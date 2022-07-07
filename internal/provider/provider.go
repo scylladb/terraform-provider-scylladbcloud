@@ -44,7 +44,6 @@ type provider struct {
 type providerData struct {
 	ApiUrl   types.String `tfsdk:"endpoint"`
 	ApiToken types.String `tfsdk:"token"`
-	Account  types.Int64  `tfsdk:"account"`
 }
 
 func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderRequest, resp *tfsdk.ConfigureProviderResponse) {
@@ -59,12 +58,11 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	// Configuration values are now available.
 	// if data.Example.Null { /* ... */ }
 
-	// TODO checks for empty value etc. required?
+	// TODO checks for empty value etc. required
 	p.apiURL = data.ApiUrl.Value
 	p.apiKey = data.ApiToken.Value
-	p.account = data.Account.Value
 
-	client, err := apiClient.NewClient(p.apiURL, p.apiKey, p.account)
+	client, err := apiClient.NewClient(p.apiURL, p.apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create API client", err.Error())
 		return
@@ -101,11 +99,6 @@ func (p *provider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostic
 				Required:            true,
 				Type:                types.StringType,
 				Sensitive:           true,
-			},
-			"account": {
-				MarkdownDescription: "The account ID used in requests to the API. Should be deleted once GET /account is implemented.",
-				Optional:            true,
-				Type:                types.Int64Type,
 			},
 		},
 	}, nil

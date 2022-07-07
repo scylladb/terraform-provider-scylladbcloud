@@ -19,8 +19,8 @@ const DefaultEndpoint = "https://cloud.scylladb.com/api/v0"
 
 // Client represents a client to call the Scylla Cloud API
 type Client struct {
-	// Token holds the bearer token used for authentication.
-	Token string
+	// token holds the bearer token used for authentication.
+	token string
 
 	// accountId holds the account ID used in requests to the API.
 	accountId int64
@@ -41,18 +41,41 @@ type Client struct {
 }
 
 // NewClient represents a new client to call the API
-func NewClient(endpoint, token string, accountId int64) (*Client, error) {
+func NewClient(endpoint, token string) (*Client, error) {
 	client := Client{
-		Token:          token,
+		token:          token,
 		Client:         &http.Client{},
 		timeDeltaMutex: &sync.Mutex{},
 		timeDeltaDone:  false,
 		Timeout:        time.Duration(DefaultTimeout),
-		accountId:      accountId,
 		endpoint:       endpoint,
 	}
 
+	if err := client.findAccountId(); err != nil {
+		return nil, err
+	}
+
 	return &client, nil
+}
+
+type UserAccount struct {
+	UserId            int64  `json:"UserID"`
+	AccountId         int64  `json:"AccountID"`
+	Name              string `json:"Name"`
+	OwnerUserId       int64  `json:"OwnerUserID"`
+	AccountStatus     string `json:"AccountStatus"`
+	Role              string `json:"Role"`
+	UserAccountStatus string `json:"UserAccountStatus"`
+}
+
+func (c *Client) findAccountId() error {
+	var result UserAccount
+	if err := c.Get("/account/default", &result); err != nil {
+		return err
+	}
+
+	c.accountId = result.AccountId
+	return nil
 }
 
 // Don't review it, it'll be overhauled later.
@@ -67,7 +90,7 @@ func (c *Client) Get(path string, resultType interface{}) error {
 	}
 
 	req.Header.Add("accept", "application/json")
-	req.Header.Add("Authorization", "Bearer "+c.Token)
+	req.Header.Add("Authorization", "Bearer "+c.token)
 
 	res, err := httpClient.Do(req)
 	if err != nil {
