@@ -82,9 +82,9 @@ func (p *provider) GetResources(ctx context.Context) (map[string]tfsdk.ResourceT
 
 func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSourceType, diag.Diagnostics) {
 	return map[string]tfsdk.DataSourceType{
-		"scyllacloud_cluster":  providerDataSourceType{}, // TODO: implement
-		"scyllacloud_region":   providerDataSourceType{}, // TODO: implement
-		"scyllacloud_provider": providerDataSourceType{},
+		"scyllacloud_cluster":         clusterDataSourceType{},
+		"scyllacloud_provider":        providerDataSourceType{},
+		"scyllacloud_provider_region": regionDataSourceType{},
 	}, nil
 }
 
