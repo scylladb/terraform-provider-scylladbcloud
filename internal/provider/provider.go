@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/scylladb/terraform-provider-scyllacloud/internal/apiClient"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -15,12 +16,9 @@ var _ tfsdk.Provider = &provider{}
 // provider satisfies the tfsdk.Provider interface and usually is included
 // with all Resource and DataSource implementations.
 type provider struct {
-	// client can contain the upstream provider SDK or HTTP client used to
-	// communicate with the upstream service. Resource and DataSource
-	// implementations can then make calls using this client.
-	//
-	// TODO: If appropriate, implement upstream provider SDK or HTTP client.
-	// client vendorsdk.ExampleClient
+	// client contains the upstream provider SDK used to
+	// communicate with the upstream service.
+	client *apiClient.Client
 
 	// configured is set to true at the end of the Configure method.
 	// This can be used in Resource and DataSource implementations to verify
@@ -31,11 +29,22 @@ type provider struct {
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
+
+	// apiKey is the API key used to authenticate with the API.
+	apiKey string
+
+	// apiURL is the base URL of the API.
+	apiURL string
+
+	// account is the account ID used in requests to the API.
+	account int64
 }
 
 // providerData can be used to store data from the Terraform configuration.
 type providerData struct {
-	Example types.String `tfsdk:"example"`
+	ApiUrl   types.String `tfsdk:"endpoint"`
+	ApiToken types.String `tfsdk:"token"`
+	Account  types.Int64  `tfsdk:"account"`
 }
 
 func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderRequest, resp *tfsdk.ConfigureProviderResponse) {
@@ -50,31 +59,53 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	// Configuration values are now available.
 	// if data.Example.Null { /* ... */ }
 
-	// If the upstream provider SDK or HTTP client requires configuration, such
-	// as authentication or logging, this is a great opportunity to do so.
+	// TODO checks for empty value etc. required?
+	p.apiURL = data.ApiUrl.Value
+	p.apiKey = data.ApiToken.Value
+	p.account = data.Account.Value
+
+	client, err := apiClient.NewClient(p.apiURL, p.apiKey, p.account)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create API client", err.Error())
+		return
+	}
+	p.client = client
 
 	p.configured = true
 }
 
 func (p *provider) GetResources(ctx context.Context) (map[string]tfsdk.ResourceType, diag.Diagnostics) {
 	return map[string]tfsdk.ResourceType{
-		"scaffolding_example": exampleResourceType{},
+		// "scaffolding_example": exampleResourceType{},
 	}, nil
 }
 
 func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSourceType, diag.Diagnostics) {
 	return map[string]tfsdk.DataSourceType{
-		"scaffolding_example": exampleDataSourceType{},
+		"scyllacloud_cluster":  providerDataSourceType{}, // TODO: implement
+		"scyllacloud_region":   providerDataSourceType{}, // TODO: implement
+		"scyllacloud_provider": providerDataSourceType{},
 	}, nil
 }
 
 func (p *provider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		Attributes: map[string]tfsdk.Attribute{
-			"example": {
-				MarkdownDescription: "Example provider attribute",
+			"endpoint": {
+				MarkdownDescription: "The base URL of the Scylla Cloud API.",
 				Optional:            true,
 				Type:                types.StringType,
+			},
+			"token": {
+				MarkdownDescription: "Bearer token used to authenticate with the API.",
+				Required:            true,
+				Type:                types.StringType,
+				Sensitive:           true,
+			},
+			"account": {
+				MarkdownDescription: "The account ID used in requests to the API. Should be deleted once GET /account is implemented.",
+				Optional:            true,
+				Type:                types.Int64Type,
 			},
 		},
 	}, nil
@@ -82,9 +113,7 @@ func (p *provider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostic
 
 func New(version string) func() tfsdk.Provider {
 	return func() tfsdk.Provider {
-		return &provider{
-			version: version,
-		}
+		return &provider{version: version}
 	}
 }
 
