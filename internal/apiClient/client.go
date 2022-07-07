@@ -133,3 +133,28 @@ func (c *Client) ListCloudProviders() ([]CloudProvider, error) {
 	}
 	return result, nil
 }
+
+type CloudProviderRegion struct {
+	Id                          int64  `json:"ID"`
+	CloudProviderId             int64  `json:"CloudProviderID"`
+	Name                        string `json:"Name"`
+	FullName                    string `json:"FullName"`
+	ExternalId                  string `json:"ExternalID"`
+	MultiRegionExternalId       string `json:"MultiRegionExternalID"`
+	DcName                      string `json:"DCName"`
+	BackupStorageGbCost         string `json:"BackupStorageGBCost"`
+	TrafficSameRegionInGbCost   string `json:"TrafficSameRegionInGBCost"`
+	TrafficSameRegionOutGbCost  string `json:"TrafficSameRegionOutGBCost"`
+	TrafficCrossRegionOutGbCost string `json:"TrafficCrossRegionOutGBCost"`
+	TrafficInternetOutGbCost    string `json:"TrafficInternetOutGBCost"`
+	Continent                   string `json:"Continent"`
+}
+
+func (c *Client) ListCloudProviderRegions(providerId int64) ([]CloudProviderRegion, error) {
+	var result []CloudProviderRegion
+	path := fmt.Sprintf("/deployment/provider/%d/region", providerId)
+	if err := c.Get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
