@@ -158,3 +158,71 @@ func (c *Client) ListCloudProviderRegions(providerId int64) ([]CloudProviderRegi
 	}
 	return result, nil
 }
+
+type DataCenter struct {
+	Id                               int64    `json:"ID"`
+	ClusterId                        int64    `json:"ClusterID"`
+	CloudProviderId                  int64    `json:"CloudProviderID"`
+	CloudProviderRegionId            int64    `json:"CloudProviderRegionID"`
+	ReplicationFactor                int64    `json:"ReplicationFactor"`
+	Ipv4Cidr                         string   `json:"IPv4CIDR"`
+	AccountCloudProviderCredentialId int64    `json:"AccountCloudProviderCredentialID"`
+	Status                           string   `json:"Status"`
+	Name                             string   `json:"Name"`
+	ManagementNetwork                string   `json:"ManagementNetwork"`
+	InstanceTypeId                   int64    `json:"InstanceTypeID"`
+	ClientConnection                 []string `json:"ClientConnection"`
+}
+
+type FreeTier struct {
+	ExpirationDate    string `json:"ExpirationDate"`
+	ExpirationSeconds int64  `json:"ExpirationSeconds"`
+	CreationTime      string `json:"CreationTime"`
+}
+
+type Cluster struct {
+	Id                        int64        `json:"ID"`
+	Name                      string       `json:"Name"`
+	ClusterNameOnConfigFile   string       `json:"ClusterNameOnConfigFile"`
+	Status                    string       `json:"Status"`
+	CloudProviderId           int64        `json:"CloudProviderID"`
+	ReplicationFactor         int64        `json:"ReplicationFactor"`
+	BroadcastType             string       `json:"BroadcastType"`
+	ScyllaVersionId           int64        `json:"ScyllaVersionID"`
+	ScyllaVersion             string       `json:"ScyllaVersion"`
+	Dc                        []DataCenter `json:"DC"`
+	GrafanaUrl                string       `json:"GrafanaURL"`
+	GrafanaRootUrl            string       `json:"GrafanaRootURL"`
+	BackofficeGrafanaUrl      string       `json:"BackofficeGrafanaURL"`
+	BackofficePrometheusUrl   string       `json:"BackofficePrometheusURL"`
+	BackofficeAlertManagerUrl string       `json:"BackofficeAlertManagerURL"`
+	FreeTier                  FreeTier     `json:"FreeTier"`
+	EncryptionMode            string       `json:"EncryptionMode"`
+	UserApiInterface          string       `json:"UserAPIInterface"`
+	PricingModel              int64        `json:"PricingModel"`
+	MaxAllowedCidrRange       int64        `json:"MaxAllowedCidrRange"`
+	CreatedAt                 string       `json:"CreatedAt"`
+	Dns                       bool         `json:"DNS"`
+	PromProxyEnabled          bool         `json:"PromProxyEnabled"`
+}
+
+func (c *Client) ListClusters() ([]Cluster, error) {
+	type Item struct {
+		Value Cluster     `json:"Value"`
+		Error interface{} `json:"Error"`
+	}
+	var result []Item
+	path := fmt.Sprintf("/account/%d/cluster", c.accountId)
+	if err := c.Get(path, &result); err != nil {
+		return nil, err
+	}
+
+	clusters := make([]Cluster, len(result))
+	for i, item := range result {
+		if item.Error != nil {
+			return nil, errors.New(fmt.Sprintf("cluster error: %v", item.Error))
+		}
+		clusters[i] = item.Value
+	}
+	return clusters, nil
+}
