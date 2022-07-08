@@ -10,10 +10,10 @@ import (
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
-var _ tfsdk.DataSourceType = regionDataSourceType{}
-var _ tfsdk.DataSource = regionDataSource{}
+var _ tfsdk.DataSourceType = providerRegionDataSourceType{}
+var _ tfsdk.DataSource = providerRegionDataSource{}
 
-type regionDataSourceType struct{}
+type providerRegionDataSourceType struct{}
 
 var regionAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 	"id": {
@@ -72,7 +72,7 @@ var regionAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 
 var regionObjectAttrTypes = extractAttrsTypes(regionAttrs)
 
-func (t regionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
+func (t providerRegionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		MarkdownDescription: "Provider regions data source",
 
@@ -93,23 +93,23 @@ func (t regionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 	}, nil
 }
 
-func (t regionDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider) (tfsdk.DataSource, diag.Diagnostics) {
+func (t providerRegionDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider) (tfsdk.DataSource, diag.Diagnostics) {
 	provider, diags := convertProviderType(in)
 
-	return regionDataSource{provider: provider}, diags
+	return providerRegionDataSource{provider: provider}, diags
 }
 
-type regionDataSourceData struct {
+type providerRegionDataSourceData struct {
 	ProviderId types.Int64 `tfsdk:"provider_id"`
 	All        types.Map   `tfsdk:"all"`
 }
 
-type regionDataSource struct {
+type providerRegionDataSource struct {
 	provider provider
 }
 
-func (d regionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest, resp *tfsdk.ReadDataSourceResponse) {
-	var data regionDataSourceData
+func (d providerRegionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest, resp *tfsdk.ReadDataSourceResponse) {
+	var data providerRegionDataSourceData
 
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
