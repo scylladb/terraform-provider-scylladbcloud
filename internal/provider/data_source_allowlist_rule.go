@@ -46,9 +46,9 @@ func (t allowlistRuleDataSourceType) NewDataSource(ctx context.Context, in tfsdk
 }
 
 type allowlistRuleDataSourceData struct {
-	Vendor        types.String `tfsdk:"vendor"`
+	ClusterId     types.Int64  `tfsdk:"cluster_id"`
 	Id            types.Int64  `tfsdk:"id"`
-	RootAccountID types.String `tfsdk:"root_account_id"`
+	SourceAddress types.String `tfsdk:"source_address"`
 }
 
 type allowlistRuleDataSource struct {
