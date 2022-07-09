@@ -81,6 +81,7 @@ func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSou
 	return map[string]tfsdk.DataSourceType{
 		"scyllacloud_cluster":         clusterDataSourceType{},
 		"scyllacloud_datacenter":      datacenterDataSourceType{},
+		"scyllacloud_node":            nodeDataSourceType{},
 		"scyllacloud_provider":        providerDataSourceType{},
 		"scyllacloud_provider_region": regionDataSourceType{},
 		"scyllacloud_provider_instance": providerInstanceDataSourceType{},
