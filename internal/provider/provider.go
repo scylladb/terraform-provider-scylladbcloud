@@ -84,6 +84,8 @@ func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSou
 		"scyllacloud_node":            nodeDataSourceType{},
 		"scyllacloud_allowlist":       allowlistDataSourceType{},
 		"scyllacloud_allowlist_rule":  allowlistRuleDataSourceType{},
+		"scyllacloud_vpc":             vpcDataSourceType{},
+		"scyllacloud_vpc_peering":     vpcPeeringDataSourceType{},
 		"scyllacloud_provider":        providerDataSourceType{},
 		"scyllacloud_provider_region": regionDataSourceType{},
 		"scyllacloud_provider_instance": providerInstanceDataSourceType{},
