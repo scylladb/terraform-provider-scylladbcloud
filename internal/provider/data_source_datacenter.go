@@ -86,9 +86,17 @@ func (t datacenterDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pr
 }
 
 type datacenterDataSourceData struct {
-	Vendor        types.String `tfsdk:"vendor"`
-	Id            types.Int64  `tfsdk:"id"`
-	RootAccountID types.String `tfsdk:"root_account_id"`
+	Id                               types.Int64  `tfsdk:"id"`
+	ClusterId                        types.Int64  `tfsdk:"cluster_id"`
+	CloudProviderId                  types.Int64  `tfsdk:"cloud_provider_id"`
+	CloudProviderRegionId            types.Int64  `tfsdk:"cloud_provider_region_id"`
+	ReplicationFactor                types.Int64  `tfsdk:"replication_factor"`
+	Ipv4Cidr                         types.String `tfsdk:"ipv4_cidr"`
+	AccountCloudProviderCredentialId types.Int64  `tfsdk:"account_cloud_provider_credential_id"`
+	Status                           types.String `tfsdk:"status"`
+	Name                             types.String `tfsdk:"name"`
+	ManagementNetwork                types.String `tfsdk:"management_network"`
+	InstanceTypeId                   types.Int64  `tfsdk:"instance_type_id"`
 }
 
 type datacenterDataSource struct {
