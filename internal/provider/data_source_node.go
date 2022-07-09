@@ -65,8 +65,26 @@ func (t nodeDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider
 }
 
 type nodeDataSourceData struct {
-	ProviderId types.Int64 `tfsdk:"provider_id"`
-	All        types.Map   `tfsdk:"all"`
+	Id                          types.Int64  `tfsdk:"ID"`
+	ClusterId                   types.Int64  `tfsdk:"cluster_id"`
+	CloudProviderId             types.Int64  `tfsdk:"cloud_provider_id"`
+	CloudProviderInstanceTypeId types.Int64  `tfsdk:"cloud_provider_instance_type_id"`
+	CloudProviderRegionId       types.Int64  `tfsdk:"cloud_provider_region_id"`
+	PublicIp                    types.String `tfsdk:"public_ip"`
+	PrivateIp                   types.String `tfsdk:"private_ip"`
+	ClusterJoinDate             types.String `tfsdk:"cluster_join_date"`
+	ServiceId                   types.Int64  `tfsdk:"service_id"`
+	ServiceVersionId            types.Int64  `tfsdk:"service_version_id"`
+	ServiceVersion              types.String `tfsdk:"service_version"`
+	BillingStartDate            types.String `tfsdk:"billing_start_date"`
+	Hostname                    types.String `tfsdk:"hostname"`
+	ClusterHostId               types.String `tfsdk:"cluster_host_id"`
+	Status                      types.String `tfsdk:"status"`
+	NodeState                   types.String `tfsdk:"node_state"`
+	ClusterDcId                 types.Int64  `tfsdk:"cluster_dc_id"`
+	ServerActionId              types.Int64  `tfsdk:"server_action_id"`
+	Distribution                types.String `tfsdk:"distribution"`
+	Dns                         types.String `tfsdk:"dns"`
 }
 
 type nodeDataSource struct {
