@@ -1,6 +1,7 @@
-// Package apiClient is a wrapper for the Scylla Cloud REST API.
+// Package scyllaCloudSDK is a wrapper for the Scylla Cloud REST API.
+package scyllaCloudSDK
+
 // TODO if sufficiently high quality it can be published as a separate SDK in the future.
-package apiClient
 
 import (
 	"bytes"

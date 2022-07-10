@@ -1,4 +1,4 @@
-package apiClient
+package scyllaCloudSDK
 
 import (
 	"errors"

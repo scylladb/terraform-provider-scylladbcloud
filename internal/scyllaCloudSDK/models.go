@@ -1,4 +1,4 @@
-package apiClient
+package scyllaCloudSDK
 
 type UserAccount struct {
 	UserId            int64  `json:"UserID"`
