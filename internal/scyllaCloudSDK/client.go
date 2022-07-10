@@ -150,11 +150,11 @@ func (c *Client) get(path string, resultType interface{}) error {
 }
 
 func (c *Client) post(path string, requestBody, resultType interface{}) error {
-	return c.callAPI(context.Background(), http.MethodGet, path, requestBody, resultType)
+	return c.callAPI(context.Background(), http.MethodPost, path, requestBody, resultType)
 }
 
 func (c *Client) delete(path string, resultType interface{}) error {
-	return c.callAPI(context.Background(), http.MethodGet, path, nil, resultType)
+	return c.callAPI(context.Background(), http.MethodDelete, path, nil, resultType)
 }
 
 func (c *Client) findAndSaveAccountId() error {
