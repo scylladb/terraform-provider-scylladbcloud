@@ -4,6 +4,7 @@ package apiClient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,24 @@ var DefaultTimeout = 60 * time.Second
 
 const DefaultEndpoint = "https://cloud.scylladb.com/api/v0"
 
+// APIError represents an error that occurred while calling the API.
+type APIError struct {
+	// API error code (meanings are described in the Scylla Cloud API documentation)
+	Code string `json:"code"`
+	// Error message.
+	Message string `json:"message"`
+	// Error details
+	TraceId string `json:"trace_id"`
+	// Http status code
+	StatusCode int
+}
+
+func (err *APIError) Error() string {
+	return fmt.Sprintf(
+		"Error %q (http status %d): %q. Trace id: %q.",
+		err.Code, err.StatusCode, err.Message, err.TraceId)
+}
+
 // Client represents a client to call the Scylla Cloud API
 type Client struct {
 	// token holds the bearer token used for authentication.
@@ -27,18 +46,20 @@ type Client struct {
 	// API endpoint
 	endpoint string
 
-	// httpClient is the underlying HTTP client used to run the requests.
-	httpClient *http.Client
+	// HttpClient is the underlying HTTP client used to run the requests.
+	// It may be overloaded but a default one is provided in ``NewClient`` by default.
+	HttpClient *http.Client
 }
 
 // NewClient represents a new client to call the API
-func NewClient(endpoint, token string) (*Client, error) {
+func NewClient(endpoint, token string, httpClient *http.Client) (*Client, error) {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: DefaultTimeout}
+	}
 	client := Client{
-		token: token,
-		httpClient: &http.Client{
-			Timeout: DefaultTimeout,
-		},
-		endpoint: endpoint,
+		token:      token,
+		endpoint:   endpoint,
+		HttpClient: httpClient,
 	}
 
 	if err := client.findAndSaveAccountId(); err != nil {
@@ -48,44 +69,92 @@ func NewClient(endpoint, token string) (*Client, error) {
 	return &client, nil
 }
 
-func (c *Client) get(path string, resultType interface{}) error {
+func (c *Client) newHttpRequest(method, path string, reqBody interface{}) (*http.Request, error) {
+	var body []byte
+	var err error
+
+	if reqBody != nil {
+		body, err = json.Marshal(reqBody)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	url := c.endpoint + path
-
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	req.Header.Add("accept", "application/json")
 	req.Header.Add("Authorization", "Bearer "+c.token)
+	req.Header.Add("Accept", "application/json")
+	if body != nil {
+		req.Header.Add("Content-Type", "application/json;charset=utf-8")
+	}
 
-	res, err := c.httpClient.Do(req)
+	return req, nil
+}
+
+func (c *Client) doHttpRequest(req *http.Request) (*http.Response, []byte, error) {
+	resp, err := c.HttpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return resp, nil, err
+	}
+
+	return resp, body, nil
+}
+
+func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}) error {
+	httpRequest, err := c.newHttpRequest(method, path, reqBody)
+	httpRequest = httpRequest.WithContext(ctx)
+
+	resp, body, err := c.doHttpRequest(httpRequest)
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
 
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		type ErrorResponse struct {
+			Error APIError `json:"Error"`
+		}
+		errorResponse := ErrorResponse{APIError{StatusCode: resp.StatusCode}}
+		if err = json.Unmarshal(body, &errorResponse); err != nil {
+			return &APIError{StatusCode: resp.StatusCode, Message: string(body)}
+		}
+
+		return &errorResponse.Error
 	}
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		//apiError := &APIError{Code: response.StatusCode}
-		//if err = json.Unmarshal(body, apiError); err != nil {
-		//	apiError.Message = string(body)
-		//}
+	return c.unmarshalResponse(body, resType)
+}
 
-		return errors.New(fmt.Sprintf("HTTP request to '%s' failed with code %d: %s", url, res.StatusCode, string(body)))
+func (c *Client) unmarshalResponse(body []byte, resType interface{}) error {
+	// Nothing to unmarshal
+	if len(body) == 0 || resType == nil {
+		return nil
 	}
 
 	d := json.NewDecoder(bytes.NewReader(body))
 	d.UseNumber()
-	if err := d.Decode(resultType); err != nil {
-		return err
-	}
-	return nil
+	return d.Decode(&resType)
+}
+
+func (c *Client) get(path string, resultType interface{}) error {
+	return c.callAPI(context.Background(), http.MethodGet, path, nil, resultType)
+}
+
+func (c *Client) post(path string, requestBody, resultType interface{}) error {
+	return c.callAPI(context.Background(), http.MethodGet, path, requestBody, resultType)
+}
+
+func (c *Client) delete(path string, resultType interface{}) error {
+	return c.callAPI(context.Background(), http.MethodGet, path, nil, resultType)
 }
 
 func (c *Client) findAndSaveAccountId() error {

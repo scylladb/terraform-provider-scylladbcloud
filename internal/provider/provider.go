@@ -62,7 +62,7 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	p.apiURL = data.ApiUrl.Value
 	p.apiKey = data.ApiToken.Value
 
-	client, err := apiClient.NewClient(p.apiURL, p.apiKey)
+	client, err := apiClient.NewClient(p.apiURL, p.apiKey, nil)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create API client", err.Error())
 		return
