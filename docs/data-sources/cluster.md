@@ -39,10 +39,10 @@ output "cluster_example_scylla_version" {
 - `cloud_provider_id` (Number) Cloud provider id
 - `cluster_name_on_config_file` (String) Cluster name on config file
 - `created_at` (String) Created at
-- `dc` (List of Object) Datacenters (see [below for nested schema](#nestedatt--dc))
+- `dc` (Attributes List) Datacenters (see [below for nested schema](#nestedatt--dc))
 - `dns` (Boolean) Dns
 - `encryption_mode` (String) Encryption mode
-- `free_tier` (Object) Free tier (see [below for nested schema](#nestedatt--free_tier))
+- `free_tier` (Attributes) Free tier (see [below for nested schema](#nestedatt--free_tier))
 - `grafana_root_url` (String) Grafana root url
 - `grafana_url` (String) Grafana url
 - `max_allowed_cidr_range` (Number) Max allowed cidr range
@@ -59,18 +59,18 @@ output "cluster_example_scylla_version" {
 
 Read-Only:
 
-- `account_cloud_provider_credential_id` (Number)
-- `client_connection` (List of String)
-- `cloud_provider_id` (Number)
-- `cloud_provider_region_id` (Number)
-- `cluster_id` (Number)
-- `id` (Number)
-- `instance_type_id` (Number)
-- `ipv4_cidr` (String)
-- `management_network` (String)
-- `name` (String)
-- `replication_factor` (Number)
-- `status` (String)
+- `account_cloud_provider_credential_id` (Number) ID of the account cloud provider credential
+- `client_connection` (List of String) Client connection of the cluster
+- `cloud_provider_id` (Number) ID of the cloud provider
+- `cloud_provider_region_id` (Number) ID of the cloud provider region
+- `cluster_id` (Number) ID of the cluster
+- `id` (Number) ID of the cluster
+- `instance_type_id` (Number) ID of the instance type
+- `ipv4_cidr` (String) IPv4 CIDR of the cluster
+- `management_network` (String) Management network of the cluster
+- `name` (String) Name of the cluster
+- `replication_factor` (Number) Replication factor of the cluster
+- `status` (String) Status of the cluster
 
 
 <a id="nestedatt--free_tier"></a>
@@ -78,8 +78,8 @@ Read-Only:
 
 Read-Only:
 
-- `creation_time` (String)
-- `expiration_date` (String)
-- `expiration_seconds` (Number)
+- `creation_time` (String) Creation time of the free tier
+- `expiration_date` (String) Expiration date of the free tier
+- `expiration_seconds` (Number) Expiration seconds of the free tier
 
 
