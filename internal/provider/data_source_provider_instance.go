@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -14,29 +13,94 @@ var _ tfsdk.DataSource = providerInstanceDataSource{}
 
 type providerInstanceDataSourceType struct{}
 
-var instanceObjectAttrTypes = map[string]attr.Type{
-	"id":                              types.Int64Type,
-	"cloud_provider_id":               types.Int64Type,
-	"name":                            types.StringType,
-	"external_name":                   types.StringType,
-	"memory_mb":                       types.StringType,
-	"local_disk_count":                types.Int64Type,
-	"local_storage_total_gb":          types.Int64Type,
-	"cpu_core_count":                  types.Int64Type,
-	"network_mbps":                    types.Int64Type,
-	"external_storage_network_mbps":   types.Int64Type,
-	"environment":                     types.StringType,
-	"display_order":                   types.Int64Type,
-	"network_speed_description":       types.StringType,
-	"license_cost_on_demand_per_hour": types.StringType,
-	"free_tier_hours":                 types.Int64Type,
-	"instance_family":                 types.StringType,
-	"group_default":                   types.BoolType,
-	"cost_per_hour":                   types.StringType,
-	"subscription_cost_hourly":        types.StringType,
-	"subscription_cost_monthly":       types.StringType,
-	"subscription_cost_yearly":        types.StringType,
-}
+var instanceAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
+	"id": {
+		MarkdownDescription: "ID of the instance",
+		Type:                types.Int64Type,
+	},
+	"cloud_provider_id": {
+		MarkdownDescription: "ID of the cloud provider",
+		Type:                types.Int64Type,
+	},
+	"name": {
+		MarkdownDescription: "Name of the instance",
+		Type:                types.StringType,
+	},
+	"external_name": {
+		MarkdownDescription: "External name of the instance",
+		Type:                types.StringType,
+	},
+	"memory_mb": {
+		MarkdownDescription: "Memory in MB",
+		Type:                types.StringType,
+	},
+	"local_disk_count": {
+		MarkdownDescription: "Number of local disks",
+		Type:                types.Int64Type,
+	},
+	"local_storage_total_gb": {
+		MarkdownDescription: "Total local storage in GB",
+		Type:                types.Int64Type,
+	},
+	"cpu_core_count": {
+		MarkdownDescription: "Number of CPU cores",
+		Type:                types.Int64Type,
+	},
+	"network_mbps": {
+		MarkdownDescription: "Network speed in MB/s",
+		Type:                types.Int64Type,
+	},
+	"external_storage_network_mbps": {
+		MarkdownDescription: "External storage network speed in MB/s",
+		Type:                types.Int64Type,
+	},
+	"environment": {
+		MarkdownDescription: "Environment",
+		Type:                types.StringType,
+	},
+	"display_order": {
+		MarkdownDescription: "Display order",
+		Type:                types.Int64Type,
+	},
+	"network_speed_description": {
+		MarkdownDescription: "Network speed description",
+		Type:                types.StringType,
+	},
+	"license_cost_on_demand_per_hour": {
+		MarkdownDescription: "License cost on demand per hour",
+		Type:                types.StringType,
+	},
+	"free_tier_hours": {
+		MarkdownDescription: "Free tier hours",
+		Type:                types.Int64Type,
+	},
+	"instance_family": {
+		MarkdownDescription: "Instance family",
+		Type:                types.StringType,
+	},
+	"group_default": {
+		MarkdownDescription: "Is this instance the default for its group",
+		Type:                types.BoolType,
+	},
+	"cost_per_hour": {
+		MarkdownDescription: "Cost per hour",
+		Type:                types.StringType,
+	},
+	"subscription_cost_hourly": {
+		MarkdownDescription: "Subscription cost hourly",
+		Type:                types.StringType,
+	},
+	"subscription_cost_monthly": {
+		MarkdownDescription: "Subscription cost monthly",
+		Type:                types.StringType,
+	},
+	"subscription_cost_yearly": {
+		MarkdownDescription: "Subscription cost yearly",
+		Type:                types.StringType,
+	},
+})
+
+var instanceAttrsTypes = extractAttrsTypes(instanceAttrs)
 
 func (t providerInstanceDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -51,9 +115,7 @@ func (t providerInstanceDataSourceType) GetSchema(ctx context.Context) (tfsdk.Sc
 			"all": {
 				MarkdownDescription: "Map of all instances, where the key is the instance code name (eg. t3.micro)",
 				Computed:            true,
-				Type: types.MapType{
-					ElemType: types.ObjectType{AttrTypes: instanceObjectAttrTypes},
-				},
+				Attributes:          tfsdk.MapNestedAttributes(instanceAttrs),
 			},
 		},
 	}, nil
