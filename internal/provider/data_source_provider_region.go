@@ -15,22 +15,62 @@ var _ tfsdk.DataSource = regionDataSource{}
 
 type regionDataSourceType struct{}
 
-var regionObjectAttrTypes = map[string]attr.Type{
-	// TODO do we want to include the prices here?
-	"id":                               types.Int64Type,
-	"cloud_provider_id":                types.Int64Type,
-	"name":                             types.StringType,
-	"full_name":                        types.StringType,
-	"external_id":                      types.StringType,
-	"multi_region_external_id":         types.StringType,
-	"dc_name":                          types.StringType,
-	"backup_storage_gb_cost":           types.StringType,
-	"traffic_same_region_in_gb_cost":   types.StringType,
-	"traffic_same_region_out_gb_cost":  types.StringType,
-	"traffic_cross_region_out_gb_cost": types.StringType,
-	"traffic_internet_out_gb_cost":     types.StringType,
-	"continent":                        types.StringType,
-}
+var regionAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
+	"id": {
+		MarkdownDescription: "ID of the region",
+		Type:                types.Int64Type,
+	},
+	"cloud_provider_id": {
+		MarkdownDescription: "ID of the cloud provider",
+		Type:                types.Int64Type,
+	},
+	"name": {
+		MarkdownDescription: "Name of the region",
+		Type:                types.StringType,
+	},
+	"full_name": {
+		MarkdownDescription: "Full name of the region",
+		Type:                types.StringType,
+	},
+	"external_id": {
+		MarkdownDescription: "External ID of the region",
+		Type:                types.StringType,
+	},
+	"multi_region_external_id": {
+		MarkdownDescription: "Multi-region external ID of the region",
+		Type:                types.StringType,
+	},
+	"dc_name": {
+		MarkdownDescription: "Name of the data center",
+		Type:                types.StringType,
+	},
+	"backup_storage_gb_cost": {
+		MarkdownDescription: "Cost of backup storage in GB",
+		Type:                types.StringType,
+	},
+	"traffic_same_region_in_gb_cost": {
+		MarkdownDescription: "Cost of traffic in the same region in GB",
+		Type:                types.StringType,
+	},
+	"traffic_same_region_out_gb_cost": {
+		MarkdownDescription: "Cost of traffic in the same region out of the region in GB",
+		Type:                types.StringType,
+	},
+	"traffic_cross_region_out_gb_cost": {
+		MarkdownDescription: "Cost of traffic in the cross region out of the region in GB",
+		Type:                types.StringType,
+	},
+	"traffic_internet_out_gb_cost": {
+		MarkdownDescription: "Cost of traffic out of the region in GB",
+		Type:                types.StringType,
+	},
+	"continent": {
+		MarkdownDescription: "Continent of the region",
+		Type:                types.StringType,
+	},
+})
+
+var regionObjectAttrTypes = extractAttrsTypes(regionAttrs)
 
 func (t regionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -45,9 +85,7 @@ func (t regionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 			"all": {
 				MarkdownDescription: "Map of all regions, where the key is the region code name (eg. us-east-1)",
 				Computed:            true,
-				Type: types.MapType{
-					ElemType: types.ObjectType{AttrTypes: regionObjectAttrTypes},
-				},
+				Attributes:          tfsdk.MapNestedAttributes(regionAttrs),
 			},
 		},
 	}, nil

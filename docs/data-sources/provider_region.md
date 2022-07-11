@@ -35,25 +35,25 @@ output "aws_provider_region_us_east_1_full_name" {
 
 ### Read-Only
 
-- `all` (Map of Object) Map of all regions, where the key is the region code name (eg. us-east-1) (see [below for nested schema](#nestedatt--all))
+- `all` (Attributes Map) Map of all regions, where the key is the region code name (eg. us-east-1) (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `backup_storage_gb_cost` (String)
-- `cloud_provider_id` (Number)
-- `continent` (String)
-- `dc_name` (String)
-- `external_id` (String)
-- `full_name` (String)
-- `id` (Number)
-- `multi_region_external_id` (String)
-- `name` (String)
-- `traffic_cross_region_out_gb_cost` (String)
-- `traffic_internet_out_gb_cost` (String)
-- `traffic_same_region_in_gb_cost` (String)
-- `traffic_same_region_out_gb_cost` (String)
+- `backup_storage_gb_cost` (String) Cost of backup storage in GB
+- `cloud_provider_id` (Number) ID of the cloud provider
+- `continent` (String) Continent of the region
+- `dc_name` (String) Name of the data center
+- `external_id` (String) External ID of the region
+- `full_name` (String) Full name of the region
+- `id` (Number) ID of the region
+- `multi_region_external_id` (String) Multi-region external ID of the region
+- `name` (String) Name of the region
+- `traffic_cross_region_out_gb_cost` (String) Cost of traffic in the cross region out of the region in GB
+- `traffic_internet_out_gb_cost` (String) Cost of traffic out of the region in GB
+- `traffic_same_region_in_gb_cost` (String) Cost of traffic in the same region in GB
+- `traffic_same_region_out_gb_cost` (String) Cost of traffic in the same region out of the region in GB
 
 
