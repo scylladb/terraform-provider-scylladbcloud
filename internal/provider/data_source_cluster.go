@@ -17,7 +17,7 @@ type clusterDataSourceType struct{}
 
 var dcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 	"id": {
-		MarkdownDescription: "ID of the cluster",
+		MarkdownDescription: "ID of DC",
 		Type:                types.Int64Type,
 	},
 	"cluster_id": {

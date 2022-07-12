@@ -64,7 +64,7 @@ Read-Only:
 - `cloud_provider_id` (Number) ID of the cloud provider
 - `cloud_provider_region_id` (Number) ID of the cloud provider region
 - `cluster_id` (Number) ID of the cluster
-- `id` (Number) ID of the cluster
+- `id` (Number) ID of DC
 - `instance_type_id` (Number) ID of the instance type
 - `ipv4_cidr` (String) IPv4 CIDR of the cluster
 - `management_network` (String) Management network of the cluster
