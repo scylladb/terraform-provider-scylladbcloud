@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -14,28 +13,91 @@ var _ tfsdk.DataSource = nodeDataSource{}
 
 type nodeDataSourceType struct{}
 
-var nodeObjectAttrTypes = map[string]attr.Type{
-	"id":                              types.Int64Type,
-	"cluster_id":                      types.Int64Type,
-	"cloud_provider_id":               types.Int64Type,
-	"cloud_provider_instance_type_id": types.Int64Type,
-	"cloud_provider_region_id":        types.Int64Type,
-	"public_ip":                       types.StringType,
-	"private_ip":                      types.StringType,
-	"cluster_join_date":               types.StringType,
-	"service_id":                      types.Int64Type,
-	"service_version_id":              types.Int64Type,
-	"service_version":                 types.StringType,
-	"billing_start_date":              types.StringType,
-	"hostname":                        types.StringType,
-	"cluster_host_id":                 types.StringType,
-	"status":                          types.StringType,
-	"node_state":                      types.StringType,
-	"cluster_dc_id":                   types.Int64Type,
-	"server_action_id":                types.Int64Type,
-	"distribution":                    types.StringType,
-	"dns":                             types.StringType,
-}
+var nodeAttrs = markAttrsAsComputed(
+	map[string]tfsdk.Attribute{
+		"id": {
+			MarkdownDescription: "ID of the node",
+			Type:                types.Int64Type,
+		},
+		"cluster_id": {
+			MarkdownDescription: "ID of the cluster",
+			Type:                types.Int64Type,
+		},
+		"cloud_provider_id": {
+			MarkdownDescription: "ID of the cloud provider",
+			Type:                types.Int64Type,
+		},
+		"cloud_provider_instance_type_id": {
+			MarkdownDescription: "ID of the cloud provider instance type",
+			Type:                types.Int64Type,
+		},
+		"cloud_provider_region_id": {
+			MarkdownDescription: "ID of the cloud provider region",
+			Type:                types.Int64Type,
+		},
+		"public_ip": {
+			MarkdownDescription: "Public IP of the node",
+			Type:                types.StringType,
+		},
+		"private_ip": {
+			MarkdownDescription: "Private IP of the node",
+			Type:                types.StringType,
+		},
+		"cluster_join_date": {
+			MarkdownDescription: "Date when the node joined the cluster",
+			Type:                types.StringType,
+		},
+		"service_id": {
+			MarkdownDescription: "ID of the service",
+			Type:                types.Int64Type,
+		},
+		"service_version_id": {
+			MarkdownDescription: "ID of the service version",
+			Type:                types.Int64Type,
+		},
+		"service_version": {
+			MarkdownDescription: "Version of the service",
+			Type:                types.StringType,
+		},
+		"billing_start_date": {
+			MarkdownDescription: "Date when the service was billed",
+			Type:                types.StringType,
+		},
+		"hostname": {
+			MarkdownDescription: "Hostname of the node",
+			Type:                types.StringType,
+		},
+		"cluster_host_id": {
+			MarkdownDescription: "ID of the cluster host",
+			Type:                types.StringType,
+		},
+		"status": {
+			MarkdownDescription: "Status of the node",
+			Type:                types.StringType,
+		},
+		"node_state": {
+			MarkdownDescription: "State of the node",
+			Type:                types.StringType,
+		},
+		"cluster_dc_id": {
+			MarkdownDescription: "ID of the cluster datacenter",
+			Type:                types.Int64Type,
+		},
+		"server_action_id": {
+			MarkdownDescription: "ID of the server action",
+			Type:                types.Int64Type,
+		},
+		"distribution": {
+			MarkdownDescription: "Distribution of the node",
+			Type:                types.StringType,
+		},
+		"dns": {
+
+			MarkdownDescription: "DNS of the node",
+			Type:                types.StringType,
+		},
+	},
+)
 
 func (t nodeDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -50,9 +112,7 @@ func (t nodeDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.D
 			"all": {
 				MarkdownDescription: "List of all nodes",
 				Computed:            true,
-				Type: types.ListType{
-					ElemType: types.ObjectType{AttrTypes: nodeObjectAttrTypes},
-				},
+				Attributes:          tfsdk.ListNestedAttributes(nodeAttrs),
 			},
 		},
 	}, nil
