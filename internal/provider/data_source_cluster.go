@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/scylladb/terraform-provider-scyllacloud/internal/scyllaCloudSDK"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -269,7 +270,13 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 		return
 	}
 
-	cluster := clusters[matchedClusterIdx]
+	writeClusterDataToTFStruct(&clusters[matchedClusterIdx], &data)
+
+	diags = resp.State.Set(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+}
+
+func writeClusterDataToTFStruct(cluster *scyllaCloudSDK.Cluster, data *clusterDataSourceData) {
 	data.Id = types.Int64{Value: cluster.Id}
 	data.Name = types.String{Value: cluster.Name}
 	data.ClusterNameOnConfigFile = types.String{Value: cluster.ClusterNameOnConfigFile}
@@ -332,7 +339,4 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 			"creation_time":      types.String{Value: cluster.FreeTier.CreationTime},
 		},
 	}
-
-	diags = resp.State.Set(ctx, &data)
-	resp.Diagnostics.Append(diags...)
 }
