@@ -22,6 +22,13 @@ func (c *Client) ListCloudProviderRegions(providerId int64) ([]CloudProviderRegi
 	return result, nil
 }
 
+func (c *Client) GetCluster(clusterId int64) (Cluster, error) {
+	var result Cluster
+	path := fmt.Sprintf("/account/%d/cluster/%d/", c.accountId, clusterId)
+	err := c.get(path, &result)
+	return result, err
+}
+
 func (c *Client) ListClusters() ([]Cluster, error) {
 	type Item struct {
 		Value Cluster     `json:"Value"`

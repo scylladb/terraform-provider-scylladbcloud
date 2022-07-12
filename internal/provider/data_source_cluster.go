@@ -25,11 +25,11 @@ var dcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "ID of the cluster",
 		Type:                types.Int64Type,
 	},
-	"cloud_provider_id": {
+	"provider_id": {
 		MarkdownDescription: "ID of the cloud provider",
 		Type:                types.Int64Type,
 	},
-	"cloud_provider_region_id": {
+	"provider_region_id": {
 		MarkdownDescription: "ID of the cloud provider region",
 		Type:                types.Int64Type,
 	},
@@ -37,7 +37,7 @@ var dcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "Replication factor of the cluster",
 		Type:                types.Int64Type,
 	},
-	"ipv4_cidr": {
+	"cidr": {
 		MarkdownDescription: "IPv4 CIDR of the cluster",
 		Type:                types.StringType,
 	},
@@ -100,7 +100,7 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 			Optional:            true,
 			Type:                types.StringType,
 		},
-		"cluster_name_on_config_file": {
+		"name_on_config_file": {
 			MarkdownDescription: "Cluster name on config file",
 			Type:                types.StringType,
 		},
@@ -108,7 +108,7 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 			MarkdownDescription: "Cluster status",
 			Type:                types.StringType,
 		},
-		"cloud_provider_id": {
+		"provider_id": {
 			MarkdownDescription: "Cloud provider id",
 			Type:                types.Int64Type,
 		},
@@ -130,7 +130,7 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 		},
 		"dc": {
 			MarkdownDescription: "Datacenters",
-			Attributes:          tfsdk.ListNestedAttributes(dcAttrs),
+			Type:                types.ListType{ElemType: types.ObjectType{AttrTypes: dcAttrTypes}},
 		},
 		"grafana_url": {
 			MarkdownDescription: "Grafana url",
@@ -140,21 +140,9 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 			MarkdownDescription: "Grafana root url",
 			Type:                types.StringType,
 		},
-		"backoffice_grafana_url": {
-			MarkdownDescription: "Backoffice grafana url",
-			Type:                types.StringType,
-		},
-		"backoffice_prometheus_url": {
-			MarkdownDescription: "Backoffice prometheus url",
-			Type:                types.StringType,
-		},
-		"backoffice_alert_manager_url": {
-			MarkdownDescription: "Backoffice alert manager url",
-			Type:                types.StringType,
-		},
 		"free_tier": {
 			MarkdownDescription: "Free tier",
-			Attributes:          tfsdk.SingleNestedAttributes(freeTierAttrs),
+			Type:                types.ObjectType{AttrTypes: freeTierAttrsTypes},
 		},
 		"encryption_mode": {
 			MarkdownDescription: "Encryption mode",
@@ -199,29 +187,26 @@ func (t clusterDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provi
 }
 
 type clusterDataSourceData struct {
-	Id                        types.Int64  `tfsdk:"id"`
-	Name                      types.String `tfsdk:"name"`
-	ClusterNameOnConfigFile   types.String `tfsdk:"cluster_name_on_config_file"`
-	Status                    types.String `tfsdk:"status"`
-	CloudProviderId           types.Int64  `tfsdk:"cloud_provider_id"`
-	ReplicationFactor         types.Int64  `tfsdk:"replication_factor"`
-	BroadcastType             types.String `tfsdk:"broadcast_type"`
-	ScyllaVersionId           types.Int64  `tfsdk:"scylla_version_id"`
-	ScyllaVersion             types.String `tfsdk:"scylla_version"`
-	Dc                        types.List   `tfsdk:"dc"`
-	GrafanaUrl                types.String `tfsdk:"grafana_url"`
-	GrafanaRootUrl            types.String `tfsdk:"grafana_root_url"`
-	BackofficeGrafanaUrl      types.String `tfsdk:"backoffice_grafana_url"`
-	BackofficePrometheusUrl   types.String `tfsdk:"backoffice_prometheus_url"`
-	BackofficeAlertManagerUrl types.String `tfsdk:"backoffice_alert_manager_url"`
-	FreeTier                  types.Object `tfsdk:"free_tier"`
-	EncryptionMode            types.String `tfsdk:"encryption_mode"`
-	UserApiInterface          types.String `tfsdk:"user_api_interface"`
-	PricingModel              types.Int64  `tfsdk:"pricing_model"`
-	MaxAllowedCidrRange       types.Int64  `tfsdk:"max_allowed_cidr_range"`
-	CreatedAt                 types.String `tfsdk:"created_at"`
-	Dns                       types.Bool   `tfsdk:"dns"`
-	PromProxyEnabled          types.Bool   `tfsdk:"prom_proxy_enabled"`
+	Id                  types.Int64  `tfsdk:"id"`
+	Name                types.String `tfsdk:"name"`
+	NameOnConfigFile    types.String `tfsdk:"name_on_config_file"`
+	Status              types.String `tfsdk:"status"`
+	ProviderId          types.Int64  `tfsdk:"provider_id"`
+	ReplicationFactor   types.Int64  `tfsdk:"replication_factor"`
+	BroadcastType       types.String `tfsdk:"broadcast_type"`
+	ScyllaVersionId     types.Int64  `tfsdk:"scylla_version_id"`
+	ScyllaVersion       types.String `tfsdk:"scylla_version"`
+	Dc                  types.List   `tfsdk:"dc"`
+	GrafanaUrl          types.String `tfsdk:"grafana_url"`
+	GrafanaRootUrl      types.String `tfsdk:"grafana_root_url"`
+	FreeTier            types.Object `tfsdk:"free_tier"`
+	EncryptionMode      types.String `tfsdk:"encryption_mode"`
+	UserApiInterface    types.String `tfsdk:"user_api_interface"`
+	PricingModel        types.Int64  `tfsdk:"pricing_model"`
+	MaxAllowedCidrRange types.Int64  `tfsdk:"max_allowed_cidr_range"`
+	CreatedAt           types.String `tfsdk:"created_at"`
+	Dns                 types.Bool   `tfsdk:"dns"`
+	PromProxyEnabled    types.Bool   `tfsdk:"prom_proxy_enabled"`
 }
 
 type clusterDataSource struct {
@@ -279,9 +264,9 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 func writeClusterDataToTFStruct(cluster *scyllaCloudSDK.Cluster, data *clusterDataSourceData) {
 	data.Id = types.Int64{Value: cluster.Id}
 	data.Name = types.String{Value: cluster.Name}
-	data.ClusterNameOnConfigFile = types.String{Value: cluster.ClusterNameOnConfigFile}
+	data.NameOnConfigFile = types.String{Value: cluster.ClusterNameOnConfigFile}
 	data.Status = types.String{Value: cluster.Status}
-	data.CloudProviderId = types.Int64{Value: cluster.CloudProviderId}
+	data.ProviderId = types.Int64{Value: cluster.CloudProviderId}
 	data.ReplicationFactor = types.Int64{Value: cluster.ReplicationFactor}
 	data.BroadcastType = types.String{Value: cluster.BroadcastType}
 	data.ScyllaVersionId = types.Int64{Value: cluster.ScyllaVersionId}
@@ -289,9 +274,6 @@ func writeClusterDataToTFStruct(cluster *scyllaCloudSDK.Cluster, data *clusterDa
 
 	data.GrafanaUrl = types.String{Value: cluster.GrafanaUrl}
 	data.GrafanaRootUrl = types.String{Value: cluster.GrafanaRootUrl}
-	data.BackofficeGrafanaUrl = types.String{Value: cluster.BackofficeGrafanaUrl}
-	data.BackofficePrometheusUrl = types.String{Value: cluster.BackofficePrometheusUrl}
-	data.BackofficeAlertManagerUrl = types.String{Value: cluster.BackofficeAlertManagerUrl}
 	data.EncryptionMode = types.String{Value: cluster.EncryptionMode}
 	data.UserApiInterface = types.String{Value: cluster.UserApiInterface}
 	data.PricingModel = types.Int64{Value: cluster.PricingModel}
@@ -312,10 +294,10 @@ func writeClusterDataToTFStruct(cluster *scyllaCloudSDK.Cluster, data *clusterDa
 			Attrs: map[string]attr.Value{
 				"id":                                   types.Int64{Value: dc.Id},
 				"cluster_id":                           types.Int64{Value: dc.ClusterId},
-				"cloud_provider_id":                    types.Int64{Value: dc.CloudProviderId},
-				"cloud_provider_region_id":             types.Int64{Value: dc.CloudProviderRegionId},
+				"provider_id":                          types.Int64{Value: dc.CloudProviderId},
+				"provider_region_id":                   types.Int64{Value: dc.CloudProviderRegionId},
 				"replication_factor":                   types.Int64{Value: dc.ReplicationFactor},
-				"ipv4_cidr":                            types.String{Value: dc.Ipv4Cidr},
+				"cidr":                                 types.String{Value: dc.Ipv4Cidr},
 				"account_cloud_provider_credential_id": types.Int64{Value: dc.AccountCloudProviderCredentialId},
 				"status":                               types.String{Value: dc.Status},
 				"name":                                 types.String{Value: dc.Name},

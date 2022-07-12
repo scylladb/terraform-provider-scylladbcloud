@@ -56,7 +56,7 @@ type FreeTier struct {
 type Cluster struct {
 	Id                        int64        `json:"ID"`
 	Name                      string       `json:"Name"`
-	ClusterNameOnConfigFile   string       `json:"ClusterNameOnConfigFile"`
+	ClusterNameOnConfigFile   string       `json:"NameOnConfigFile"`
 	Status                    string       `json:"Status"`
 	CloudProviderId           int64        `json:"CloudProviderID"`
 	ReplicationFactor         int64        `json:"ReplicationFactor"`
@@ -76,5 +76,5 @@ type Cluster struct {
 	MaxAllowedCidrRange       int64        `json:"MaxAllowedCidrRange"`
 	CreatedAt                 string       `json:"CreatedAt"`
 	Dns                       bool         `json:"DNS"`
-	PromProxyEnabled          bool         `json:"PromProxyEnabled"`
+	PromProxyEnabled          bool         `json:"VpcPeeringEnabled"`
 }
