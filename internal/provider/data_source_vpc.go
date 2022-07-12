@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -14,14 +13,33 @@ var _ tfsdk.DataSource = vpcDataSource{}
 
 type vpcDataSourceType struct{}
 
-var vpcObjectAttrTypes = map[string]attr.Type{
-	"id":                       types.Int64Type,
-	"cluster_id":               types.Int64Type,
-	"cloud_provider_id":        types.Int64Type,
-	"cloud_provider_region_id": types.Int64Type,
-	"cluster_dc_id":            types.Int64Type,
-	"ipv4_cidr":                types.StringType,
-}
+var vpcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
+	"id": {
+		MarkdownDescription: "ID",
+		Type:                types.Int64Type,
+	},
+	"cluster_id": {
+		MarkdownDescription: "ID of the cluster",
+		Type:                types.Int64Type,
+	},
+	"cloud_provider_id": {
+		MarkdownDescription: "ID of the cloud provider",
+		Type:                types.Int64Type,
+	},
+	"cloud_provider_region_id": {
+		MarkdownDescription: "ID of the cloud provider region",
+		Type:                types.Int64Type,
+	},
+	"cluster_dc_id": {
+
+		MarkdownDescription: "ID of the cluster's data center",
+		Type:                types.Int64Type,
+	},
+	"ipv4_cidr": {
+		MarkdownDescription: "IPv4 CIDR",
+		Type:                types.StringType,
+	},
+})
 
 func (t vpcDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -36,9 +54,7 @@ func (t vpcDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Di
 			"all": {
 				MarkdownDescription: "List of all cluster's VPCs (AWS) or subnets (GCP)",
 				Computed:            true,
-				Type: types.ListType{
-					ElemType: types.ObjectType{AttrTypes: vpcObjectAttrTypes},
-				},
+				Attributes:          tfsdk.ListNestedAttributes(vpcAttrs),
 			},
 		},
 	}, nil
