@@ -85,7 +85,9 @@ func (t regionDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 			"all": {
 				MarkdownDescription: "Map of all regions, where the key is the region code name (eg. us-east-1)",
 				Computed:            true,
-				Attributes:          tfsdk.MapNestedAttributes(regionAttrs),
+				Type: types.MapType{
+					ElemType: tfsdk.SingleNestedAttributes(regionAttrs).AttributeType(),
+				},
 			},
 		},
 	}, nil
@@ -144,9 +146,7 @@ func (d regionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequ
 		}
 	}
 
-	data.All = types.Map{Elems: regionsByName, ElemType: types.ObjectType{
-		AttrTypes: regionObjectAttrTypes,
-	}}
+	data.All = types.Map{Elems: regionsByName, ElemType: types.ObjectType{AttrTypes: regionObjectAttrTypes}}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
