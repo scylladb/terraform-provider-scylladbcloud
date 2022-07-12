@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -14,11 +13,20 @@ var _ tfsdk.DataSource = allowlistDataSource{}
 
 type allowlistDataSourceType struct{}
 
-var allowlistObjectAttrTypes = map[string]attr.Type{
-	"id":             types.Int64Type,
-	"cluster_id":     types.Int64Type,
-	"source_address": types.StringType,
-}
+var allowlistAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
+	"id": {
+		MarkdownDescription: "ID of the cluster",
+		Type:                types.Int64Type,
+	},
+	"cluster_id": {
+		MarkdownDescription: "ID of the cluster",
+		Type:                types.Int64Type,
+	},
+	"source_address": {
+		MarkdownDescription: "Source address of allowed traffic",
+		Type:                types.StringType,
+	},
+})
 
 func (t allowlistDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -33,9 +41,7 @@ func (t allowlistDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, d
 			"all": {
 				MarkdownDescription: "List of all firewall rules",
 				Computed:            true,
-				Type: types.ListType{
-					ElemType: types.ObjectType{AttrTypes: allowlistObjectAttrTypes},
-				},
+				Attributes:          tfsdk.ListNestedAttributes(allowlistAttrs),
 			},
 		},
 	}, nil
