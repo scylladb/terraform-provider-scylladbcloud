@@ -3,11 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/scylladb/terraform-provider-scyllacloud/internal/apiClient"
-
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/scylladb/terraform-provider-scyllacloud/internal/scyllaCloudSDK"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -18,7 +17,7 @@ var _ tfsdk.Provider = &provider{}
 type provider struct {
 	// client contains the upstream provider SDK used to
 	// communicate with the upstream service.
-	client *apiClient.Client
+	client *scyllaCloudSDK.Client
 
 	// configured is set to true at the end of the Configure method.
 	// This can be used in Resource and DataSource implementations to verify
@@ -62,7 +61,7 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	p.apiURL = data.ApiUrl.Value
 	p.apiKey = data.ApiToken.Value
 
-	client, err := apiClient.NewClient(p.apiURL, p.apiKey)
+	client, err := scyllaCloudSDK.NewClient(p.apiURL, p.apiKey, nil)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create API client", err.Error())
 		return
