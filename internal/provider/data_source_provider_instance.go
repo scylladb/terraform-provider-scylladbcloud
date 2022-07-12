@@ -115,7 +115,9 @@ func (t providerInstanceDataSourceType) GetSchema(ctx context.Context) (tfsdk.Sc
 			"all": {
 				MarkdownDescription: "Map of all instances, where the key is the instance code name (eg. t3.micro)",
 				Computed:            true,
-				Attributes:          tfsdk.MapNestedAttributes(instanceAttrs),
+				Type: types.MapType{
+					ElemType: types.ObjectType{AttrTypes: instanceAttrsTypes},
+				},
 			},
 		},
 	}, nil

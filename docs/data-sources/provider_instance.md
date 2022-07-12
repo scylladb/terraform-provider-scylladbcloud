@@ -35,33 +35,33 @@ output "t3micro_instance_memory" {
 
 ### Read-Only
 
-- `all` (Attributes Map) Map of all instances, where the key is the instance code name (eg. t3.micro) (see [below for nested schema](#nestedatt--all))
+- `all` (Map of Object) Map of all instances, where the key is the instance code name (eg. t3.micro) (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `cloud_provider_id` (Number) ID of the cloud provider
-- `cost_per_hour` (String) Cost per hour
-- `cpu_core_count` (Number) Number of CPU cores
-- `display_order` (Number) Display order
-- `environment` (String) Environment
-- `external_name` (String) External name of the instance
-- `external_storage_network_mbps` (Number) External storage network speed in MB/s
-- `free_tier_hours` (Number) Free tier hours
-- `group_default` (Boolean) Is this instance the default for its group
-- `id` (Number) ID of the instance
-- `instance_family` (String) Instance family
-- `license_cost_on_demand_per_hour` (String) License cost on demand per hour
-- `local_disk_count` (Number) Number of local disks
-- `local_storage_total_gb` (Number) Total local storage in GB
-- `memory_mb` (String) Memory in MB
-- `name` (String) Name of the instance
-- `network_mbps` (Number) Network speed in MB/s
-- `network_speed_description` (String) Network speed description
-- `subscription_cost_hourly` (String) Subscription cost hourly
-- `subscription_cost_monthly` (String) Subscription cost monthly
-- `subscription_cost_yearly` (String) Subscription cost yearly
+- `cloud_provider_id` (Number)
+- `cost_per_hour` (String)
+- `cpu_core_count` (Number)
+- `display_order` (Number)
+- `environment` (String)
+- `external_name` (String)
+- `external_storage_network_mbps` (Number)
+- `free_tier_hours` (Number)
+- `group_default` (Boolean)
+- `id` (Number)
+- `instance_family` (String)
+- `license_cost_on_demand_per_hour` (String)
+- `local_disk_count` (Number)
+- `local_storage_total_gb` (Number)
+- `memory_mb` (String)
+- `name` (String)
+- `network_mbps` (Number)
+- `network_speed_description` (String)
+- `subscription_cost_hourly` (String)
+- `subscription_cost_monthly` (String)
+- `subscription_cost_yearly` (String)
 
 
