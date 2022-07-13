@@ -15,7 +15,7 @@ type allowlistDataSourceType struct{}
 
 var allowlistAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 	"id": {
-		MarkdownDescription: "ID of the cluster",
+		MarkdownDescription: "ID of the rule",
 		Type:                types.Int64Type,
 	},
 	"cluster_id": {
@@ -27,6 +27,8 @@ var allowlistAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		Type:                types.StringType,
 	},
 })
+
+var allowlistAttrsTypes = extractAttrsTypes(allowlistAttrs)
 
 func (t allowlistDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
@@ -41,7 +43,9 @@ func (t allowlistDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, d
 			"all": {
 				MarkdownDescription: "List of all firewall rules",
 				Computed:            true,
-				Attributes:          tfsdk.ListNestedAttributes(allowlistAttrs),
+				Type: types.ListType{
+					ElemType: types.ObjectType{AttrTypes: allowlistAttrsTypes},
+				},
 			},
 		},
 	}, nil

@@ -35,15 +35,15 @@ output "cluster_allowed_ips" {
 
 ### Read-Only
 
-- `all` (Attributes List) List of all firewall rules (see [below for nested schema](#nestedatt--all))
+- `all` (List of Object) List of all firewall rules (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `cluster_id` (Number) ID of the cluster
-- `id` (Number) ID of the cluster
-- `source_address` (String) Source address of allowed traffic
+- `cluster_id` (Number)
+- `id` (Number)
+- `source_address` (String)
 
 
