@@ -42,3 +42,12 @@ func (c *Client) ListClusters() ([]Cluster, error) {
 	}
 	return clusters, nil
 }
+
+func (c *Client) ListAllowlistRules(clusterId int64) ([]AllowlistRule, error) {
+	var result []AllowlistRule
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
