@@ -1,3 +1,3 @@
-provider "scyllacloud" {
+provider "scylla" {
   token = "supersecrettoken"
 }

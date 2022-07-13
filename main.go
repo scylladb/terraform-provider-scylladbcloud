@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/scylladb/terraform-provider-scyllacloud/internal/provider"
+	"github.com/scylladb/terraform-provider-scylla/internal/provider"
 )
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
@@ -22,7 +22,7 @@ import (
 var (
 	// these will be set by the goreleaser configuration
 	// to appropriate values for the compiled binary
-	version string = "dev"
+	version = "dev"
 
 	// goreleaser can also pass the specific commit if you want
 	// commit  string = ""
@@ -36,7 +36,7 @@ func main() {
 
 	opts := providerserver.ServeOpts{
 		// TODO: Update this string with the published name of your provider.
-		Address: "registry.terraform.io/scylladb/scyllacloud",
+		Address: "registry.terraform.io/scylladb/scylla",
 		Debug:   debug,
 	}
 

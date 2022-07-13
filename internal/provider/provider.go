@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/scylladb/terraform-provider-scyllacloud/internal/scyllaCloudSDK"
+	"github.com/scylladb/terraform-provider-scylla/internal/scyllaCloudSDK"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -55,10 +55,21 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	}
 
 	// Configuration values are now available.
-	// if data.Example.Null { /* ... */ }
 
-	// TODO checks for empty value etc. required
-	p.apiURL = data.ApiUrl.Value
+	if data.ApiUrl.IsUnknown() {
+		resp.Diagnostics.AddError("Missing API URL", "The API URL must be known at the time of provider configuration.")
+		return
+	}
+	if data.ApiUrl.IsNull() || data.ApiUrl.Value == "" {
+		p.apiURL = scyllaCloudSDK.DefaultEndpoint
+	} else {
+		p.apiURL = data.ApiUrl.Value
+	}
+
+	if data.ApiToken.IsUnknown() {
+		resp.Diagnostics.AddError("Missing API Token", "The API Token must be known at the time of provider configuration.")
+		return
+	}
 	p.apiKey = data.ApiToken.Value
 
 	client, err := scyllaCloudSDK.NewClient(p.apiURL, p.apiKey, nil)
@@ -79,14 +90,14 @@ func (p *provider) GetResources(ctx context.Context) (map[string]tfsdk.ResourceT
 
 func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSourceType, diag.Diagnostics) {
 	return map[string]tfsdk.DataSourceType{
-		"scyllacloud_cluster":         clusterDataSourceType{},
-		"scyllacloud_datacenter":      datacenterDataSourceType{},
-		"scyllacloud_node":            nodeDataSourceType{},
-		"scyllacloud_allowlist":       allowlistDataSourceType{},
-		"scyllacloud_allowlist_rule":  allowlistRuleDataSourceType{},
-		"scyllacloud_provider":        providerDataSourceType{},
-		"scyllacloud_provider_region": regionDataSourceType{},
-		"scyllacloud_provider_instance": providerInstanceDataSourceType{},
+		"scylla_cluster":           clusterDataSourceType{},
+		"scylla_datacenter":        datacenterDataSourceType{},
+		"scylla_node":              nodeDataSourceType{},
+		"scylla_allowlist":         allowlistDataSourceType{},
+		"scylla_allowlist_rule":    allowlistRuleDataSourceType{},
+		"scylla_provider":          providerDataSourceType{},
+		"scylla_provider_region":   providerRegionDataSourceType{},
+		"scylla_provider_instance": providerInstanceDataSourceType{},
 	}, nil
 }
 

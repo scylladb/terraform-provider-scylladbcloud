@@ -14,7 +14,7 @@ func TestAccExampleDataSource(t *testing.T) {
 			{
 				Config: testAccProviderDataSourceConfig,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("data.scyllacloud_provider.test", "id", "1"),
+					resource.TestCheckResourceAttr("data.scylla_provider.test", "id", "1"),
 				),
 			},
 		},
@@ -25,18 +25,18 @@ func TestAccExampleDataSource(t *testing.T) {
 const testAccProviderDataSourceConfig = `
 terraform {
   required_providers {
-    scyllacloud = {
-      source  = "registry.terraform.io/scylladb/scyllacloud"
+    scylla = {
+      source  = "registry.terraform.io/scylladb/scylla"
     }
   }
 }
 
-provider "scyllacloud" {
+provider "scylla" {
 	endpoint = "https://api-amnonh.ext.lab.scylla.cloud/api/v0"
 	token    = "token"
 }
 
-data "scyllacloud_provider" "test" {
+data "scylla_provider" "test" {
   vendor = "AWS"
 }
 `

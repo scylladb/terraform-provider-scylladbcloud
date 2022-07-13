@@ -10,6 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
+// TODO this is example resource from the provider scaffolding
+
 // Ensure provider defined types fully satisfy framework interfaces
 var _ tfsdk.ResourceType = exampleResourceType{}
 var _ tfsdk.Resource = exampleResource{}
