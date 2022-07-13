@@ -41,6 +41,8 @@ var vpcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 	},
 })
 
+var vpcAttrTypes = extractAttrsTypes(vpcAttrs)
+
 func (t vpcDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		MarkdownDescription: "Cluster's VPCs data source",
@@ -54,7 +56,9 @@ func (t vpcDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Di
 			"all": {
 				MarkdownDescription: "List of all cluster's VPCs (AWS) or subnets (GCP)",
 				Computed:            true,
-				Attributes:          tfsdk.ListNestedAttributes(vpcAttrs),
+				Type: types.MapType{
+					ElemType: types.ObjectType{AttrTypes: vpcAttrTypes},
+				},
 			},
 		},
 	}, nil

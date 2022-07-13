@@ -35,18 +35,18 @@ output "cluster_vpcs_cidrs" {
 
 ### Read-Only
 
-- `all` (Attributes List) List of all cluster's VPCs (AWS) or subnets (GCP) (see [below for nested schema](#nestedatt--all))
+- `all` (Map of Object) List of all cluster's VPCs (AWS) or subnets (GCP) (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `cloud_provider_id` (Number) ID of the cloud provider
-- `cloud_provider_region_id` (Number) ID of the cloud provider region
-- `cluster_dc_id` (Number) ID of the cluster's data center
-- `cluster_id` (Number) ID of the cluster
-- `id` (Number) ID
-- `ipv4_cidr` (String) IPv4 CIDR
+- `cloud_provider_id` (Number)
+- `cloud_provider_region_id` (Number)
+- `cluster_dc_id` (Number)
+- `cluster_id` (Number)
+- `id` (Number)
+- `ipv4_cidr` (String)
 
 

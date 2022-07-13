@@ -64,6 +64,8 @@ var vpcPeeringAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 	},
 })
 
+var vpcPeeringAttrTypes = extractAttrsTypes(vpcPeeringAttrs)
+
 func (t vpcPeeringDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		MarkdownDescription: "Cluster's VPC peerings data source",
@@ -77,7 +79,9 @@ func (t vpcPeeringDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, 
 			"all": {
 				MarkdownDescription: "List of all cluster's VPC peerings",
 				Computed:            true,
-				Attributes:          tfsdk.ListNestedAttributes(vpcPeeringAttrs),
+				Type: types.ListType{
+					ElemType: types.ObjectType{AttrTypes: vpcPeeringAttrTypes},
+				},
 			},
 		},
 	}, nil

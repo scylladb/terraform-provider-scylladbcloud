@@ -35,24 +35,24 @@ output "cluster_vpc_peers_external_ids" {
 
 ### Read-Only
 
-- `all` (Attributes List) List of all cluster's VPC peerings (see [below for nested schema](#nestedatt--all))
+- `all` (List of Object) List of all cluster's VPC peerings (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `cluster_dc_id` (Number) Cluster DC ID
-- `expires_at` (String) Expires at
-- `external_id` (String) External ID
-- `id` (Number) ID
-- `network_name` (String) Network name
-- `peer_owner_external_id` (String) Peer owner external ID
-- `peer_vpc_external_id` (String) Peer VPC external ID
-- `peer_vpc_ipv4_cidr_list` (List of String) Peer VPC IPv4 CIDR list
-- `peer_vpc_ipv4_cidr_list_verified` (List of String) Peer VPC IPv4 CIDR list verified
-- `peer_vpc_region_id` (Number) Peer VPC region ID
-- `project_id` (String) Project ID
-- `status` (String) Status
+- `cluster_dc_id` (Number)
+- `expires_at` (String)
+- `external_id` (String)
+- `id` (Number)
+- `network_name` (String)
+- `peer_owner_external_id` (String)
+- `peer_vpc_external_id` (String)
+- `peer_vpc_ipv4_cidr_list` (List of String)
+- `peer_vpc_ipv4_cidr_list_verified` (List of String)
+- `peer_vpc_region_id` (Number)
+- `project_id` (String)
+- `status` (String)
 
 
