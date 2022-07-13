@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -59,7 +61,7 @@ func (t allowlistDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pro
 
 type allowlistDataSourceData struct {
 	ClusterId types.Int64 `tfsdk:"cluster_id"`
-	All       types.Map   `tfsdk:"all"`
+	All       types.List  `tfsdk:"all"`
 }
 
 type allowlistDataSource struct {
@@ -76,7 +78,25 @@ func (d allowlistDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceR
 		return
 	}
 
-	// TODO implement
+	rules, err := d.provider.client.ListAllowlistRules(data.ClusterId.Value)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cloud provider regions, got error: %s", err))
+		return
+	}
+
+	wrappedRules := make([]attr.Value, 0, len(rules))
+	for _, rule := range rules {
+		wrappedRules = append(wrappedRules, types.Object{
+			Attrs: map[string]attr.Value{
+				"id":             types.Int64{Value: rule.Id},
+				"cluster_id":     types.Int64{Value: rule.ClusterId},
+				"source_address": types.String{Value: rule.SourceAddress},
+			},
+			AttrTypes: allowlistAttrsTypes,
+		})
+	}
+
+	data.All = types.List{Elems: wrappedRules, ElemType: types.ObjectType{AttrTypes: allowlistAttrsTypes}}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
