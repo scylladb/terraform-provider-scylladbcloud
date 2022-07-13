@@ -99,6 +99,8 @@ var nodeAttrs = markAttrsAsComputed(
 	},
 )
 
+var nodeAttrsTypes = extractAttrsTypes(nodeAttrs)
+
 func (t nodeDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		MarkdownDescription: "Cluster nodes data source",
@@ -112,7 +114,9 @@ func (t nodeDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.D
 			"all": {
 				MarkdownDescription: "List of all nodes",
 				Computed:            true,
-				Attributes:          tfsdk.ListNestedAttributes(nodeAttrs),
+				Type: types.ListType{
+					ElemType: types.ObjectType{AttrTypes: nodeAttrsTypes},
+				},
 			},
 		},
 	}, nil

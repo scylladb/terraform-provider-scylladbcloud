@@ -31,32 +31,32 @@ output "cluster_nodes_public_ips" {
 
 ### Read-Only
 
-- `all` (Attributes List) List of all nodes (see [below for nested schema](#nestedatt--all))
+- `all` (List of Object) List of all nodes (see [below for nested schema](#nestedatt--all))
 
 <a id="nestedatt--all"></a>
 ### Nested Schema for `all`
 
 Read-Only:
 
-- `billing_start_date` (String) Date when the service was billed
-- `cloud_provider_id` (Number) ID of the cloud provider
-- `cloud_provider_instance_type_id` (Number) ID of the cloud provider instance type
-- `cloud_provider_region_id` (Number) ID of the cloud provider region
-- `cluster_dc_id` (Number) ID of the cluster datacenter
-- `cluster_host_id` (String) ID of the cluster host
-- `cluster_id` (Number) ID of the cluster
-- `cluster_join_date` (String) Date when the node joined the cluster
-- `distribution` (String) Distribution of the node
-- `dns` (String) DNS of the node
-- `hostname` (String) Hostname of the node
-- `id` (Number) ID of the node
-- `node_state` (String) State of the node
-- `private_ip` (String) Private IP of the node
-- `public_ip` (String) Public IP of the node
-- `server_action_id` (Number) ID of the server action
-- `service_id` (Number) ID of the service
-- `service_version` (String) Version of the service
-- `service_version_id` (Number) ID of the service version
-- `status` (String) Status of the node
+- `billing_start_date` (String)
+- `cloud_provider_id` (Number)
+- `cloud_provider_instance_type_id` (Number)
+- `cloud_provider_region_id` (Number)
+- `cluster_dc_id` (Number)
+- `cluster_host_id` (String)
+- `cluster_id` (Number)
+- `cluster_join_date` (String)
+- `distribution` (String)
+- `dns` (String)
+- `hostname` (String)
+- `id` (Number)
+- `node_state` (String)
+- `private_ip` (String)
+- `public_ip` (String)
+- `server_action_id` (Number)
+- `service_id` (Number)
+- `service_version` (String)
+- `service_version_id` (Number)
+- `status` (String)
 
 
