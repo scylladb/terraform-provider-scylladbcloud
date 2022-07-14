@@ -46,7 +46,7 @@ func (t providerDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Prov
 
 type providerDataSourceData struct {
 	Vendor        types.String `tfsdk:"vendor"`
-	Id            types.Int64  `tfsdk:"id"`
+	ID            types.Int64  `tfsdk:"id"`
 	RootAccountID types.String `tfsdk:"root_account_id"`
 }
 
@@ -73,8 +73,8 @@ func (d providerDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRe
 	found := false
 	for _, cloudProvider := range cloudProviders {
 		if cloudProvider.Name == data.Vendor.Value {
-			data.Id = types.Int64{Value: cloudProvider.Id}
-			data.RootAccountID = types.String{Value: cloudProvider.RootAccountId}
+			data.ID = types.Int64{Value: cloudProvider.ID}
+			data.RootAccountID = types.String{Value: cloudProvider.RootAccountID}
 			found = true
 		}
 	}

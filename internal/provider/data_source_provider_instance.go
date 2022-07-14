@@ -130,7 +130,7 @@ func (t providerInstanceDataSourceType) NewDataSource(ctx context.Context, in tf
 }
 
 type providerInstanceDataSourceData struct {
-	ProviderId types.Int64 `tfsdk:"provider_id"`
+	ProviderID types.Int64 `tfsdk:"provider_id"`
 	All        types.Map   `tfsdk:"all"`
 }
 

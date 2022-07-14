@@ -74,7 +74,7 @@ func (t vpcDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider)
 }
 
 type vpcDataSourceData struct {
-	ClusterId types.Int64 `tfsdk:"cluster_id"`
+	ClusterID types.Int64 `tfsdk:"cluster_id"`
 	All       types.List  `tfsdk:"all"`
 }
 
@@ -92,7 +92,7 @@ func (d vpcDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest
 		return
 	}
 
-	vpcs, err := d.provider.client.ListClusterVPCs(data.ClusterId.Value)
+	vpcs, err := d.provider.client.ListClusterVPCs(data.ClusterID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cluster's VPCs, got error: %s", err))
 		return
@@ -102,12 +102,12 @@ func (d vpcDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceRequest
 	for _, vpc := range vpcs {
 		wrappedVpcs = append(wrappedVpcs, types.Object{
 			Attrs: map[string]attr.Value{
-				"id":                       types.Int64{Value: vpc.Id},
-				"cluster_id":               types.Int64{Value: vpc.ClusterId},
-				"provider_id":              types.Int64{Value: vpc.CloudProviderId},
-				"cloud_provider_region_id": types.Int64{Value: vpc.CloudProviderRegionId},
-				"cluster_dc_id":            types.Int64{Value: vpc.ClusterDcId},
-				"cidr":                     types.String{Value: vpc.Ipv4Cidr},
+				"id":                       types.Int64{Value: vpc.ID},
+				"cluster_id":               types.Int64{Value: vpc.ClusterID},
+				"provider_id":              types.Int64{Value: vpc.CloudProviderID},
+				"cloud_provider_region_id": types.Int64{Value: vpc.CloudProviderRegionID},
+				"cluster_dc_id":            types.Int64{Value: vpc.ClusterDcID},
+				"cidr":                     types.String{Value: vpc.CIDR},
 			},
 			AttrTypes: vpcAttrsTypes,
 		})

@@ -87,17 +87,17 @@ func (t datacenterDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pr
 }
 
 type datacenterDataSourceData struct {
-	Id                               types.Int64  `tfsdk:"id"`
-	ClusterId                        types.Int64  `tfsdk:"cluster_id"`
-	CloudProviderId                  types.Int64  `tfsdk:"provider_id"`
-	CloudProviderRegionId            types.Int64  `tfsdk:"cloud_provider_region_id"`
+	ID                               types.Int64  `tfsdk:"id"`
+	ClusterID                        types.Int64  `tfsdk:"cluster_id"`
+	CloudProviderID                  types.Int64  `tfsdk:"provider_id"`
+	CloudProviderRegionID            types.Int64  `tfsdk:"cloud_provider_region_id"`
 	ReplicationFactor                types.Int64  `tfsdk:"replication_factor"`
 	Ipv4Cidr                         types.String `tfsdk:"ipv4_cidr"`
-	AccountCloudProviderCredentialId types.Int64  `tfsdk:"account_cloud_provider_credential_id"`
+	AccountCloudProviderCredentialID types.Int64  `tfsdk:"account_cloud_provider_credential_id"`
 	Status                           types.String `tfsdk:"status"`
 	Name                             types.String `tfsdk:"name"`
 	ManagementNetwork                types.String `tfsdk:"management_network"`
-	InstanceTypeId                   types.Int64  `tfsdk:"instance_type_id"`
+	InstanceTypeID                   types.Int64  `tfsdk:"instance_type_id"`
 }
 
 type datacenterDataSource struct {
@@ -114,12 +114,12 @@ func (d datacenterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 		return
 	}
 
-	if data.Id.IsNull() && data.Name.IsNull() {
+	if data.ID.IsNull() && data.Name.IsNull() {
 		resp.Diagnostics.AddError("malformed data", "id or name must be specified")
 		return
 	}
 
-	dcs, err := d.provider.client.ListDataCenters(data.ClusterId.Value)
+	dcs, err := d.provider.client.ListDataCenters(data.ClusterID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cluster's data centers, got error: %s", err))
 		return
@@ -127,18 +127,18 @@ func (d datacenterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 
 	found := false
 	for _, d := range dcs {
-		if (!data.Id.IsNull() && d.Id == data.Id.Value) || (!data.Name.IsNull() && d.Name == data.Name.Value) {
-			data.Id = types.Int64{Value: d.Id}
-			data.ClusterId = types.Int64{Value: d.ClusterId}
-			data.CloudProviderId = types.Int64{Value: d.CloudProviderId}
-			data.CloudProviderRegionId = types.Int64{Value: d.CloudProviderRegionId}
+		if (!data.ID.IsNull() && d.ID == data.ID.Value) || (!data.Name.IsNull() && d.Name == data.Name.Value) {
+			data.ID = types.Int64{Value: d.ID}
+			data.ClusterID = types.Int64{Value: d.ClusterID}
+			data.CloudProviderID = types.Int64{Value: d.CloudProviderID}
+			data.CloudProviderRegionID = types.Int64{Value: d.CloudProviderRegionID}
 			data.ReplicationFactor = types.Int64{Value: d.ReplicationFactor}
-			data.Ipv4Cidr = types.String{Value: d.Ipv4Cidr}
-			data.AccountCloudProviderCredentialId = types.Int64{Value: d.AccountCloudProviderCredentialId}
+			data.Ipv4Cidr = types.String{Value: d.CIDR}
+			data.AccountCloudProviderCredentialID = types.Int64{Value: d.AccountCloudProviderCredentialID}
 			data.Status = types.String{Value: d.Status}
 			data.Name = types.String{Value: d.Name}
 			data.ManagementNetwork = types.String{Value: d.ManagementNetwork}
-			data.InstanceTypeId = types.Int64{Value: d.InstanceTypeId}
+			data.InstanceTypeID = types.Int64{Value: d.InstanceTypeID}
 
 			found = true
 			break

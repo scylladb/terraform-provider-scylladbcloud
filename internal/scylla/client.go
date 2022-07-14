@@ -29,7 +29,7 @@ type APIError struct {
 	// Error message.
 	Message string `json:"message"`
 	// Error details
-	TraceId string `json:"trace_id"`
+	TraceID string `json:"trace_id"`
 	// Http status code
 	StatusCode int
 }
@@ -37,7 +37,7 @@ type APIError struct {
 func (err *APIError) Error() string {
 	return fmt.Sprintf(
 		"Error %q (http status %d): %q. Trace id: %q.",
-		err.Code, err.StatusCode, err.Message, err.TraceId)
+		err.Code, err.StatusCode, err.Message, err.TraceID)
 }
 
 // Client represents a client to call the Scylla Cloud API
@@ -45,8 +45,8 @@ type Client struct {
 	// headers holds headers that will be set for all http requests.
 	headers http.Header
 
-	// accountId holds the account ID used in requests to the API.
-	accountId int64
+	// accountID holds the account ID used in requests to the API.
+	accountID int64
 
 	// API endpoint
 	endpoint string
@@ -71,7 +71,7 @@ func NewClient(endpoint, token string, httpClient *http.Client) (*Client, error)
 	client.headers.Add("Authorization", "Bearer "+token)
 	client.headers.Add("Accept", "application/json")
 
-	if err := client.findAndSaveAccountId(); err != nil {
+	if err := client.findAndSaveAccountID(); err != nil {
 		return nil, err
 	}
 
@@ -172,12 +172,12 @@ func (c *Client) delete(path string) error {
 	return c.callAPI(context.TODO(), http.MethodDelete, path, nil, nil)
 }
 
-func (c *Client) findAndSaveAccountId() error {
+func (c *Client) findAndSaveAccountID() error {
 	var result model.UserAccount
 	if err := c.get("/account/default", &result); err != nil {
 		return err
 	}
 
-	c.accountId = result.AccountId
+	c.accountID = result.AccountID
 	return nil
 }

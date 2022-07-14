@@ -100,7 +100,7 @@ func (t providerRegionDataSourceType) NewDataSource(ctx context.Context, in tfsd
 }
 
 type providerRegionDataSourceData struct {
-	ProviderId types.Int64 `tfsdk:"provider_id"`
+	ProviderID types.Int64 `tfsdk:"provider_id"`
 	All        types.Map   `tfsdk:"all"`
 }
 
@@ -118,7 +118,7 @@ func (d providerRegionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSo
 		return
 	}
 
-	regions, err := d.provider.client.ListCloudProviderRegions(data.ProviderId.Value)
+	regions, err := d.provider.client.ListCloudProviderRegions(data.ProviderID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cloud provider regions, got error: %s", err))
 		return
@@ -128,12 +128,12 @@ func (d providerRegionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSo
 	for _, region := range regions {
 		regionsByName[region.Name] = types.Object{
 			Attrs: map[string]attr.Value{
-				"id":                               types.Int64{Value: region.Id},
-				"cloud_provider_id":                types.Int64{Value: region.CloudProviderId},
+				"id":                               types.Int64{Value: region.ID},
+				"cloud_provider_id":                types.Int64{Value: region.CloudProviderID},
 				"name":                             types.String{Value: region.Name},
 				"full_name":                        types.String{Value: region.FullName},
-				"external_id":                      types.String{Value: region.ExternalId},
-				"multi_region_external_id":         types.String{Value: region.MultiRegionExternalId},
+				"external_id":                      types.String{Value: region.ExternalID},
+				"multi_region_external_id":         types.String{Value: region.MultiRegionExternalID},
 				"dc_name":                          types.String{Value: region.DcName},
 				"backup_storage_gb_cost":           types.String{Value: region.BackupStorageGbCost},
 				"traffic_same_region_in_gb_cost":   types.String{Value: region.TrafficSameRegionInGbCost},

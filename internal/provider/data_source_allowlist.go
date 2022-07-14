@@ -60,7 +60,7 @@ func (t allowlistDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pro
 }
 
 type allowlistDataSourceData struct {
-	ClusterId types.Int64 `tfsdk:"cluster_id"`
+	ClusterID types.Int64 `tfsdk:"cluster_id"`
 	All       types.List  `tfsdk:"all"`
 }
 
@@ -78,7 +78,7 @@ func (d allowlistDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceR
 		return
 	}
 
-	rules, err := d.provider.client.ListAllowlistRules(data.ClusterId.Value)
+	rules, err := d.provider.client.ListAllowlistRules(data.ClusterID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cloud provider regions, got error: %s", err))
 		return
@@ -88,8 +88,8 @@ func (d allowlistDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceR
 	for _, rule := range rules {
 		wrappedRules = append(wrappedRules, types.Object{
 			Attrs: map[string]attr.Value{
-				"id":             types.Int64{Value: rule.Id},
-				"cluster_id":     types.Int64{Value: rule.ClusterId},
+				"id":             types.Int64{Value: rule.ID},
+				"cluster_id":     types.Int64{Value: rule.ClusterID},
 				"source_address": types.String{Value: rule.SourceAddress},
 			},
 			AttrTypes: allowlistAttrsTypes,
