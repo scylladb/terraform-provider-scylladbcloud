@@ -39,7 +39,6 @@ output "cluster_nodes_public_ips" {
 Read-Only:
 
 - `billing_start_date` (String)
-- `cloud_provider_id` (Number)
 - `cloud_provider_instance_type_id` (Number)
 - `cloud_provider_region_id` (Number)
 - `cluster_dc_id` (Number)
@@ -52,6 +51,7 @@ Read-Only:
 - `id` (Number)
 - `node_state` (String)
 - `private_ip` (String)
+- `provider_id` (Number)
 - `public_ip` (String)
 - `server_action_id` (Number)
 - `service_id` (Number)
