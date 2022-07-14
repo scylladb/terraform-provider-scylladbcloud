@@ -36,7 +36,6 @@ output "cluster_example_scylla_version" {
 - `backoffice_grafana_url` (String) Backoffice grafana url
 - `backoffice_prometheus_url` (String) Backoffice prometheus url
 - `broadcast_type` (String) Cluster broadcast type
-- `cloud_provider_id` (Number) Cloud provider id
 - `cluster_name_on_config_file` (String) Cluster name on config file
 - `created_at` (String) Created at
 - `dc` (Attributes List) Datacenters (see [below for nested schema](#nestedatt--dc))
@@ -48,6 +47,7 @@ output "cluster_example_scylla_version" {
 - `max_allowed_cidr_range` (Number) Max allowed cidr range
 - `pricing_model` (Number) Pricing model
 - `prom_proxy_enabled` (Boolean) Prom proxy enabled
+- `provider_id` (Number) Cloud provider id
 - `replication_factor` (Number) Cluster replication factor
 - `scylla_version` (String) Scylla version
 - `scylla_version_id` (Number) Scylla version id
@@ -61,7 +61,6 @@ Read-Only:
 
 - `account_cloud_provider_credential_id` (Number) ID of the account cloud provider credential
 - `client_connection` (List of String) Client connection of the cluster
-- `cloud_provider_id` (Number) ID of the cloud provider
 - `cloud_provider_region_id` (Number) ID of the cloud provider region
 - `cluster_id` (Number) ID of the cluster
 - `id` (Number) ID of DC
@@ -69,6 +68,7 @@ Read-Only:
 - `ipv4_cidr` (String) IPv4 CIDR of the cluster
 - `management_network` (String) Management network of the cluster
 - `name` (String) Name of the cluster
+- `provider_id` (Number) ID of the cloud provider
 - `replication_factor` (Number) Replication factor of the cluster
 - `status` (String) Status of the cluster
 

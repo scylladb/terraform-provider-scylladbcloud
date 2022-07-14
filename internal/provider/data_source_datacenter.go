@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -19,7 +20,7 @@ func (t datacenterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, 
 
 		Attributes: map[string]tfsdk.Attribute{
 			"id": {
-				MarkdownDescription: "ID of the provider",
+				MarkdownDescription: "ID of the data center",
 				Optional:            true,
 				Computed:            true,
 				Type:                types.Int64Type,
@@ -29,7 +30,7 @@ func (t datacenterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, 
 				Required:            true,
 				Type:                types.Int64Type,
 			},
-			"cloud_provider_id": {
+			"provider_id": {
 				MarkdownDescription: "ID of the cloud provider",
 				Computed:            true,
 				Type:                types.Int64Type,
@@ -88,7 +89,7 @@ func (t datacenterDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Pr
 type datacenterDataSourceData struct {
 	Id                               types.Int64  `tfsdk:"id"`
 	ClusterId                        types.Int64  `tfsdk:"cluster_id"`
-	CloudProviderId                  types.Int64  `tfsdk:"cloud_provider_id"`
+	CloudProviderId                  types.Int64  `tfsdk:"provider_id"`
 	CloudProviderRegionId            types.Int64  `tfsdk:"cloud_provider_region_id"`
 	ReplicationFactor                types.Int64  `tfsdk:"replication_factor"`
 	Ipv4Cidr                         types.String `tfsdk:"ipv4_cidr"`
@@ -113,7 +114,40 @@ func (d datacenterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSource
 		return
 	}
 
-	// TODO implement
+	if data.Id.IsNull() && data.Name.IsNull() {
+		resp.Diagnostics.AddError("malformed data", "id or name must be specified")
+		return
+	}
+
+	dcs, err := d.provider.client.ListDataCenters(data.ClusterId.Value)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cluster's data centers, got error: %s", err))
+		return
+	}
+
+	found := false
+	for _, d := range dcs {
+		if (!data.Id.IsNull() && d.Id == data.Id.Value) || (!data.Name.IsNull() && d.Name == data.Name.Value) {
+			data.Id = types.Int64{Value: d.Id}
+			data.ClusterId = types.Int64{Value: d.ClusterId}
+			data.CloudProviderId = types.Int64{Value: d.CloudProviderId}
+			data.CloudProviderRegionId = types.Int64{Value: d.CloudProviderRegionId}
+			data.ReplicationFactor = types.Int64{Value: d.ReplicationFactor}
+			data.Ipv4Cidr = types.String{Value: d.Ipv4Cidr}
+			data.AccountCloudProviderCredentialId = types.Int64{Value: d.AccountCloudProviderCredentialId}
+			data.Status = types.String{Value: d.Status}
+			data.Name = types.String{Value: d.Name}
+			data.ManagementNetwork = types.String{Value: d.ManagementNetwork}
+			data.InstanceTypeId = types.Int64{Value: d.InstanceTypeId}
+
+			found = true
+			break
+		}
+	}
+	if !found {
+		resp.Diagnostics.AddError("Not Found", "No data center matching criteria found")
+		return
+	}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)

@@ -78,3 +78,14 @@ func (c *Client) DeleteAllowlistRule(clusterId, ruleId int64) error {
 	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
 	return c.delete(path)
 }
+
+func (c *Client) ListDataCenters(clusterId int64) ([]DataCenter, error) {
+	var result []DataCenter
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// scylla_node
