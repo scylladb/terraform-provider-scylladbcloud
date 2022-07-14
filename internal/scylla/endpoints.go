@@ -37,6 +37,7 @@ func (c *Client) ListClusters() ([]model.Cluster, error) {
 	clusters := make([]model.Cluster, len(result))
 	for i, item := range result {
 		if item.Error != nil {
+			// TODO jmolinski: it's not clear how to handle the case when only some clusters have associated errors
 			return nil, errors.New(fmt.Sprintf("cluster error: %v", item.Error))
 		}
 		clusters[i] = item.Value
