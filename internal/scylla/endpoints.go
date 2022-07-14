@@ -78,3 +78,30 @@ func (c *Client) DeleteAllowlistRule(clusterId, ruleId int64) error {
 	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
 	return c.delete(path)
 }
+
+func (c *Client) ListDataCenters(clusterId int64) ([]model.DataCenter, error) {
+	var result []model.DataCenter
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *Client) ListClusterNodes(clusterId int64) ([]model.Node, error) {
+	var result []model.Node
+	path := fmt.Sprintf("/account/%d/cluster/%d/node", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *Client) ListClusterVPCs(clusterId int64) ([]model.VPC, error) {
+	var result []model.VPC
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

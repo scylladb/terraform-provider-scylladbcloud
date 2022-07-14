@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -23,7 +25,7 @@ var nodeAttrs = markAttrsAsComputed(
 			MarkdownDescription: "ID of the cluster",
 			Type:                types.Int64Type,
 		},
-		"cloud_provider_id": {
+		"provider_id": {
 			MarkdownDescription: "ID of the cloud provider",
 			Type:                types.Int64Type,
 		},
@@ -92,7 +94,6 @@ var nodeAttrs = markAttrsAsComputed(
 			Type:                types.StringType,
 		},
 		"dns": {
-
 			MarkdownDescription: "DNS of the node",
 			Type:                types.StringType,
 		},
@@ -129,26 +130,8 @@ func (t nodeDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider
 }
 
 type nodeDataSourceData struct {
-	Id                          types.Int64  `tfsdk:"ID"`
-	ClusterId                   types.Int64  `tfsdk:"cluster_id"`
-	CloudProviderId             types.Int64  `tfsdk:"cloud_provider_id"`
-	CloudProviderInstanceTypeId types.Int64  `tfsdk:"cloud_provider_instance_type_id"`
-	CloudProviderRegionId       types.Int64  `tfsdk:"cloud_provider_region_id"`
-	PublicIp                    types.String `tfsdk:"public_ip"`
-	PrivateIp                   types.String `tfsdk:"private_ip"`
-	ClusterJoinDate             types.String `tfsdk:"cluster_join_date"`
-	ServiceId                   types.Int64  `tfsdk:"service_id"`
-	ServiceVersionId            types.Int64  `tfsdk:"service_version_id"`
-	ServiceVersion              types.String `tfsdk:"service_version"`
-	BillingStartDate            types.String `tfsdk:"billing_start_date"`
-	Hostname                    types.String `tfsdk:"hostname"`
-	ClusterHostId               types.String `tfsdk:"cluster_host_id"`
-	Status                      types.String `tfsdk:"status"`
-	NodeState                   types.String `tfsdk:"node_state"`
-	ClusterDcId                 types.Int64  `tfsdk:"cluster_dc_id"`
-	ServerActionId              types.Int64  `tfsdk:"server_action_id"`
-	Distribution                types.String `tfsdk:"distribution"`
-	Dns                         types.String `tfsdk:"dns"`
+	ClusterId types.Int64 `tfsdk:"cluster_id"`
+	All       types.List  `tfsdk:"all"`
 }
 
 type nodeDataSource struct {
@@ -165,7 +148,42 @@ func (d nodeDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReques
 		return
 	}
 
-	// TODO: implement
+	nodes, err := d.provider.client.ListClusterNodes(data.ClusterId.Value)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cluster's nodes, got error: %s", err))
+		return
+	}
+
+	wrappedNodes := make([]attr.Value, 0, len(nodes))
+	for _, node := range nodes {
+		wrappedNodes = append(wrappedNodes, types.Object{
+			Attrs: map[string]attr.Value{
+				"id":                              types.Int64{Value: node.Id},
+				"cluster_id":                      types.Int64{Value: node.ClusterId},
+				"provider_id":                     types.Int64{Value: node.CloudProviderId},
+				"cloud_provider_instance_type_id": types.Int64{Value: node.CloudProviderInstanceTypeId},
+				"cloud_provider_region_id":        types.Int64{Value: node.CloudProviderRegionId},
+				"public_ip":                       types.String{Value: node.PublicIP},
+				"private_ip":                      types.String{Value: node.PrivateIP},
+				"cluster_join_date":               types.String{Value: node.ClusterJoinDate},
+				"service_id":                      types.Int64{Value: node.ServiceId},
+				"service_version_id":              types.Int64{Value: node.ServiceVersionId},
+				"service_version":                 types.String{Value: node.ServiceVersion},
+				"billing_start_date":              types.String{Value: node.BillingStartDate},
+				"hostname":                        types.String{Value: node.Hostname},
+				"cluster_host_id":                 types.String{Value: node.ClusterHostId},
+				"status":                          types.String{Value: node.Status},
+				"node_state":                      types.String{Value: node.NodeState},
+				"cluster_dc_id":                   types.Int64{Value: node.ClusterDcId},
+				"server_action_id":                types.Int64{Value: node.ServerActionId},
+				"distribution":                    types.String{Value: node.Distribution},
+				"dns":                             types.String{Value: node.Dns},
+			},
+			AttrTypes: nodeAttrsTypes,
+		})
+	}
+
+	data.All = types.List{Elems: wrappedNodes, ElemType: types.ObjectType{AttrTypes: nodeAttrsTypes}}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)

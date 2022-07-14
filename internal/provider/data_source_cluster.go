@@ -24,7 +24,7 @@ var dcAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "ID of the cluster",
 		Type:                types.Int64Type,
 	},
-	"cloud_provider_id": {
+	"provider_id": {
 		MarkdownDescription: "ID of the cloud provider",
 		Type:                types.Int64Type,
 	},
@@ -107,7 +107,7 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 			MarkdownDescription: "Cluster status",
 			Type:                types.StringType,
 		},
-		"cloud_provider_id": {
+		"provider_id": {
 			MarkdownDescription: "Cloud provider id",
 			Type:                types.Int64Type,
 		},
@@ -202,7 +202,7 @@ type clusterDataSourceData struct {
 	Name                      types.String `tfsdk:"name"`
 	ClusterNameOnConfigFile   types.String `tfsdk:"cluster_name_on_config_file"`
 	Status                    types.String `tfsdk:"status"`
-	CloudProviderId           types.Int64  `tfsdk:"cloud_provider_id"`
+	CloudProviderId           types.Int64  `tfsdk:"provider_id"`
 	ReplicationFactor         types.Int64  `tfsdk:"replication_factor"`
 	BroadcastType             types.String `tfsdk:"broadcast_type"`
 	ScyllaVersionId           types.Int64  `tfsdk:"scylla_version_id"`
@@ -305,7 +305,7 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 			Attrs: map[string]attr.Value{
 				"id":                                   types.Int64{Value: dc.Id},
 				"cluster_id":                           types.Int64{Value: dc.ClusterId},
-				"cloud_provider_id":                    types.Int64{Value: dc.CloudProviderId},
+				"provider_id":                          types.Int64{Value: dc.CloudProviderId},
 				"cloud_provider_region_id":             types.Int64{Value: dc.CloudProviderRegionId},
 				"replication_factor":                   types.Int64{Value: dc.ReplicationFactor},
 				"ipv4_cidr":                            types.String{Value: dc.Ipv4Cidr},
