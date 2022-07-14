@@ -78,3 +78,9 @@ type Cluster struct {
 	Dns                       bool         `json:"DNS"`
 	PromProxyEnabled          bool         `json:"PromProxyEnabled"`
 }
+
+type AllowlistRule struct {
+	Id            int64  `json:"ID"`
+	ClusterId     int64  `json:"ClusterID"`
+	SourceAddress string `json:"SourceAddress"`
+}

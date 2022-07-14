@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -65,7 +66,31 @@ func (d allowlistRuleDataSource) Read(ctx context.Context, req tfsdk.ReadDataSou
 		return
 	}
 
-	// TODO: implement
+	if data.Id.IsNull() && data.SourceAddress.IsNull() {
+		resp.Diagnostics.AddError("malformed data", "id or source_address must be specified")
+		return
+	}
+
+	rules, err := d.provider.client.ListAllowlistRules(data.ClusterId.Value)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cloud provider regions, got error: %s", err))
+		return
+	}
+
+	foundRule := false
+	for _, rule := range rules {
+		if (!data.Id.IsNull() && rule.Id == data.Id.Value) || (!data.SourceAddress.IsNull() && rule.SourceAddress == data.SourceAddress.Value) {
+			data.Id = types.Int64{Value: rule.Id}
+			data.ClusterId = types.Int64{Value: rule.ClusterId}
+			data.SourceAddress = types.String{Value: rule.SourceAddress}
+			foundRule = true
+			break
+		}
+	}
+	if !foundRule {
+		resp.Diagnostics.AddError("Not Found", "No rule matching criteria found")
+		return
+	}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
