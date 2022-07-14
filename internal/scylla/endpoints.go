@@ -88,4 +88,11 @@ func (c *Client) ListDataCenters(clusterId int64) ([]DataCenter, error) {
 	return result, nil
 }
 
-// scylla_node
+func (c *Client) ListClusterNodes(clusterId int64) ([]Node, error) {
+	var result []Node
+	path := fmt.Sprintf("/account/%d/cluster/%d/node", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

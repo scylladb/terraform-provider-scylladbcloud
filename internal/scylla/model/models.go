@@ -88,3 +88,26 @@ type AllowlistRule struct {
 	ClusterId     int64  `json:"ClusterID"`
 	SourceAddress string `json:"SourceAddress"`
 }
+
+type Node struct {
+	Id                          int64  `json:"ID"`
+	ClusterId                   int64  `json:"ClusterID"`
+	CloudProviderId             int64  `json:"CloudProviderID"`
+	CloudProviderInstanceTypeId int64  `json:"CloudProviderInstanceTypeID"`
+	CloudProviderRegionId       int64  `json:"CloudProviderRegionID"`
+	PublicIP                    string `json:"PublicIP"`
+	PrivateIP                   string `json:"PrivateIP"`
+	ClusterJoinDate             string `json:"ClusterJoinDate"`
+	ServiceId                   int64  `json:"ServiceID"`
+	ServiceVersionId            int64  `json:"ServiceVersionID"`
+	ServiceVersion              string `json:"ServiceVersion"`
+	BillingStartDate            string `json:"BillingStartDate"`
+	Hostname                    string `json:"Hostname"`
+	ClusterHostId               string `json:"ClusterHostID"`
+	Status                      string `json:"Status"`
+	NodeState                   string `json:"NodeState"`
+	ClusterDcId                 int64  `json:"ClusterDCID"`
+	ServerActionId              int64  `json:"ServerActionID"`
+	Distribution                string `json:"Distribution"`
+	Dns                         string `json:"DNS"`
+}
