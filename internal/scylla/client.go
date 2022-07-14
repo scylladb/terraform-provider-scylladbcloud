@@ -1,5 +1,5 @@
-// Package scyllaCloudSDK is a wrapper for the Scylla Cloud REST API.
-package scyllaCloudSDK
+// Package scylla is a wrapper for the Scylla Cloud REST API.
+package scylla
 
 // TODO if sufficiently high quality it can be published as a separate SDK in the future.
 
@@ -8,7 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -16,6 +17,9 @@ import (
 var DefaultTimeout = 60 * time.Second
 
 const DefaultEndpoint = "https://cloud.scylladb.com/api/v0"
+
+var retriesAllowed = 3
+var maxResponseBodyLength int64 = 1 << 20
 
 // APIError represents an error that occurred while calling the API.
 type APIError struct {
@@ -37,8 +41,8 @@ func (err *APIError) Error() string {
 
 // Client represents a client to call the Scylla Cloud API
 type Client struct {
-	// token holds the bearer token used for authentication.
-	token string
+	// headers holds headers that will be set for all http requests.
+	headers http.Header
 
 	// accountId holds the account ID used in requests to the API.
 	accountId int64
@@ -46,9 +50,9 @@ type Client struct {
 	// API endpoint
 	endpoint string
 
-	// HttpClient is the underlying HTTP client used to run the requests.
+	// HTTPClient is the underlying HTTP client used to run the requests.
 	// It may be overloaded but a default one is provided in ``NewClient`` by default.
-	HttpClient *http.Client
+	HTTPClient *http.Client
 }
 
 // NewClient represents a new client to call the API
@@ -56,11 +60,15 @@ func NewClient(endpoint, token string, httpClient *http.Client) (*Client, error)
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: DefaultTimeout}
 	}
+
 	client := Client{
-		token:      token,
+		headers:    http.Header{},
 		endpoint:   endpoint,
-		HttpClient: httpClient,
+		HTTPClient: httpClient,
 	}
+
+	client.headers.Add("Authorization", "Bearer "+token)
+	client.headers.Add("Accept", "application/json")
 
 	if err := client.findAndSaveAccountId(); err != nil {
 		return nil, err
@@ -86,75 +94,81 @@ func (c *Client) newHttpRequest(method, path string, reqBody interface{}) (*http
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", "Bearer "+c.token)
-	req.Header.Add("Accept", "application/json")
+	req.Header = c.headers
 	if body != nil {
+		req.Header = req.Header.Clone()
 		req.Header.Add("Content-Type", "application/json;charset=utf-8")
 	}
 
 	return req, nil
 }
 
-func (c *Client) doHttpRequest(req *http.Request) (*http.Response, []byte, error) {
-	resp, err := c.HttpClient.Do(req)
+func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporaryErr bool, err error) {
+	resp, err = c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return resp, nil, err
+		temporaryErr = err.(*net.OpError).Temporary()
+		return
 	}
 
-	return resp, body, nil
+	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout
+	return
+}
+
+func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
+	resp, temporaryErr, err := c.doHttpRequest(req)
+	if temporaryErr && retries > 0 {
+		if err == nil {
+			_ = resp.Body.Close() // We want to retry anyway.
+		}
+		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
+	}
+
+	return resp, err
 }
 
 func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}) error {
-	httpRequest, err := c.newHttpRequest(method, path, reqBody)
-	httpRequest = httpRequest.WithContext(ctx)
+	req, err := c.newHttpRequest(method, path, reqBody)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
 
-	resp, body, err := c.doHttpRequest(httpRequest)
+	resp, err := c.doHttpRequestWithRetries(req, retriesAllowed, time.Second)
 	if err != nil {
 		return err
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	d := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBodyLength))
+	d.UseNumber()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 300 {
 		type ErrorResponse struct {
 			Error APIError `json:"Error"`
 		}
 		errorResponse := ErrorResponse{APIError{StatusCode: resp.StatusCode}}
-		if err = json.Unmarshal(body, &errorResponse); err != nil {
-			return &APIError{StatusCode: resp.StatusCode, Message: string(body)}
+		if err = d.Decode(&errorResponse); err != nil {
+			return &APIError{StatusCode: resp.StatusCode}
 		}
-
 		return &errorResponse.Error
 	}
 
-	return c.unmarshalResponse(body, resType)
-}
-
-func (c *Client) unmarshalResponse(body []byte, resType interface{}) error {
-	// Nothing to unmarshal
-	if len(body) == 0 || resType == nil {
+	if resType == nil {
 		return nil
 	}
 
-	d := json.NewDecoder(bytes.NewReader(body))
-	d.UseNumber()
 	return d.Decode(&resType)
 }
 
 func (c *Client) get(path string, resultType interface{}) error {
-	return c.callAPI(context.Background(), http.MethodGet, path, nil, resultType)
+	return c.callAPI(context.TODO(), http.MethodGet, path, nil, resultType)
 }
 
 func (c *Client) post(path string, requestBody, resultType interface{}) error {
-	return c.callAPI(context.Background(), http.MethodPost, path, requestBody, resultType)
+	return c.callAPI(context.TODO(), http.MethodPost, path, requestBody, resultType)
 }
 
 func (c *Client) delete(path string) error {
-	return c.callAPI(context.Background(), http.MethodDelete, path, nil, nil)
+	return c.callAPI(context.TODO(), http.MethodDelete, path, nil, nil)
 }
 
 func (c *Client) findAndSaveAccountId() error {
