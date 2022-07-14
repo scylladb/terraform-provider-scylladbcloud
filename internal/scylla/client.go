@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/scylladb/terraform-provider-scylla/internal/scylla/model"
 	"io"
 	"net"
 	"net/http"
@@ -172,7 +173,7 @@ func (c *Client) delete(path string) error {
 }
 
 func (c *Client) findAndSaveAccountId() error {
-	var result UserAccount
+	var result model.UserAccount
 	if err := c.get("/account/default", &result); err != nil {
 		return err
 	}
