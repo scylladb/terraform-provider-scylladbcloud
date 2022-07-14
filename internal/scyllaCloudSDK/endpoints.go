@@ -51,3 +51,29 @@ func (c *Client) ListAllowlistRules(clusterId int64) ([]AllowlistRule, error) {
 	}
 	return result, nil
 }
+
+func (c *Client) GetAllowlistRule(clusterId, ruleId int64) (*AllowlistRule, error) {
+	var result AllowlistRule
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) CreateAllowlistRule(clusterId int64, address string) (*AllowlistRule, error) {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountId, clusterId)
+	var result AllowlistRule
+	data := map[string]interface{}{
+		"CIDRBlock": address,
+	}
+	if err := c.post(path, data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) DeleteAllowlistRule(clusterId, ruleId int64) error {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
+	return c.delete(path)
+}
