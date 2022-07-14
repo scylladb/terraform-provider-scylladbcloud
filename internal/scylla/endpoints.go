@@ -1,4 +1,4 @@
-package scyllaCloudSDK
+package scylla
 
 import (
 	"errors"

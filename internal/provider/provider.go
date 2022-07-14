@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/scylladb/terraform-provider-scylla/internal/scyllaCloudSDK"
+	"github.com/scylladb/terraform-provider-scylla/internal/scylla"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -17,7 +17,7 @@ var _ tfsdk.Provider = &provider{}
 type provider struct {
 	// client contains the upstream provider SDK used to
 	// communicate with the upstream service.
-	client *scyllaCloudSDK.Client
+	client *scylla.Client
 
 	// configured is set to true at the end of the Configure method.
 	// This can be used in Resource and DataSource implementations to verify
@@ -61,7 +61,7 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 		return
 	}
 	if data.ApiUrl.IsNull() || data.ApiUrl.Value == "" {
-		p.apiURL = scyllaCloudSDK.DefaultEndpoint
+		p.apiURL = scylla.DefaultEndpoint
 	} else {
 		p.apiURL = data.ApiUrl.Value
 	}
@@ -72,7 +72,7 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 	}
 	p.apiKey = data.ApiToken.Value
 
-	client, err := scyllaCloudSDK.NewClient(p.apiURL, p.apiKey, nil)
+	client, err := scylla.NewClient(p.apiURL, p.apiKey, nil)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create API client", err.Error())
 		return
