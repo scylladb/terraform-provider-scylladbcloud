@@ -36,17 +36,17 @@ output "datacenter_status" {
 
 ### Optional
 
-- `id` (Number) ID of the provider
+- `id` (Number) ID of the data center
 - `name` (String) Name, e.g. AWS_US_WEST_1
 
 ### Read-Only
 
 - `account_cloud_provider_credential_id` (Number) ID of the account cloud provider credential
-- `cloud_provider_id` (Number) ID of the cloud provider
 - `cloud_provider_region_id` (Number) ID of the cloud provider region
 - `instance_type_id` (Number) ID of the instance type
 - `ipv4_cidr` (String) IPv4 CIDR
 - `management_network` (String) Management network
+- `provider_id` (Number) ID of the cloud provider
 - `replication_factor` (Number) Replication factor
 - `status` (String) Status
 
