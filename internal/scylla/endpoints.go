@@ -14,9 +14,9 @@ func (c *Client) ListCloudProviders() ([]model.CloudProvider, error) {
 	return result, nil
 }
 
-func (c *Client) ListCloudProviderRegions(providerId int64) ([]model.CloudProviderRegion, error) {
+func (c *Client) ListCloudProviderRegions(providerID int64) ([]model.CloudProviderRegion, error) {
 	var result []model.CloudProviderRegion
-	path := fmt.Sprintf("/deployment/provider/%d/region", providerId)
+	path := fmt.Sprintf("/deployment/provider/%d/region", providerID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (c *Client) ListClusters() ([]model.Cluster, error) {
 		Error interface{}   `json:"Error"`
 	}
 	var result []Item
-	path := fmt.Sprintf("/account/%d/cluster", c.accountId)
+	path := fmt.Sprintf("/account/%d/cluster", c.accountID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
@@ -45,26 +45,26 @@ func (c *Client) ListClusters() ([]model.Cluster, error) {
 	return clusters, nil
 }
 
-func (c *Client) ListAllowlistRules(clusterId int64) ([]model.AllowlistRule, error) {
+func (c *Client) ListAllowlistRules(clusterID int64) ([]model.AllowlistRule, error) {
 	var result []model.AllowlistRule
-	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountId, clusterId)
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountID, clusterID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (c *Client) GetAllowlistRule(clusterId, ruleId int64) (*model.AllowlistRule, error) {
+func (c *Client) GetAllowlistRule(clusterID, ruleID int64) (*model.AllowlistRule, error) {
 	var result model.AllowlistRule
-	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountID, clusterID, ruleID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-func (c *Client) CreateAllowlistRule(clusterId int64, address string) (*model.AllowlistRule, error) {
-	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountId, clusterId)
+func (c *Client) CreateAllowlistRule(clusterID int64, address string) (*model.AllowlistRule, error) {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed", c.accountID, clusterID)
 	var result model.AllowlistRule
 	data := map[string]interface{}{
 		"CIDRBlock": address,
@@ -75,32 +75,32 @@ func (c *Client) CreateAllowlistRule(clusterId int64, address string) (*model.Al
 	return &result, nil
 }
 
-func (c *Client) DeleteAllowlistRule(clusterId, ruleId int64) error {
-	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountId, clusterId, ruleId)
+func (c *Client) DeleteAllowlistRule(clusterID, ruleID int64) error {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/firewall/allowed/%d", c.accountID, clusterID, ruleID)
 	return c.delete(path)
 }
 
-func (c *Client) ListDataCenters(clusterId int64) ([]model.DataCenter, error) {
+func (c *Client) ListDataCenters(clusterID int64) ([]model.DataCenter, error) {
 	var result []model.DataCenter
-	path := fmt.Sprintf("/account/%d/cluster/%d/dc", c.accountId, clusterId)
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc", c.accountID, clusterID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (c *Client) ListClusterNodes(clusterId int64) ([]model.Node, error) {
+func (c *Client) ListClusterNodes(clusterID int64) ([]model.Node, error) {
 	var result []model.Node
-	path := fmt.Sprintf("/account/%d/cluster/%d/node", c.accountId, clusterId)
+	path := fmt.Sprintf("/account/%d/cluster/%d/node", c.accountID, clusterID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (c *Client) ListClusterVPCs(clusterId int64) ([]model.VPC, error) {
+func (c *Client) ListClusterVPCs(clusterID int64) ([]model.VPC, error) {
 	var result []model.VPC
-	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc", c.accountId, clusterId)
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc", c.accountID, clusterID)
 	if err := c.get(path, &result); err != nil {
 		return nil, err
 	}

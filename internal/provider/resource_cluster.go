@@ -52,7 +52,7 @@ func (t exampleResourceType) NewResource(ctx context.Context, in tfsdk.Provider)
 
 type exampleResourceData struct {
 	ConfigurableAttribute types.String `tfsdk:"configurable_attribute"`
-	Id                    types.String `tfsdk:"id"`
+	ID                    types.String `tfsdk:"id"`
 }
 
 type exampleResource struct {
@@ -79,7 +79,7 @@ func (r exampleResource) Create(ctx context.Context, req tfsdk.CreateResourceReq
 
 	// For the purposes of this example code, hardcoding a response value to
 	// save into the Terraform state.
-	data.Id = types.String{Value: "example-id"}
+	data.ID = types.String{Value: "example-id"}
 
 	// write logs using the tflog package
 	// see https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog

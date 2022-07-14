@@ -176,7 +176,7 @@ func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 			Type:                types.StringType,
 		},
 		"dns": {
-			MarkdownDescription: "Dns",
+			MarkdownDescription: "DNS",
 			Type:                types.BoolType,
 		},
 		"prom_proxy_enabled": {
@@ -198,21 +198,21 @@ func (t clusterDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provi
 }
 
 type clusterDataSourceData struct {
-	Id                        types.Int64  `tfsdk:"id"`
+	ID                        types.Int64  `tfsdk:"id"`
 	Name                      types.String `tfsdk:"name"`
 	ClusterNameOnConfigFile   types.String `tfsdk:"cluster_name_on_config_file"`
 	Status                    types.String `tfsdk:"status"`
-	CloudProviderId           types.Int64  `tfsdk:"provider_id"`
+	CloudProviderID           types.Int64  `tfsdk:"provider_id"`
 	ReplicationFactor         types.Int64  `tfsdk:"replication_factor"`
 	BroadcastType             types.String `tfsdk:"broadcast_type"`
-	ScyllaVersionId           types.Int64  `tfsdk:"scylla_version_id"`
+	ScyllaVersionID           types.Int64  `tfsdk:"scylla_version_id"`
 	ScyllaVersion             types.String `tfsdk:"scylla_version"`
 	Dc                        types.List   `tfsdk:"dc"`
-	GrafanaUrl                types.String `tfsdk:"grafana_url"`
-	GrafanaRootUrl            types.String `tfsdk:"grafana_root_url"`
-	BackofficeGrafanaUrl      types.String `tfsdk:"backoffice_grafana_url"`
-	BackofficePrometheusUrl   types.String `tfsdk:"backoffice_prometheus_url"`
-	BackofficeAlertManagerUrl types.String `tfsdk:"backoffice_alert_manager_url"`
+	GrafanaURL                types.String `tfsdk:"grafana_url"`
+	GrafanaRootURL            types.String `tfsdk:"grafana_root_url"`
+	BackofficeGrafanaURL      types.String `tfsdk:"backoffice_grafana_url"`
+	BackofficePrometheusURL   types.String `tfsdk:"backoffice_prometheus_url"`
+	BackofficeAlertManagerURL types.String `tfsdk:"backoffice_alert_manager_url"`
 	FreeTier                  types.Object `tfsdk:"free_tier"`
 	EncryptionMode            types.String `tfsdk:"encryption_mode"`
 	UserApiInterface          types.String `tfsdk:"user_api_interface"`
@@ -237,7 +237,7 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 		return
 	}
 
-	if data.Id.IsNull() && data.Name.IsNull() {
+	if data.ID.IsNull() && data.Name.IsNull() {
 		resp.Diagnostics.AddError("failed to match cluster", "at least one of {id, name} must be specified")
 		return
 	}
@@ -248,10 +248,10 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 		return
 	}
 
-	matchedClusterIdx := -1
+	matchedClusterIDx := -1
 	for i, cluster := range clusters {
-		if !data.Id.IsNull() {
-			if cluster.Id != data.Id.Value {
+		if !data.ID.IsNull() {
+			if cluster.ID != data.ID.Value {
 				continue
 			}
 		}
@@ -260,37 +260,37 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 				continue
 			}
 		}
-		matchedClusterIdx = i
+		matchedClusterIDx = i
 		break
 	}
 
-	if matchedClusterIdx == -1 {
+	if matchedClusterIDx == -1 {
 		resp.Diagnostics.AddError("failed to match cluster", "no cluster found")
 		return
 	}
 
-	cluster := clusters[matchedClusterIdx]
-	data.Id = types.Int64{Value: cluster.Id}
+	cluster := clusters[matchedClusterIDx]
+	data.ID = types.Int64{Value: cluster.ID}
 	data.Name = types.String{Value: cluster.Name}
 	data.ClusterNameOnConfigFile = types.String{Value: cluster.ClusterNameOnConfigFile}
 	data.Status = types.String{Value: cluster.Status}
-	data.CloudProviderId = types.Int64{Value: cluster.CloudProviderId}
+	data.CloudProviderID = types.Int64{Value: cluster.CloudProviderID}
 	data.ReplicationFactor = types.Int64{Value: cluster.ReplicationFactor}
 	data.BroadcastType = types.String{Value: cluster.BroadcastType}
-	data.ScyllaVersionId = types.Int64{Value: cluster.ScyllaVersionId}
+	data.ScyllaVersionID = types.Int64{Value: cluster.ScyllaVersionID}
 	data.ScyllaVersion = types.String{Value: cluster.ScyllaVersion}
 
-	data.GrafanaUrl = types.String{Value: cluster.GrafanaUrl}
-	data.GrafanaRootUrl = types.String{Value: cluster.GrafanaRootUrl}
-	data.BackofficeGrafanaUrl = types.String{Value: cluster.BackofficeGrafanaUrl}
-	data.BackofficePrometheusUrl = types.String{Value: cluster.BackofficePrometheusUrl}
-	data.BackofficeAlertManagerUrl = types.String{Value: cluster.BackofficeAlertManagerUrl}
+	data.GrafanaURL = types.String{Value: cluster.GrafanaURL}
+	data.GrafanaRootURL = types.String{Value: cluster.GrafanaRootURL}
+	data.BackofficeGrafanaURL = types.String{Value: cluster.BackofficeGrafanaURL}
+	data.BackofficePrometheusURL = types.String{Value: cluster.BackofficePrometheusURL}
+	data.BackofficeAlertManagerURL = types.String{Value: cluster.BackofficeAlertManagerURL}
 	data.EncryptionMode = types.String{Value: cluster.EncryptionMode}
 	data.UserApiInterface = types.String{Value: cluster.UserApiInterface}
 	data.PricingModel = types.Int64{Value: cluster.PricingModel}
-	data.MaxAllowedCidrRange = types.Int64{Value: cluster.MaxAllowedCidrRange}
+	data.MaxAllowedCidrRange = types.Int64{Value: cluster.MaxAllowedCIDRRange}
 	data.CreatedAt = types.String{Value: cluster.CreatedAt}
-	data.Dns = types.Bool{Value: cluster.Dns}
+	data.Dns = types.Bool{Value: cluster.DNS}
 	data.PromProxyEnabled = types.Bool{Value: cluster.PromProxyEnabled}
 
 	dcs := make([]attr.Value, len(cluster.Dc))
@@ -303,17 +303,17 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 		dcs[i] = types.Object{
 			AttrTypes: dcAttrTypes,
 			Attrs: map[string]attr.Value{
-				"id":                                   types.Int64{Value: dc.Id},
-				"cluster_id":                           types.Int64{Value: dc.ClusterId},
-				"provider_id":                          types.Int64{Value: dc.CloudProviderId},
-				"cloud_provider_region_id":             types.Int64{Value: dc.CloudProviderRegionId},
+				"id":                                   types.Int64{Value: dc.ID},
+				"cluster_id":                           types.Int64{Value: dc.ClusterID},
+				"provider_id":                          types.Int64{Value: dc.CloudProviderID},
+				"cloud_provider_region_id":             types.Int64{Value: dc.CloudProviderRegionID},
 				"replication_factor":                   types.Int64{Value: dc.ReplicationFactor},
-				"ipv4_cidr":                            types.String{Value: dc.Ipv4Cidr},
-				"account_cloud_provider_credential_id": types.Int64{Value: dc.AccountCloudProviderCredentialId},
+				"ipv4_cidr":                            types.String{Value: dc.CIDR},
+				"account_cloud_provider_credential_id": types.Int64{Value: dc.AccountCloudProviderCredentialID},
 				"status":                               types.String{Value: dc.Status},
 				"name":                                 types.String{Value: dc.Name},
 				"management_network":                   types.String{Value: dc.ManagementNetwork},
-				"instance_type_id":                     types.Int64{Value: dc.InstanceTypeId},
+				"instance_type_id":                     types.Int64{Value: dc.InstanceTypeID},
 				"client_connection": types.List{
 					ElemType: types.StringType,
 					Elems:    clientConnections,

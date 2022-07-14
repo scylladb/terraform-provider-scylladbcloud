@@ -39,7 +39,7 @@ output "cluster_example_scylla_version" {
 - `cluster_name_on_config_file` (String) Cluster name on config file
 - `created_at` (String) Created at
 - `dc` (Attributes List) Datacenters (see [below for nested schema](#nestedatt--dc))
-- `dns` (Boolean) Dns
+- `dns` (Boolean) DNS
 - `encryption_mode` (String) Encryption mode
 - `free_tier` (Attributes) Free tier (see [below for nested schema](#nestedatt--free_tier))
 - `grafana_root_url` (String) Grafana root url

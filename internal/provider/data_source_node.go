@@ -130,7 +130,7 @@ func (t nodeDataSourceType) NewDataSource(ctx context.Context, in tfsdk.Provider
 }
 
 type nodeDataSourceData struct {
-	ClusterId types.Int64 `tfsdk:"cluster_id"`
+	ClusterID types.Int64 `tfsdk:"cluster_id"`
 	All       types.List  `tfsdk:"all"`
 }
 
@@ -148,7 +148,7 @@ func (d nodeDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReques
 		return
 	}
 
-	nodes, err := d.provider.client.ListClusterNodes(data.ClusterId.Value)
+	nodes, err := d.provider.client.ListClusterNodes(data.ClusterID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cluster's nodes, got error: %s", err))
 		return
@@ -158,26 +158,26 @@ func (d nodeDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReques
 	for _, node := range nodes {
 		wrappedNodes = append(wrappedNodes, types.Object{
 			Attrs: map[string]attr.Value{
-				"id":                              types.Int64{Value: node.Id},
-				"cluster_id":                      types.Int64{Value: node.ClusterId},
-				"provider_id":                     types.Int64{Value: node.CloudProviderId},
-				"cloud_provider_instance_type_id": types.Int64{Value: node.CloudProviderInstanceTypeId},
-				"cloud_provider_region_id":        types.Int64{Value: node.CloudProviderRegionId},
+				"id":                              types.Int64{Value: node.ID},
+				"cluster_id":                      types.Int64{Value: node.ClusterID},
+				"provider_id":                     types.Int64{Value: node.CloudProviderID},
+				"cloud_provider_instance_type_id": types.Int64{Value: node.CloudProviderInstanceTypeID},
+				"cloud_provider_region_id":        types.Int64{Value: node.CloudProviderRegionID},
 				"public_ip":                       types.String{Value: node.PublicIP},
 				"private_ip":                      types.String{Value: node.PrivateIP},
 				"cluster_join_date":               types.String{Value: node.ClusterJoinDate},
-				"service_id":                      types.Int64{Value: node.ServiceId},
-				"service_version_id":              types.Int64{Value: node.ServiceVersionId},
+				"service_id":                      types.Int64{Value: node.ServiceID},
+				"service_version_id":              types.Int64{Value: node.ServiceVersionID},
 				"service_version":                 types.String{Value: node.ServiceVersion},
 				"billing_start_date":              types.String{Value: node.BillingStartDate},
 				"hostname":                        types.String{Value: node.Hostname},
-				"cluster_host_id":                 types.String{Value: node.ClusterHostId},
+				"cluster_host_id":                 types.String{Value: node.ClusterHostID},
 				"status":                          types.String{Value: node.Status},
 				"node_state":                      types.String{Value: node.NodeState},
-				"cluster_dc_id":                   types.Int64{Value: node.ClusterDcId},
-				"server_action_id":                types.Int64{Value: node.ServerActionId},
+				"cluster_dc_id":                   types.Int64{Value: node.ClusterDcID},
+				"server_action_id":                types.Int64{Value: node.ServerActionID},
 				"distribution":                    types.String{Value: node.Distribution},
-				"dns":                             types.String{Value: node.Dns},
+				"dns":                             types.String{Value: node.DNS},
 			},
 			AttrTypes: nodeAttrsTypes,
 		})

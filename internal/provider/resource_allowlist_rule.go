@@ -58,8 +58,8 @@ func (t allowlistRuleResourceType) NewResource(ctx context.Context, in tfsdk.Pro
 }
 
 type allowlistRuleResourceData struct {
-	Id            types.Int64  `tfsdk:"id"`
-	ClusterId     types.Int64  `tfsdk:"cluster_id"`
+	ID            types.Int64  `tfsdk:"id"`
+	ClusterID     types.Int64  `tfsdk:"cluster_id"`
 	SourceAddress types.String `tfsdk:"source_address"`
 }
 
@@ -77,14 +77,14 @@ func (r allowlistRuleResource) Create(ctx context.Context, req tfsdk.CreateResou
 		return
 	}
 
-	rule, err := r.provider.client.CreateAllowlistRule(data.ClusterId.Value, data.SourceAddress.Value)
+	rule, err := r.provider.client.CreateAllowlistRule(data.ClusterID.Value, data.SourceAddress.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to create allowlistRule, got error: %s", err))
 		return
 	}
-	data.Id = types.Int64{Value: rule.Id}
+	data.ID = types.Int64{Value: rule.ID}
 
-	tflog.Trace(ctx, fmt.Sprintf("created an allowlist rule with ID %d", rule.Id))
+	tflog.Trace(ctx, fmt.Sprintf("created an allowlist rule with ID %d", rule.ID))
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -100,7 +100,7 @@ func (r allowlistRuleResource) Read(ctx context.Context, req tfsdk.ReadResourceR
 		return
 	}
 
-	rule, err := r.provider.client.GetAllowlistRule(data.ClusterId.Value, data.Id.Value)
+	rule, err := r.provider.client.GetAllowlistRule(data.ClusterID.Value, data.ID.Value)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read allowlistRule, got error: %s", err))
 		return
@@ -125,7 +125,7 @@ func (r allowlistRuleResource) Delete(ctx context.Context, req tfsdk.DeleteResou
 		return
 	}
 
-	if err := r.provider.client.DeleteAllowlistRule(data.ClusterId.Value, data.Id.Value); err != nil {
+	if err := r.provider.client.DeleteAllowlistRule(data.ClusterID.Value, data.ID.Value); err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete allowlistRule, got error: %s", err))
 		return
 	}

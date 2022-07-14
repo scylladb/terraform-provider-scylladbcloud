@@ -41,7 +41,7 @@ type provider struct {
 
 // providerData can be used to store data from the Terraform configuration.
 type providerData struct {
-	ApiUrl   types.String `tfsdk:"endpoint"`
+	ApiURL   types.String `tfsdk:"endpoint"`
 	ApiToken types.String `tfsdk:"token"`
 }
 
@@ -56,14 +56,14 @@ func (p *provider) Configure(ctx context.Context, req tfsdk.ConfigureProviderReq
 
 	// Configuration values are now available.
 
-	if data.ApiUrl.IsUnknown() {
+	if data.ApiURL.IsUnknown() {
 		resp.Diagnostics.AddError("Missing API URL", "The API URL must be known at the time of provider configuration.")
 		return
 	}
-	if data.ApiUrl.IsNull() || data.ApiUrl.Value == "" {
+	if data.ApiURL.IsNull() || data.ApiURL.Value == "" {
 		p.apiURL = scylla.DefaultEndpoint
 	} else {
-		p.apiURL = data.ApiUrl.Value
+		p.apiURL = data.ApiURL.Value
 	}
 
 	if data.ApiToken.IsUnknown() {
