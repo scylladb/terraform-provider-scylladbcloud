@@ -1,4 +1,4 @@
-package scylla
+package model
 
 type UserAccount struct {
 	UserId            int64  `json:"UserID"`
