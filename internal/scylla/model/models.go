@@ -111,3 +111,12 @@ type Node struct {
 	Distribution                string `json:"Distribution"`
 	Dns                         string `json:"DNS"`
 }
+
+type VPC struct {
+	Id                    int64  `json:"ID"`
+	ClusterId             int64  `json:"ClusterID"`
+	CloudProviderId       int64  `json:"CloudProviderID"`
+	CloudProviderRegionId int64  `json:"CloudProviderRegionID"`
+	ClusterDcId           int64  `json:"ClusterDCID"`
+	Ipv4Cidr              string `json:"IPv4CIDR"`
+}

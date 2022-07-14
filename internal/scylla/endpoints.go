@@ -96,3 +96,12 @@ func (c *Client) ListClusterNodes(clusterId int64) ([]Node, error) {
 	}
 	return result, nil
 }
+
+func (c *Client) ListClusterVPCs(clusterId int64) ([]VPC, error) {
+	var result []VPC
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc", c.accountId, clusterId)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
