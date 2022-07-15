@@ -120,3 +120,27 @@ type VPC struct {
 	ClusterDcID           int64  `json:"ClusterDCID"`
 	CIDR                  string `json:"IPv4CIDR"`
 }
+
+type CloudProviderInstance struct {
+	ID                         int64  `json:"ID"`
+	CloudProviderID            int64  `json:"CloudProviderID"`
+	Name                       string `json:"Name"`
+	ExternalID                 string `json:"ExternalID"`
+	MemoryMB                   int64  `json:"MemoryMB"`
+	LocalDiskCount             int64  `json:"LocalDiskCount"`
+	LocalStorageTotalGB        int64  `json:"LocalStorageTotalGB"`
+	CPUCoreCount               int64  `json:"CPUCoreCount"`
+	NetworkMBPS                int64  `json:"NetworkMBPS"`
+	ExternalStorageNetworkMBPS int64  `json:"ExternalStorageNetworkMBPS"`
+	Environment                string `json:"Environment"`
+	DisplayOrder               int64  `json:"DisplayOrder"`
+	NetworkSpeedDescription    string `json:"NetworkSpeedDescription"`
+	LicenseCostOnDemandPerHour string `json:"LicenseCostOnDemandPerHour"`
+	FreeTierHours              int64  `json:"FreeTierHours"`
+	InstanceFamily             string `json:"InstanceFamily"`
+	GroupDefault               bool   `json:"GroupDefault"`
+	CostPerHour                string `json:"CostPerHour"`
+	SubscriptionCostHourly     string `json:"SubscriptionCostHourly"`
+	SubscriptionCostMonthly    string `json:"SubscriptionCostMonthly"`
+	SubscriptionCostYearly     string `json:"SubscriptionCostYearly"`
+}

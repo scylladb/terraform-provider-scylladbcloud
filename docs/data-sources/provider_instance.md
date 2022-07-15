@@ -42,12 +42,11 @@ output "t3micro_instance_memory" {
 
 Read-Only:
 
-- `cloud_provider_id` (Number)
 - `cost_per_hour` (String)
 - `cpu_core_count` (Number)
 - `display_order` (Number)
 - `environment` (String)
-- `external_name` (String)
+- `external_id` (String)
 - `external_storage_network_mbps` (Number)
 - `free_tier_hours` (Number)
 - `group_default` (Boolean)
@@ -56,10 +55,11 @@ Read-Only:
 - `license_cost_on_demand_per_hour` (String)
 - `local_disk_count` (Number)
 - `local_storage_total_gb` (Number)
-- `memory_mb` (String)
+- `memory_mb` (Number)
 - `name` (String)
 - `network_mbps` (Number)
 - `network_speed_description` (String)
+- `provider_id` (Number)
 - `subscription_cost_hourly` (String)
 - `subscription_cost_monthly` (String)
 - `subscription_cost_yearly` (String)
