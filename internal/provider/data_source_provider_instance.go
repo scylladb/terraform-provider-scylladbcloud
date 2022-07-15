@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -18,7 +20,7 @@ var instanceAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "ID of the instance",
 		Type:                types.Int64Type,
 	},
-	"cloud_provider_id": {
+	"provider_id": {
 		MarkdownDescription: "ID of the cloud provider",
 		Type:                types.Int64Type,
 	},
@@ -26,13 +28,13 @@ var instanceAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "Name of the instance",
 		Type:                types.StringType,
 	},
-	"external_name": {
+	"external_id": {
 		MarkdownDescription: "External name of the instance",
 		Type:                types.StringType,
 	},
 	"memory_mb": {
 		MarkdownDescription: "Memory in MB",
-		Type:                types.StringType,
+		Type:                types.Int64Type,
 	},
 	"local_disk_count": {
 		MarkdownDescription: "Number of local disks",
@@ -148,7 +150,43 @@ func (d providerInstanceDataSource) Read(ctx context.Context, req tfsdk.ReadData
 		return
 	}
 
-	// TODO: implement
+	instances, err := d.provider.client.ListCloudProviderInstances(data.ProviderID.Value)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to list cloud provider instances, got error: %s", err))
+		return
+	}
+
+	instancesByName := make(map[string]attr.Value)
+	for _, instance := range instances {
+		instancesByName[instance.Name] = types.Object{
+			Attrs: map[string]attr.Value{
+				"id":                              types.Int64{Value: instance.ID},
+				"provider_id":                     types.Int64{Value: instance.CloudProviderID},
+				"name":                            types.String{Value: instance.Name},
+				"external_id":                     types.String{Value: instance.ExternalID},
+				"memory_mb":                       types.Int64{Value: instance.MemoryMB},
+				"local_disk_count":                types.Int64{Value: instance.LocalDiskCount},
+				"local_storage_total_gb":          types.Int64{Value: instance.LocalStorageTotalGB},
+				"cpu_core_count":                  types.Int64{Value: instance.CPUCoreCount},
+				"network_mbps":                    types.Int64{Value: instance.NetworkMBPS},
+				"external_storage_network_mbps":   types.Int64{Value: instance.ExternalStorageNetworkMBPS},
+				"environment":                     types.String{Value: instance.Environment},
+				"display_order":                   types.Int64{Value: instance.DisplayOrder},
+				"network_speed_description":       types.String{Value: instance.NetworkSpeedDescription},
+				"license_cost_on_demand_per_hour": types.String{Value: instance.LicenseCostOnDemandPerHour},
+				"free_tier_hours":                 types.Int64{Value: instance.FreeTierHours},
+				"instance_family":                 types.String{Value: instance.InstanceFamily},
+				"group_default":                   types.Bool{Value: instance.GroupDefault},
+				"cost_per_hour":                   types.String{Value: instance.CostPerHour},
+				"subscription_cost_hourly":        types.String{Value: instance.SubscriptionCostHourly},
+				"subscription_cost_monthly":       types.String{Value: instance.SubscriptionCostMonthly},
+				"subscription_cost_yearly":        types.String{Value: instance.SubscriptionCostYearly},
+			},
+			AttrTypes: instanceAttrsTypes,
+		}
+	}
+
+	data.All = types.Map{Elems: instancesByName, ElemType: types.ObjectType{AttrTypes: instanceAttrsTypes}}
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
