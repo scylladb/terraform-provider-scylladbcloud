@@ -23,6 +23,15 @@ func (c *Client) ListCloudProviderRegions(providerID int64) ([]model.CloudProvid
 	return result, nil
 }
 
+func (c *Client) ListCloudProviderInstances(providerID int64) ([]model.CloudProviderInstance, error) {
+	var result []model.CloudProviderInstance
+	path := fmt.Sprintf("/deployment/provider/%d/instance", providerID)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (c *Client) ListClusters() ([]model.Cluster, error) {
 	type Item struct {
 		Value model.Cluster `json:"Value"`
