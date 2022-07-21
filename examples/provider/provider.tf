@@ -1,0 +1,3 @@
+provider "scylla" {
+  token = "supersecrettoken"
+}
