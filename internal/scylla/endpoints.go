@@ -115,3 +115,12 @@ func (c *Client) ListClusterVPCs(clusterID int64) ([]model.VPC, error) {
 	}
 	return result, nil
 }
+
+func (c *Client) ListClusterVPCPeerings(clusterID int64) ([]model.VPCPeering, error) {
+	var result []model.VPCPeering
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/peer", c.accountID, clusterID)
+	if err := c.get(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

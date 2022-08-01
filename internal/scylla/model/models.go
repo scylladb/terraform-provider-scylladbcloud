@@ -144,3 +144,18 @@ type CloudProviderInstance struct {
 	SubscriptionCostMonthly    string `json:"SubscriptionCostMonthly"`
 	SubscriptionCostYearly     string `json:"SubscriptionCostYearly"`
 }
+
+type VPCPeering struct {
+	ID                          int64    `json:"ID"`
+	ExternalID                  string   `json:"ExternalID"`
+	ClusterDCID                 int64    `json:"ClusterDCID"`
+	PeerVPCIPv4CIDRList         []string `json:"PeerVPCIPv4CIDRList"`
+	PeerVPCIPv4CIDRListVerified []string `json:"PeerVPCIPv4CIDRListVerified"`
+	PeerVPCRegionID             int64    `json:"PeerVPCRegionID"`
+	PeerVPCExternalID           string   `json:"PeerVPCExternalID"`
+	PeerOwnerExternalID         string   `json:"PeerOwnerExternalID"`
+	Status                      string   `json:"Status"`
+	ExpiresAt                   string   `json:"ExpiresAt"`
+	NetworkName                 string   `json:"NetworkName"`
+	ProjectID                   string   `json:"ProjectID"`
+}
