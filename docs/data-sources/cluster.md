@@ -32,19 +32,16 @@ output "cluster_example_scylla_version" {
 
 ### Read-Only
 
-- `backoffice_alert_manager_url` (String) Backoffice alert manager url
-- `backoffice_grafana_url` (String) Backoffice grafana url
-- `backoffice_prometheus_url` (String) Backoffice prometheus url
 - `broadcast_type` (String) Cluster broadcast type
-- `cluster_name_on_config_file` (String) Cluster name on config file
 - `created_at` (String) Created at
-- `dc` (Attributes List) Datacenters (see [below for nested schema](#nestedatt--dc))
+- `dc` (List of Object) Datacenters (see [below for nested schema](#nestedatt--dc))
 - `dns` (Boolean) DNS
 - `encryption_mode` (String) Encryption mode
-- `free_tier` (Attributes) Free tier (see [below for nested schema](#nestedatt--free_tier))
+- `free_tier` (Object) Free tier (see [below for nested schema](#nestedatt--free_tier))
 - `grafana_root_url` (String) Grafana root url
 - `grafana_url` (String) Grafana url
 - `max_allowed_cidr_range` (Number) Max allowed cidr range
+- `name_on_config_file` (String) Cluster name on config file
 - `pricing_model` (Number) Pricing model
 - `prom_proxy_enabled` (Boolean) Prom proxy enabled
 - `provider_id` (Number) Cloud provider id
@@ -59,18 +56,18 @@ output "cluster_example_scylla_version" {
 
 Read-Only:
 
-- `account_cloud_provider_credential_id` (Number) ID of the account cloud provider credential
-- `client_connection` (List of String) Client connection of the cluster
-- `cloud_provider_region_id` (Number) ID of the cloud provider region
-- `cluster_id` (Number) ID of the cluster
-- `id` (Number) ID of DC
-- `instance_type_id` (Number) ID of the instance type
-- `ipv4_cidr` (String) IPv4 CIDR of the cluster
-- `management_network` (String) Management network of the cluster
-- `name` (String) Name of the cluster
-- `provider_id` (Number) ID of the cloud provider
-- `replication_factor` (Number) Replication factor of the cluster
-- `status` (String) Status of the cluster
+- `account_cloud_provider_credential_id` (Number)
+- `cidr` (String)
+- `client_connection` (List of String)
+- `cluster_id` (Number)
+- `id` (Number)
+- `instance_type_id` (Number)
+- `management_network` (String)
+- `name` (String)
+- `provider_id` (Number)
+- `provider_region_id` (Number)
+- `replication_factor` (Number)
+- `status` (String)
 
 
 <a id="nestedatt--free_tier"></a>
@@ -78,8 +75,8 @@ Read-Only:
 
 Read-Only:
 
-- `creation_time` (String) Creation time of the free tier
-- `expiration_date` (String) Expiration date of the free tier
-- `expiration_seconds` (Number) Expiration seconds of the free tier
+- `creation_time` (String)
+- `expiration_date` (String)
+- `expiration_seconds` (Number)
 
 
