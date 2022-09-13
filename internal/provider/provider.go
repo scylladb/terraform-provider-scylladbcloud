@@ -100,6 +100,7 @@ func (p *provider) GetDataSources(ctx context.Context) (map[string]tfsdk.DataSou
 		"scylla_provider":          providerDataSourceType{},
 		"scylla_provider_region":   providerRegionDataSourceType{},
 		"scylla_provider_instance": providerInstanceDataSourceType{},
+		"scylla_vpc_peering":       vpcPeeringDataSourceType{},
 	}, nil
 }
 
