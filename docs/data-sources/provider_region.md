@@ -43,7 +43,6 @@ output "aws_provider_region_us_east_1_full_name" {
 Read-Only:
 
 - `backup_storage_gb_cost` (String)
-- `cloud_provider_id` (Number)
 - `continent` (String)
 - `dc_name` (String)
 - `external_id` (String)
@@ -51,6 +50,7 @@ Read-Only:
 - `id` (Number)
 - `multi_region_external_id` (String)
 - `name` (String)
+- `provider_id` (Number)
 - `traffic_cross_region_out_gb_cost` (String)
 - `traffic_internet_out_gb_cost` (String)
 - `traffic_same_region_in_gb_cost` (String)

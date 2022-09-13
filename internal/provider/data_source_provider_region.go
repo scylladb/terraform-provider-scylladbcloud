@@ -20,7 +20,7 @@ var regionAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 		MarkdownDescription: "ID of the region",
 		Type:                types.Int64Type,
 	},
-	"cloud_provider_id": {
+	"provider_id": {
 		MarkdownDescription: "ID of the cloud provider",
 		Type:                types.Int64Type,
 	},
@@ -129,7 +129,7 @@ func (d providerRegionDataSource) Read(ctx context.Context, req tfsdk.ReadDataSo
 		regionsByName[region.Name] = types.Object{
 			Attrs: map[string]attr.Value{
 				"id":                               types.Int64{Value: region.ID},
-				"cloud_provider_id":                types.Int64{Value: region.CloudProviderID},
+				"provider_id":                      types.Int64{Value: region.CloudProviderID},
 				"name":                             types.String{Value: region.Name},
 				"full_name":                        types.String{Value: region.FullName},
 				"external_id":                      types.String{Value: region.ExternalID},

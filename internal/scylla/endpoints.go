@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/scylladb/terraform-provider-scylla/internal/scylla/model"
+	"golang.org/x/exp/slices"
 )
 
 func (c *Client) ListCloudProviders() ([]model.CloudProvider, error) {
@@ -32,6 +33,56 @@ func (c *Client) ListCloudProviderInstances(providerID int64) ([]model.CloudProv
 	return result, nil
 }
 
+func (c *Client) GetCluster(clusterID int64) (model.Cluster, error) {
+	var result model.Cluster
+	path := fmt.Sprintf("/account/%d/cluster/%d/", c.accountID, clusterID)
+	err := c.get(path, &result)
+	return result, err
+}
+
+func (c *Client) CreateCluster(data map[string]interface{}) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/", c.accountID)
+
+	allowedFields := []string{
+		"cidrBlock",
+		"name",
+		"nodes",
+		"cloudProvider",
+		"cloudProviderRegion",
+		"cloudProviderInstanceType",
+		"replicationFactor",
+		"enableDnsAssociation",
+		"broadcastType",
+		"userApiInterface",
+	}
+
+	for field, _ := range data {
+		if !slices.Contains(allowedFields, field) {
+			// This is an error in provider logic, so panic rather than return an error.
+			panic(fmt.Sprintf("field %s is not allowed", field))
+		}
+	}
+
+	if err := c.post(path, data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) DeleteCluster(clusterID int64, clusterName string) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/%d/delete", c.accountID, clusterID)
+	data := map[string]interface{}{
+		"clusterName": clusterName,
+	}
+
+	if err := c.post(path, data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) ListClusters() ([]model.Cluster, error) {
 	type Item struct {
 		Value model.Cluster `json:"Value"`
@@ -52,6 +103,13 @@ func (c *Client) ListClusters() ([]model.Cluster, error) {
 		clusters[i] = item.Value
 	}
 	return clusters, nil
+}
+
+func (c *Client) GetClusterRequest(requestID int64) (model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/request/%d/", c.accountID, requestID)
+	err := c.get(path, &result)
+	return result, err
 }
 
 func (c *Client) ListAllowlistRules(clusterID int64) ([]model.AllowlistRule, error) {

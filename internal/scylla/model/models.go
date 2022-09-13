@@ -144,3 +144,17 @@ type CloudProviderInstance struct {
 	SubscriptionCostMonthly    string `json:"SubscriptionCostMonthly"`
 	SubscriptionCostYearly     string `json:"SubscriptionCostYearly"`
 }
+
+type ClusterRequest struct {
+	ID                  int64  `json:"ID"`
+	RequestType         string `json:"RequestType"`
+	AccountID           int64  `json:"AccountID"`
+	UserID              int64  `json:"UserID"`
+	Version             int64  `json:"Version"`
+	RequestBody         string `json:"RequestBody"`
+	ProgressPercent     int64  `json:"ProgressPercent"`
+	ProgressDescription string `json:"ProgressDescription"`
+	ClusterID           int64  `json:"ClusterID"`
+	UserFriendlyError   string `json:"UserFriendlyError"`
+	Status              string `json:"Status"`
+}
