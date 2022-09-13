@@ -88,91 +88,93 @@ var freeTierAttrs = markAttrsAsComputed(map[string]tfsdk.Attribute{
 
 var freeTierAttrsTypes = extractAttrsTypes(freeTierAttrs)
 
+var clusterDataSourceAttrs = map[string]tfsdk.Attribute{
+	"id": {
+		MarkdownDescription: "Cluster id",
+		Optional:            true,
+		Type:                types.Int64Type,
+	},
+	"name": {
+		MarkdownDescription: "Cluster name",
+		Optional:            true,
+		Type:                types.StringType,
+	},
+	"name_on_config_file": {
+		MarkdownDescription: "Cluster name on config file",
+		Type:                types.StringType,
+	},
+	"status": {
+		MarkdownDescription: "Cluster status",
+		Type:                types.StringType,
+	},
+	"provider_id": {
+		MarkdownDescription: "Cloud provider id",
+		Type:                types.Int64Type,
+	},
+	"replication_factor": {
+		MarkdownDescription: "Cluster replication factor",
+		Type:                types.Int64Type,
+	},
+	"broadcast_type": {
+		MarkdownDescription: "Cluster broadcast type",
+		Type:                types.StringType,
+	},
+	"scylla_version_id": {
+		MarkdownDescription: "Scylla version id",
+		Type:                types.Int64Type,
+	},
+	"scylla_version": {
+		MarkdownDescription: "Scylla version",
+		Type:                types.StringType,
+	},
+	"dc": {
+		MarkdownDescription: "Datacenters",
+		Type:                types.ListType{ElemType: types.ObjectType{AttrTypes: dcAttrTypes}},
+	},
+	"grafana_url": {
+		MarkdownDescription: "Grafana url",
+		Type:                types.StringType,
+	},
+	"grafana_root_url": {
+		MarkdownDescription: "Grafana root url",
+		Type:                types.StringType,
+	},
+	"free_tier": {
+		MarkdownDescription: "Free tier",
+		Type:                types.ObjectType{AttrTypes: freeTierAttrsTypes},
+	},
+	"encryption_mode": {
+		MarkdownDescription: "Encryption mode",
+		Type:                types.StringType,
+	},
+	"user_api_interface": {
+		MarkdownDescription: "User api interface",
+		Type:                types.StringType,
+	},
+	"pricing_model": {
+		MarkdownDescription: "Pricing model",
+		Type:                types.Int64Type,
+	},
+	"max_allowed_cidr_range": {
+		MarkdownDescription: "Max allowed cidr range",
+		Type:                types.Int64Type,
+	},
+	"created_at": {
+		MarkdownDescription: "Created at",
+		Type:                types.StringType,
+	},
+	"dns": {
+		MarkdownDescription: "DNS",
+		Type:                types.BoolType,
+	},
+	"prom_proxy_enabled": {
+		MarkdownDescription: "Prom proxy enabled",
+		Type:                types.BoolType,
+	},
+}
+
 func (t clusterDataSourceType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	attrs := markAttrsAsComputed(map[string]tfsdk.Attribute{
-		"id": {
-			MarkdownDescription: "Cluster id",
-			Optional:            true,
-			Type:                types.Int64Type,
-		},
-		"name": {
-			MarkdownDescription: "Cluster name",
-			Optional:            true,
-			Type:                types.StringType,
-		},
-		"name_on_config_file": {
-			MarkdownDescription: "Cluster name on config file",
-			Type:                types.StringType,
-		},
-		"status": {
-			MarkdownDescription: "Cluster status",
-			Type:                types.StringType,
-		},
-		"provider_id": {
-			MarkdownDescription: "Cloud provider id",
-			Type:                types.Int64Type,
-		},
-		"replication_factor": {
-			MarkdownDescription: "Cluster replication factor",
-			Type:                types.Int64Type,
-		},
-		"broadcast_type": {
-			MarkdownDescription: "Cluster broadcast type",
-			Type:                types.StringType,
-		},
-		"scylla_version_id": {
-			MarkdownDescription: "Scylla version id",
-			Type:                types.Int64Type,
-		},
-		"scylla_version": {
-			MarkdownDescription: "Scylla version",
-			Type:                types.StringType,
-		},
-		"dc": {
-			MarkdownDescription: "Datacenters",
-			Type:                types.ListType{ElemType: types.ObjectType{AttrTypes: dcAttrTypes}},
-		},
-		"grafana_url": {
-			MarkdownDescription: "Grafana url",
-			Type:                types.StringType,
-		},
-		"grafana_root_url": {
-			MarkdownDescription: "Grafana root url",
-			Type:                types.StringType,
-		},
-		"free_tier": {
-			MarkdownDescription: "Free tier",
-			Type:                types.ObjectType{AttrTypes: freeTierAttrsTypes},
-		},
-		"encryption_mode": {
-			MarkdownDescription: "Encryption mode",
-			Type:                types.StringType,
-		},
-		"user_api_interface": {
-			MarkdownDescription: "User api interface",
-			Type:                types.StringType,
-		},
-		"pricing_model": {
-			MarkdownDescription: "Pricing model",
-			Type:                types.Int64Type,
-		},
-		"max_allowed_cidr_range": {
-			MarkdownDescription: "Max allowed cidr range",
-			Type:                types.Int64Type,
-		},
-		"created_at": {
-			MarkdownDescription: "Created at",
-			Type:                types.StringType,
-		},
-		"dns": {
-			MarkdownDescription: "DNS",
-			Type:                types.BoolType,
-		},
-		"prom_proxy_enabled": {
-			MarkdownDescription: "Prom proxy enabled",
-			Type:                types.BoolType,
-		},
-	})
+	attrs := markAttrsAsComputed(clusterDataSourceAttrs)
 
 	return tfsdk.Schema{
 		MarkdownDescription: "Clusters data source",
@@ -255,13 +257,13 @@ func (d clusterDataSource) Read(ctx context.Context, req tfsdk.ReadDataSourceReq
 		return
 	}
 
-	writeClusterDataToTFStruct(&clusters[matchedClusterID], &data)
+	writeClusterDSDataToTFStruct(&clusters[matchedClusterID], &data)
 
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 }
 
-func writeClusterDataToTFStruct(cluster *model.Cluster, data *clusterDataSourceData) {
+func writeClusterDSDataToTFStruct(cluster *model.Cluster, data *clusterDataSourceData) {
 	data.ID = types.Int64{Value: cluster.ID}
 	data.Name = types.String{Value: cluster.Name}
 	data.NameOnConfigFile = types.String{Value: cluster.ClusterNameOnConfigFile}
@@ -280,9 +282,24 @@ func writeClusterDataToTFStruct(cluster *model.Cluster, data *clusterDataSourceD
 	data.CreatedAt = types.String{Value: cluster.CreatedAt}
 	data.DNS = types.Bool{Value: cluster.DNS}
 	data.PromProxyEnabled = types.Bool{Value: cluster.PromProxyEnabled}
+	data.DC = parseClusterDCData(cluster.Dc)
+	data.FreeTier = parseClusterFreeTierData(&cluster.FreeTier)
+}
 
-	dcs := make([]attr.Value, len(cluster.Dc))
-	for i, dc := range cluster.Dc {
+func parseClusterFreeTierData(ft *model.FreeTier) types.Object {
+	return types.Object{
+		AttrTypes: freeTierAttrsTypes,
+		Attrs: map[string]attr.Value{
+			"expiration_date":    types.String{Value: ft.ExpirationDate},
+			"expiration_seconds": types.Int64{Value: ft.ExpirationSeconds},
+			"creation_time":      types.String{Value: ft.CreationTime},
+		},
+	}
+}
+
+func parseClusterDCData(rawDCs []model.DataCenterWithClientConnections) types.List {
+	dcs := make([]attr.Value, len(rawDCs))
+	for i, dc := range rawDCs {
 		clientConnections := make([]attr.Value, len(dc.ClientConnection))
 		for j, clientConnection := range dc.ClientConnection {
 			clientConnections[j] = types.String{Value: clientConnection}
@@ -310,14 +327,5 @@ func writeClusterDataToTFStruct(cluster *model.Cluster, data *clusterDataSourceD
 		}
 	}
 
-	data.DC = types.List{Elems: dcs, ElemType: types.ObjectType{AttrTypes: dcAttrTypes}}
-
-	data.FreeTier = types.Object{
-		AttrTypes: freeTierAttrsTypes,
-		Attrs: map[string]attr.Value{
-			"expiration_date":    types.String{Value: cluster.FreeTier.ExpirationDate},
-			"expiration_seconds": types.Int64{Value: cluster.FreeTier.ExpirationSeconds},
-			"creation_time":      types.String{Value: cluster.FreeTier.CreationTime},
-		},
-	}
+	return types.List{Elems: dcs, ElemType: types.ObjectType{AttrTypes: dcAttrTypes}}
 }
