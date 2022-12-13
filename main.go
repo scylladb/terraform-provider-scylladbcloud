@@ -10,6 +10,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/tf5server"
 )
 
+// Generate the Terraform provider documentation using `tfplugindocs`:
+//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
+
 func main() {
 	debugFlag := flag.Bool("debug", false, "Start provider in debug mode.")
 	flag.Parse()
