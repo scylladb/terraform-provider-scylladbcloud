@@ -1,3 +1,11 @@
+terraform {
+	required_providers {
+		scylla = {
+			source = "registry.terraform.io/scylladb/scylla"
+		}
+	}
+}
+
 provider "scylla" {
 	token = "..."
 }

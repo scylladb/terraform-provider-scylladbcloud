@@ -1,5 +1,13 @@
+terraform {
+	required_providers {
+		scylla = {
+			source = "registry.terraform.io/scylladb/scylla"
+		}
+	}
+}
+
 provider "scylla" {
-  token = "..."
+	token = "..."
 }
 
 resource "scylla_vpc_peering" "scylla" {
