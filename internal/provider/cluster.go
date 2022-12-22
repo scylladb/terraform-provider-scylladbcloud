@@ -61,6 +61,20 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:    true,
 				Type:        schema.TypeInt,
 			},
+			"user_api_interface": {
+				Description: "Type of API interface, either CQL or ALTERNATOR",
+				Optional:    true,
+				ForceNew:    true,
+				Type:        schema.TypeString,
+				Default:     "CQL",
+			},
+			"alternator_write_isolation": {
+				Description: "Default write isolation policy",
+				Optional:    true,
+				ForceNew:    true,
+				Type:        schema.TypeString,
+				Default:     "only_rmw_uses_lwt",
+			},
 			"node_type": {
 				Description: "Instance type of a node",
 				Required:    true,
@@ -128,7 +142,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 			BroadcastType:        "PRIVATE",
 			ReplicationFactor:    3,
 			NumberOfNodes:        int64(d.Get("node_count").(int)),
-			UserAPIInterface:     "CQL",
+			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 		}
 		cidr, cidrOK       = d.GetOk("cidr_block")
@@ -140,6 +154,10 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 
 	if !enableVpcPeering {
 		r.BroadcastType = "PUBLIC"
+	}
+
+	if r.UserAPIInterface == "ALTERNATOR" {
+		r.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
 	}
 
 	if !cidrOK {
@@ -232,6 +250,7 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("name", cluster.ClusterName)
 	d.Set("region", cluster.Region.ExternalID)
 	d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
+	d.Set("user_api_interface", cluster.UserAPIInterface)
 	d.Set("node_type", c.Meta.AWS.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
 	d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
 	d.Set("scylla_version", cluster.ScyllaVersion.Version)
