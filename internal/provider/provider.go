@@ -68,6 +68,7 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		c        = p.Meta().(*scylla.Client)
 	)
 
+	c.Endpoint = defaultEndpoint
 	if endpoint != "" {
 		var err error
 
