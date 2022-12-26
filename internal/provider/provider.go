@@ -25,6 +25,7 @@ func New(_ context.Context) (*schema.Provider, error) {
 			"endpoint": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Default:     defaultEndpoint.String(),
 				Description: "URL of the Scylla Cloud endpoint.",
 			},
 			"token": {
@@ -68,12 +69,9 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		c        = p.Meta().(*scylla.Client)
 	)
 
-	if endpoint != "" {
-		var err error
-
-		if c.Endpoint, err = url.Parse(endpoint); err != nil {
-			return nil, diag.FromErr(err)
-		}
+	var err error
+	if c.Endpoint, err = url.Parse(endpoint); err != nil {
+		return nil, diag.FromErr(err)
 	}
 
 	c.Headers.Add("User-Agent", userAgent(p.TerraformVersion))
