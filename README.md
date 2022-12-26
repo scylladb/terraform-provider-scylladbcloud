@@ -1,5 +1,5 @@
-terraform-provider-scylla
-=========================
+terraform-provider-scylladbcloud
+================================
 
 
 ### Getting started with local development and testing
@@ -17,7 +17,7 @@ when looking up for provider binary, instead of talking with Terraform Registry:
 $ cat >~/.terraformrc <<EOF
 provider_installation {
 	dev_overrides {
-		"registry.terraform.io/scylladb/scylla" = "/Users/rafal/bin"
+		"registry.terraform.io/scylladb/scylladbcloud" = "/Users/rafal/bin"
 	}
 }
 EOF
@@ -26,7 +26,7 @@ EOF
 Build the provider binary and move it to $GOBIN:
 
 ```
-$ go install github.com/scylladb/terraform-provider-scylla
+$ go install github.com/scylladb/terraform-provider-scylladbcloud
 ```
 
 Take one of the example templates and configure the provider section with proper

@@ -1,16 +1,16 @@
 terraform {
 	required_providers {
-		scylla = {
-			source = "registry.terraform.io/scylladb/scylla"
+		scylladbcloud = {
+			source = "registry.terraform.io/scylladb/scylladbcloud"
 		}
 	}
 }
 
-provider "scylla" {
+provider "scylladbcloud" {
 	token = "..."
 }
 
-resource "scylla_cluster" "scylla" {
+resource "scylladbcloud_cluster" "scylladbcloud" {
 	name       = "My Cluster"
 	region     = "us-east-1"
 	node_count = 3
@@ -21,10 +21,10 @@ resource "scylla_cluster" "scylla" {
 	enable_dns         = true
 }
 
-output "scylla_cluster_id" {
-	value = scylla_cluster.scylla.id
+output "scylladbcloud_cluster_id" {
+	value = scylladbcloud_cluster.scylladbcloud.id
 }
 
-output "scylla_cluster_datacenter" {
-	value = scylla_cluster.scylla.datacenter
+output "scylladbcloud_cluster_datacenter" {
+	value = scylladbcloud_cluster.scylladbcloud.datacenter
 }

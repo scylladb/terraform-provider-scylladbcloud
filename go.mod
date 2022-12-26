@@ -1,4 +1,4 @@
-module github.com/scylladb/terraform-provider-scylla
+module github.com/scylladb/terraform-provider-scylladbcloud
 
 go 1.19
 

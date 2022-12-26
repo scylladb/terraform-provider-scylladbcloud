@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/scylladb/terraform-provider-scylla/internal/scylla/model"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
 
 func (c *Client) ListCloudProviders() ([]model.CloudProvider, error) {

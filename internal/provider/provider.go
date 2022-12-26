@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"runtime"
 
-	"github.com/scylladb/terraform-provider-scylla/internal/scylla"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"

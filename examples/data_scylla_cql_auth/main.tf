@@ -1,27 +1,27 @@
 terraform {
 	required_providers {
-		scylla = {
-			source = "registry.terraform.io/scylladb/scylla"
+		scylladbcloud = {
+			source = "registry.terraform.io/scylladb/scylladbcloud"
 		}
 	}
 }
 
-provider "scylla" {
+provider "scylladbcloud" {
 	token = "..."
 }
 
-data "scylla_cql_auth" "scylla" {
+data "scylladbcloud_cql_auth" "scylla" {
 	cluster_id = 10
 }
 
-output "scylla_cql_seeds" {
-	value = data.scylla_cql_auth.scylla.seeds
+output "scylladbcloud_cql_seeds" {
+	value = data.scylladbcloud_cql_auth.scylla.seeds
 }
 
-output "scylla_cql_username" {
-	value = data.scylla_cql_auth.scylla.username
+output "scylladbcloud_cql_username" {
+	value = data.scylladbcloud_cql_auth.scylla.username
 }
 
-output "scylla_cql_password" {
-	value = data.scylla_cql_auth.scylla.password
+output "scylladbcloud_cql_password" {
+	value = data.scylladbcloud_cql_auth.scylla.password
 }

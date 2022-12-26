@@ -1,16 +1,16 @@
 terraform {
 	required_providers {
-		scylla = {
-			source = "registry.terraform.io/scylladb/scylla"
+		scylladbcloud = {
+			source = "registry.terraform.io/scylladb/scylladbcloud"
 		}
 	}
 }
 
-provider "scylla" {
+provider "scylladbcloud" {
 	token = "..."
 }
 
-resource "scylla_vpc_peering" "scylla" {
+resource "scylladbcloud_vpc_peering" "scylladbcloud" {
 	cluster_id = 10
 	datacenter = AWS_US_EAST_1
 
@@ -22,6 +22,6 @@ resource "scylla_vpc_peering" "scylla" {
 	allow_cql = true
 }
 
-output "scylla_vpc_peering_connection_id" {
-	value = scylla_vpc_peering.scylla.connection_id
+output "scylladbcloud_vpc_peering_connection_id" {
+	value = scylladbcloud_vpc_peering.scylladbcloud.connection_id
 }

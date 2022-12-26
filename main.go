@@ -5,7 +5,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/scylladb/terraform-provider-scylla/internal/provider"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider"
 
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5/tf5server"
 )
@@ -34,7 +34,7 @@ func main() {
 	log.SetFlags(logFlags)
 
 	err = tf5server.Serve(
-		"registry.terraform.io/scylladb/scylla",
+		"registry.terraform.io/scylladb/scylladbcloud",
 		serverFactory,
 		serveOpts...,
 	)

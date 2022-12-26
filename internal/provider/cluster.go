@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/scylladb/terraform-provider-scylla/internal/scylla"
-	"github.com/scylladb/terraform-provider-scylla/internal/scylla/model"
 )
 
 const (

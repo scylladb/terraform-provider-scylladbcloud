@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/scylladb/terraform-provider-scylla/internal/scylla/model"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
 
 type CloudProvider struct {
