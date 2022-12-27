@@ -163,6 +163,7 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	var buf bytes.Buffer
 
