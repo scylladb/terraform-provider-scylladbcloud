@@ -55,7 +55,7 @@ func New(_ context.Context) (*schema.Provider, error) {
 		Headers: make(http.Header),
 	}
 
-	c.Headers.Add("Accept", "application/json")
+	c.Headers.Set("Accept", "application/json")
 
 	p.SetMeta(c)
 
@@ -74,7 +74,7 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		return nil, diag.FromErr(err)
 	}
 
-	c.Headers.Add("User-Agent", userAgent(p.TerraformVersion))
+	c.Headers.Set("User-Agent", userAgent(p.TerraformVersion))
 
 	if err := c.Auth(ctx, token); err != nil {
 		return nil, diag.FromErr(err)

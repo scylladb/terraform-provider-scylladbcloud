@@ -68,7 +68,7 @@ func (c *Client) Auth(ctx context.Context, token string) error {
 		c.Headers = make(http.Header)
 	}
 
-	c.Headers.Add("Authorization", "Bearer "+token)
+	c.Headers.Set("Authorization", "Bearer "+token)
 
 	if err := c.findAndSaveAccountID(); err != nil {
 		return err
