@@ -37,13 +37,13 @@ func New(_ context.Context) (*schema.Provider, error) {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
-			"scylla_cql_auth": DataSourceCQLAuth(),
+			"scylladbcloud_cql_auth": DataSourceCQLAuth(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"scylla_cluster":        ResourceCluster(),
-			"scylla_allowlist_rule": ResourceAllowlistRule(),
-			"scylla_vpc_peering":    ResourceVPCPeering(),
+			"scylladbcloud_cluster":        ResourceCluster(),
+			"scylladbcloud_allowlist_rule": ResourceAllowlistRule(),
+			"scylladbcloud_vpc_peering":    ResourceVPCPeering(),
 		},
 	}
 
