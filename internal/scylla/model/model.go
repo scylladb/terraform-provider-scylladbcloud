@@ -105,7 +105,7 @@ type ClusterCreateRequest struct {
 	PromProxy                bool     `json:"promProxy"`
 	ReplicationFactor        int64    `json:"replicationFactor"`
 	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
-	UserAPIInterface         string   `json:"userAPIInterface,omitempty"`
+	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
 }
 
 type Cluster struct {
