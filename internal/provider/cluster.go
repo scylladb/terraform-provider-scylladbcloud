@@ -81,6 +81,20 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
+			"node_dns_names": {
+				Description: "Cluster nodes DNS names",
+				Computed:    true,
+				Type:        schema.TypeSet,
+				Elem: schema.TypeString,
+				Set: schema.HashString,
+			},
+			"node_private_ips": {
+				Description: "Cluster nodes private IP addresses",
+				Computed:    true,
+				Type:        schema.TypeSet,
+				Elem: schema.TypeString,
+				Set: schema.HashString,
+			},
 			"cidr_block": {
 				Description: "IPv4 CIDR of the cluster",
 				Optional:    true,
@@ -252,6 +266,8 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
 	d.Set("user_api_interface", cluster.UserAPIInterface)
 	d.Set("node_type", c.Meta.AWS.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
+	d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
+	d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
 	d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
 	d.Set("scylla_version", cluster.ScyllaVersion.Version)
 	d.Set("enable_vpc_peering", !strings.EqualFold(cluster.BroadcastType, "PUBLIC"))
