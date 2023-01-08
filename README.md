@@ -1,6 +1,16 @@
 terraform-provider-scylladbcloud
 ================================
 
+This is the repository for the Terraform Scylla Cloud Provider, which allows one to use Terraform with ScyllaDB's Database as a Service, Scylla Cloud. For general information about Terraform, visit the official website and the GitHub project page. For details about Scylla Cloud, see [Scylla Cloud Documentation](https://cloud.docs.scylladb.com).
+The provider is using [Scylla Cloud REST API](https://cloud.docs.scylladb.com/stable/api-docs/api-get-started.html).
+
+
+### Prerequisites
+
+* Terrafrom 0.13+
+* Go 1.18 (to build the provider plugin)
+* [Scylla Cloud](https://cloud.scylladb.com/) Account
+* [Scylla Cloud API Token](https://cloud.docs.scylladb.com/stable/api-docs/api-get-started.html#obtaining-an-api-key-beta)
 
 ### Getting started with local development and testing
 
