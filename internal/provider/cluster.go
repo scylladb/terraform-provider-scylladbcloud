@@ -195,9 +195,8 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
 	}
 
-	if defaultID := c.Meta.ScyllaVersions.DefaultScyllaVersionID; !versionOK {
+	if !versionOK {
 		r.ScyllaVersionID = c.Meta.ScyllaVersions.DefaultScyllaVersionID
-		d.Set("scylla_version", c.Meta.VersionByID(defaultID).Version)
 	} else if mv := c.Meta.VersionByName(version.(string)); mv != nil {
 		r.ScyllaVersionID = mv.VersionID
 	} else {
@@ -210,7 +209,6 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	d.Set("cluster_id", cr.ClusterID)
 	d.Set("request_id", cr.ID)
 
 	if err := waitForCluster(c, cr.ID); err != nil {
@@ -222,7 +220,10 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("error reading cluster: %w", err)
 	}
 
-	d.Set("datacenter_id", cluster.Datacenter.ID)
+	err =  setClusterKVs(d, cluster, c.Meta)
+	if err != nil {
+		return fmt.Errorf("error setting cluster values: %w", err)
+	}
 
 	return nil
 }
@@ -244,6 +245,7 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 	if len(reqs) != 1 {
 		return fmt.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
 	}
+	d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
 		if err := waitForCluster(c, reqs[0].ID); err != nil {
@@ -260,22 +262,30 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("multi-datacenter clusters are not currently supported: %d", n)
 	}
 
+	err =  setClusterKVs(d, cluster, c.Meta)
+	if err != nil {
+		return fmt.Errorf("error setting cluster values: %w", err)
+	}
+
+	return nil
+}
+
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, meta *scylla.Cloudmeta) error {
 	d.Set("cluster_id", cluster.ID)
 	d.Set("name", cluster.ClusterName)
 	d.Set("region", cluster.Region.ExternalID)
 	d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
 	d.Set("user_api_interface", cluster.UserAPIInterface)
-	d.Set("node_type", c.Meta.AWS.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
+	d.Set("node_type", meta.AWS.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
 	d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
 	d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
 	d.Set("scylla_version", cluster.ScyllaVersion.Version)
 	d.Set("enable_vpc_peering", !strings.EqualFold(cluster.BroadcastType, "PUBLIC"))
 	d.Set("enable_dns", cluster.DNS)
-	d.Set("request_id", reqs[0].ID)
+	d.Set("datacenter_id", cluster.Datacenter.ID)
 	d.Set("datacenter", cluster.Datacenter.Name)
 	d.Set("status", cluster.Status)
-
 	return nil
 }
 
