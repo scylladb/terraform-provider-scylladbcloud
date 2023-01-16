@@ -251,6 +251,22 @@ func NodesByStatus(n []Node, status string) (f []Node) {
 	return f
 }
 
+func NodesPrivateIPs(n []Node) []string {
+	ips := make([]string, 0, len(n))
+	for i := range n {
+		ips = append(ips, n[i].PrivateIP)
+	}
+	return ips
+}
+
+func NodesDNSNames(n []Node) []string {
+	dns := make([]string, 0, len(n))
+	for i := range n {
+		dns = append(dns, n[i].DNS)
+	}
+	return dns
+}
+
 type Datacenters struct {
 	Datacenters []Datacenter `json:"dataCenters"`
 }
