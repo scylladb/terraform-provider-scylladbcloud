@@ -24,17 +24,21 @@ description: |-
 
 ### Optional
 
+- `alternator_write_isolation` (String) Default write isolation policy
 - `cidr_block` (String) IPv4 CIDR of the cluster
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
 - `scylla_version` (String) Scylla version
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
+- `user_api_interface` (String) Type of API interface, either CQL or ALTERNATOR
 
 ### Read-Only
 
 - `cluster_id` (Number) Cluster id
 - `datacenter` (String) Cluster datacenter name
 - `id` (String) The ID of this resource.
+- `node_dns_names` (Set of String) Cluster nodes DNS names
+- `node_private_ips` (Set of String) Cluster nodes private IP addresses
 - `request_id` (Number) Cluster creation request ID
 - `status` (String) Cluster status
 
