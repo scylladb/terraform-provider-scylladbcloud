@@ -188,7 +188,6 @@ lookup:
 	d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
 	d.Set("peer_region", c.Meta.AWS.RegionByID(vpcPeering.RegionID).ExternalID)
 	d.Set("peer_account_id", vpcPeering.OwnerID)
-	// d.Set("allow_cql", vpcPeering.
 	d.Set("vpc_peering_id", vpcPeering.ID)
 	d.Set("connection_id", vpcPeering.ExternalID)
 	d.Set("cluster_id", cluster.ID)

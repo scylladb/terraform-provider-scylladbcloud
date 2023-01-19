@@ -43,16 +43,12 @@ func (err *APIError) Error() string {
 // Client represents a client to call the Scylla Cloud API
 type Client struct {
 	Meta *Cloudmeta
-
 	// headers holds headers that will be set for all http requests.
 	Headers http.Header
-
 	// AccountID holds the account ID used in requests to the API.
 	AccountID int64
-
 	// API endpoint
 	Endpoint *url.URL
-
 	// HTTPClient is the underlying HTTP client used to run the requests.
 	// It may be overloaded but a default one is provided in ``NewClient`` by default.
 	HTTPClient *http.Client
