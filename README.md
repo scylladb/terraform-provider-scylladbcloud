@@ -17,7 +17,7 @@ The provider is using [Scylla Cloud REST API](https://cloud.docs.scylladb.com/st
 Let's assume we have a $GOBIN env set to the following path:
 
 ```
-$ export GOBIN=/Users/rafal/bin
+$ export GOBIN=${HOME}/bin
 ```
 
 Create a local development override file, to teach Terraform to use your $GOBIN
@@ -27,7 +27,7 @@ when looking up for provider binary, instead of talking with Terraform Registry:
 $ cat >~/.terraformrc <<EOF
 provider_installation {
 	dev_overrides {
-		"registry.terraform.io/scylladb/scylladbcloud" = "/Users/rafal/bin"
+		"registry.terraform.io/scylladb/scylladbcloud" = "${HOME}/bin"
 	}
 }
 EOF
