@@ -229,9 +229,19 @@ type VPCPeering struct {
 }
 
 type ClusterConnection struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Seeds    string `json:"seeds"`
+	BroadcastType string `json:"broadcastType"`
+	Credentials   struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"credentials"`
+	Datacenters []DatacenterConnection `json:"connectDataCenters"`
+}
+
+type DatacenterConnection struct {
+	Name      string   `json:"dcName"`
+	PublicIP  []string `json:"publicIPs"`
+	PrivateIP []string `json:"privateIPs"`
+	DNS       []string `json:"dns"`
 }
 
 type ClusterDetails struct {

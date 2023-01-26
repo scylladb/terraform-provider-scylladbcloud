@@ -65,6 +65,8 @@ func (c *Client) Connect(clusterID int64) (*model.ClusterConnection, error) {
 		return nil, err
 	}
 
+	fix_sf3112(&result) // TODO(rjeczalik): remove when scylladb/siren-frontend#3112 gets fixed
+
 	return &result, nil
 }
 
@@ -242,4 +244,24 @@ func (c *Client) DeleteClusterVPCPeering(clusterID, peerID int64) error {
 	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/peer/%d", c.AccountID, clusterID, peerID)
 
 	return c.delete(path)
+}
+
+func fix_sf3112(c *model.ClusterConnection) {
+	for i := range c.Datacenters {
+		dc := &c.Datacenters[i]
+
+		dc.PublicIP = nonempty(dc.PublicIP)
+		dc.PrivateIP = nonempty(dc.PrivateIP)
+		dc.DNS = nonempty(dc.DNS)
+	}
+}
+
+func nonempty(s []string) (f []string) {
+	for _, s := range s {
+		if s != "" {
+			f = append(f, s)
+		}
+	}
+
+	return f
 }
