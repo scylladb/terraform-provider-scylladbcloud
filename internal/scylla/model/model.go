@@ -89,7 +89,7 @@ type ClusterRequest struct {
 }
 
 type ClusterCreateRequest struct {
-	AccountCredentialID      int64    `json:"accountCredentialID,omitempty"`
+	AccountCredentialID      int64    `json:"accountCredentialId,omitempty"`
 	AlternatorWriteIsolation string   `json:"alternatorWriteIsolation,omitempty"`
 	BroadcastType            string   `json:"broadcastType,omitempty"`
 	CidrBlock                string   `json:"cidrBlock,omitempty"`

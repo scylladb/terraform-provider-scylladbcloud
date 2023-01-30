@@ -21,6 +21,8 @@ description: |-
 
 ### Optional
 
+- `datacenter_id` (Number) Datacenter ID
+- `dns` (Boolean) Use DNS names for seeds
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

@@ -61,6 +61,12 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:    true,
 				Type:        schema.TypeInt,
 			},
+			"byoa_id": {
+				Description: "BYOA credential ID",
+				Optional:    true,
+				ForceNew:    true,
+				Type:        schema.TypeInt,
+			},
 			"user_api_interface": {
 				Description: "Type of API interface, either CQL or ALTERNATOR",
 				Optional:    true,
@@ -85,15 +91,15 @@ func ResourceCluster() *schema.Resource {
 				Description: "Cluster nodes DNS names",
 				Computed:    true,
 				Type:        schema.TypeSet,
-				Elem: schema.TypeString,
-				Set: schema.HashString,
+				Elem:        schema.TypeString,
+				Set:         schema.HashString,
 			},
 			"node_private_ips": {
 				Description: "Cluster nodes private IP addresses",
 				Computed:    true,
 				Type:        schema.TypeSet,
-				Elem: schema.TypeString,
-				Set: schema.HashString,
+				Elem:        schema.TypeString,
+				Set:         schema.HashString,
 			},
 			"cidr_block": {
 				Description: "IPv4 CIDR of the cluster",
@@ -160,6 +166,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 		}
 		cidr, cidrOK       = d.GetOk("cidr_block")
+		byoa, byoaOK       = d.GetOk("byoa_id")
 		region             = d.Get("region").(string)
 		nodeType           = d.Get("node_type").(string)
 		version, versionOK = d.GetOk("scylla_version")
@@ -172,6 +179,10 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 
 	if r.UserAPIInterface == "ALTERNATOR" {
 		r.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
+	}
+
+	if byoaOK {
+		r.AccountCredentialID = int64(byoa.(int))
 	}
 
 	if !cidrOK {
@@ -220,7 +231,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("error reading cluster: %w", err)
 	}
 
-	err =  setClusterKVs(d, cluster, c.Meta)
+	err = setClusterKVs(d, cluster, c.Meta)
 	if err != nil {
 		return fmt.Errorf("error setting cluster values: %w", err)
 	}
@@ -262,7 +273,7 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("multi-datacenter clusters are not currently supported: %d", n)
 	}
 
-	err =  setClusterKVs(d, cluster, c.Meta)
+	err = setClusterKVs(d, cluster, c.Meta)
 	if err != nil {
 		return fmt.Errorf("error setting cluster values: %w", err)
 	}
@@ -286,6 +297,8 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, meta *scylla.
 	d.Set("datacenter_id", cluster.Datacenter.ID)
 	d.Set("datacenter", cluster.Datacenter.Name)
 	d.Set("status", cluster.Status)
+	d.Set("byoa_id", cluster.Datacenter.AccountCloudProviderCredentialID)
+
 	return nil
 }
 
