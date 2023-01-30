@@ -23,21 +23,39 @@ var (
 
 // APIError represents an error that occurred while calling the API.
 type APIError struct {
-	// URL at which the error originated
-	URL string `json:"url"`
-	// API error code (meanings are described in the Scylla Cloud API documentation)
-	Code string `json:"code"`
-	// Error message.
-	Message string `json:"message"`
-	// Error details
-	TraceID string `json:"trace_id"`
-	// Http status code
+	URL        string
+	Code       string
+	Message    string
 	StatusCode int
 }
 
+func makeError(text string, errCodes map[string]string, r *http.Response) *APIError {
+	var err APIError
+	if _, e := strconv.Atoi(text); e == nil {
+		err.Code = text
+
+		switch text := errCodes[text]; {
+		case err.Message == "" && text == "":
+			err.Message = "Request has failed. For more details consult the error code"
+		case err.Message == "":
+			err.Message = text
+		case text != "":
+			err.Message = err.Message + " (" + text + ")"
+		}
+	} else {
+		err.Message = text
+	}
+	if err.URL == "" {
+		err.URL = r.Request.URL.String()
+	}
+	if err.StatusCode == 0 {
+		err.StatusCode = r.StatusCode
+	}
+	return &err
+}
+
 func (err *APIError) Error() string {
-	return fmt.Sprintf("Error %q (http status %d, url=%q): %q. Trace id: %q.",
-		err.Code, err.StatusCode, err.URL, err.Message, err.TraceID)
+	return fmt.Sprintf("Error %q: %s (http status %d, url %q)", err.Code, err.Message, err.StatusCode, err.URL)
 }
 
 // Client represents a client to call the Scylla Cloud API
@@ -171,24 +189,6 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	d := json.NewDecoder(io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf))
 	d.UseNumber()
 
-	if resp.StatusCode < 200 || resp.StatusCode > 300 {
-		type ErrorResponse struct {
-			Error APIError `json:"error"`
-		}
-		errorResponse := ErrorResponse{APIError{StatusCode: resp.StatusCode}}
-		if err = d.Decode(&errorResponse); err != nil {
-			return &APIError{StatusCode: resp.StatusCode, URL: req.URL.String()}
-		}
-		if errorResponse.Error.URL == "" {
-			errorResponse.Error.URL = req.URL.String()
-		}
-		return &errorResponse.Error
-	}
-
-	if resType == nil {
-		return nil
-	}
-
 	var data = struct {
 		Error string      `json:"error"`
 		Data  interface{} `json:"data"`
@@ -198,18 +198,14 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 		return err
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if data.Error == "" {
+			data.Error = http.StatusText(resp.StatusCode)
+		}
+	}
+
 	if data.Error != "" {
-		if _, e := strconv.Atoi(data.Error); e == nil {
-			return &APIError{
-				Code:    data.Error,
-				Message: "Request has failed. For more details consult the error code",
-				URL:     req.URL.String(),
-			}
-		}
-		return &APIError{
-			Message: data.Error,
-			URL:     req.URL.String(),
-		}
+		return makeError(data.Error, c.Meta.ErrCodes, resp)
 	}
 
 	return nil
