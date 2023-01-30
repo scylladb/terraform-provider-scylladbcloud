@@ -25,6 +25,7 @@ description: |-
 ### Optional
 
 - `alternator_write_isolation` (String) Default write isolation policy
+- `byoa_id` (Number) BYOA credential ID
 - `cidr_block` (String) IPv4 CIDR of the cluster
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
