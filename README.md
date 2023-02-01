@@ -39,9 +39,32 @@ Build the provider binary and move it to $GOBIN:
 $ go install github.com/scylladb/terraform-provider-scylladbcloud
 ```
 
-Take one of the example templates and configure the provider section with proper
-values for the `token` and `endpoint` keys.
+### Provider configuration
 
-Run `terraform plan` or `terraform apply` and be happy!
+In order to configure provider pass a token you obtained from ScyllaDB Cloud:
+
+```
+terraform {
+	required_providers {
+		scylladbcloud = {
+			source = "registry.terraform.io/scylladb/scylladbcloud"
+		}
+	}
+}
+
+provider "scylladbcloud" {
+	token = "..."
+}
+```
+
+Run `terraform apply` in order to create a cluster or `terraform destroy` in order to delete it.
+
+You can also import an existing cluster by providing its ID:
+
+```
+resource "scylladbcloud_cluster" "mycluster" { }
+```
+
+Run `terraform import scylladbcloud_cluster.mycluster 123` to import an existing cluster into the state file.
 
 For debugging / troubleshooting please [Terraform debugging documentation](https://developer.hashicorp.com/terraform/internals/debugging).
