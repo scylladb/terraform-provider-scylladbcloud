@@ -12,33 +12,6 @@ The provider is using [Scylla Cloud REST API](https://cloud.docs.scylladb.com/st
 * [Scylla Cloud](https://cloud.scylladb.com/) Account
 * [Scylla Cloud API Token](https://cloud.docs.scylladb.com/stable/api-docs/api-get-started.html#obtaining-an-api-key-beta)
 
-### Getting started with local development and testing
-
-Let's assume we have a $GOBIN env set to the following path:
-
-```
-$ export GOBIN=${HOME}/bin
-```
-
-Create a local development override file, to teach Terraform to use your $GOBIN
-when looking up for provider binary, instead of talking with Terraform Registry:
-
-```
-$ cat >~/.terraformrc <<EOF
-provider_installation {
-	dev_overrides {
-		"registry.terraform.io/scylladb/scylladbcloud" = "${HOME}/bin"
-	}
-}
-EOF
-```
-
-Build the provider binary and move it to $GOBIN:
-
-```
-$ go install github.com/scylladb/terraform-provider-scylladbcloud
-```
-
 ### Provider configuration
 
 In order to configure provider pass a token you obtained from ScyllaDB Cloud:

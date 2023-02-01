@@ -1,15 +1,3 @@
-terraform {
-	required_providers {
-		scylladbcloud = {
-			source = "registry.terraform.io/scylladb/scylladbcloud"
-		}
-	}
-}
-
-provider "scylladbcloud" {
-	token = "..."
-}
-
 resource "scylladbcloud_cluster" "scylladbcloud" {
 	name       = "My Cluster"
 	region     = "us-east-1"
