@@ -219,9 +219,6 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("error creating cluster: %w", err)
 	}
 
-	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	d.Set("request_id", cr.ID)
-
 	if err := waitForCluster(c, cr.ID); err != nil {
 		return fmt.Errorf("error waiting for cluster: %w", err)
 	}
@@ -235,6 +232,9 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return fmt.Errorf("error setting cluster values: %w", err)
 	}
+
+	d.SetId(strconv.Itoa(int(cr.ClusterID)))
+	d.Set("request_id", cr.ID)
 
 	return nil
 }
@@ -349,6 +349,8 @@ func waitForCluster(c *scylla.Client, requestID int64) error {
 			break
 		} else if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
 			continue
+		} else if strings.EqualFold(r.Status, "FAILED") {
+			return fmt.Errorf("cluster request failed: %q", r.UserFriendlyError)
 		}
 
 		return fmt.Errorf("unrecognized cluster request status: %q", r.Status)
