@@ -65,7 +65,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 		dns        = d.Get("dns").(bool)
 	)
 
-	conn, err := c.Connect(clusterID)
+	conn, err := c.Connect(ctx, clusterID)
 	if err != nil {
 		return diag.Errorf("error reading connection details: %w", err)
 	}
@@ -77,7 +77,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 	var dc *model.DatacenterConnection
 
 	if dcOK {
-		datacenters, err := c.ListDataCenters(clusterID)
+		datacenters, err := c.ListDataCenters(ctx, clusterID)
 		if err != nil {
 			return diag.Errorf("error reading datacenters: %w", err)
 		}

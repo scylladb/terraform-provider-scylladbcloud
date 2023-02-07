@@ -84,7 +84,7 @@ func (c *Client) Auth(ctx context.Context, token string) error {
 
 	c.Headers.Set("Authorization", "Bearer "+token)
 
-	if err := c.findAndSaveAccountID(); err != nil {
+	if err := c.findAndSaveAccountID(ctx); err != nil {
 		return err
 	}
 
@@ -98,7 +98,7 @@ func (c *Client) Auth(ctx context.Context, token string) error {
 	return nil
 }
 
-func (c *Client) newHttpRequest(method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
+func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
 	var body []byte
 	var err error
 
@@ -114,7 +114,7 @@ func (c *Client) newHttpRequest(method, path string, reqBody interface{}, query 
 	url := *c.Endpoint
 	url.Path = stdpath.Join("/", url.Path, path)
 
-	req, err := http.NewRequest(method, url.String(), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, url.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryB
 }
 
 func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
-	req, err := c.newHttpRequest(method, path, reqBody, query...)
+	req, err := c.newHttpRequest(ctx, method, path, reqBody, query...)
 	if err != nil {
 		return err
 	}
@@ -211,24 +211,24 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	return nil
 }
 
-func (c *Client) get(path string, resultType interface{}, query ...string) error {
-	return c.callAPI(context.TODO(), http.MethodGet, path, nil, resultType, query...)
+func (c *Client) get(ctx context.Context, path string, resultType interface{}, query ...string) error {
+	return c.callAPI(ctx, http.MethodGet, path, nil, resultType, query...)
 }
 
-func (c *Client) post(path string, requestBody, resultType interface{}) error {
-	return c.callAPI(context.TODO(), http.MethodPost, path, requestBody, resultType)
+func (c *Client) post(ctx context.Context, path string, requestBody, resultType interface{}) error {
+	return c.callAPI(ctx, http.MethodPost, path, requestBody, resultType)
 }
 
-func (c *Client) delete(path string) error {
-	return c.callAPI(context.TODO(), http.MethodDelete, path, nil, nil)
+func (c *Client) delete(ctx context.Context, path string) error {
+	return c.callAPI(ctx, http.MethodDelete, path, nil, nil)
 }
 
-func (c *Client) findAndSaveAccountID() error {
+func (c *Client) findAndSaveAccountID(ctx context.Context) error {
 	var result struct {
 		AccountID int64 `json:"accountId"`
 	}
 
-	if err := c.get("/account/default", &result); err != nil {
+	if err := c.get(ctx, "/account/default", &result); err != nil {
 		return err
 	}
 

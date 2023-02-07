@@ -1,13 +1,14 @@
 package provider
 
 import (
-	"fmt"
+	"context"
 	"strings"
 	"time"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
@@ -20,10 +21,10 @@ const (
 
 func ResourceVPCPeering() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceVPCPeeringCreate,
-		Read:   resourceVPCPeeringRead,
-		Update: resourceVPCPeeringUpdate,
-		Delete: resourceVPCPeeringDelete,
+		CreateContext: resourceVPCPeeringCreate,
+		ReadContext:   resourceVPCPeeringRead,
+		UpdateContext: resourceVPCPeeringUpdate,
+		DeleteContext: resourceVPCPeeringDelete,
 
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -97,7 +98,7 @@ func ResourceVPCPeering() *schema.Resource {
 	}
 }
 
-func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c      = meta.(*scylla.Client)
 		pr     = d.Get("peer_region").(string)
@@ -113,9 +114,9 @@ func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
 		dc        *model.Datacenter
 	)
 
-	dcs, err := c.ListDataCenters(int64(clusterID))
+	dcs, err := c.ListDataCenters(ctx, int64(clusterID))
 	if err != nil {
-		return fmt.Errorf("error reading clusters: %w", err)
+		return diag.Errorf("error reading clusters: %w", err)
 	}
 
 	for i := range dcs {
@@ -129,26 +130,26 @@ func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	if dc == nil {
-		return fmt.Errorf("unable to find %q datacenter", dcName)
+		return diag.Errorf("unable to find %q datacenter", dcName)
 	}
 	if p == nil {
-		return fmt.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
+		return diag.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 	}
 
 	region := p.RegionByName(pr)
 	if region == nil {
-		return fmt.Errorf("unrecognized region %q", pr)
+		return diag.Errorf("unrecognized region %q", pr)
 	}
 
 	r.RegionID = region.ID
 
 	if r.DatacenterID == 0 {
-		return fmt.Errorf("unrecognized datacenter %q", dcName)
+		return diag.Errorf("unrecognized datacenter %q", dcName)
 	}
 
-	vp, err := c.CreateClusterVPCPeering(int64(clusterID), r)
+	vp, err := c.CreateClusterVPCPeering(ctx, int64(clusterID), r)
 	if err != nil {
-		return fmt.Errorf("error creating vpc peering: %w", err)
+		return diag.Errorf("error creating vpc peering: %w", err)
 	}
 
 	d.SetId(vp.ExternalID)
@@ -158,7 +159,7 @@ func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func resourceVPCPeeringRead(d *schema.ResourceData, meta interface{}) error {
+func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c          = meta.(*scylla.Client)
 		connID     = d.Id()
@@ -167,16 +168,16 @@ func resourceVPCPeeringRead(d *schema.ResourceData, meta interface{}) error {
 		p          *scylla.CloudProvider
 	)
 
-	clusters, err := c.ListClusters()
+	clusters, err := c.ListClusters(ctx)
 	if err != nil {
-		return fmt.Errorf("error reading cluster list: %w", err)
+		return diag.Errorf("error reading cluster list: %w", err)
 	}
 
 lookup:
 	for i := range clusters {
-		c, err := c.GetCluster(clusters[i].ID)
+		c, err := c.GetCluster(ctx, clusters[i].ID)
 		if err != nil {
-			return fmt.Errorf("error reading cluster ID=%d: %w", clusters[i].ID, err)
+			return diag.Errorf("error reading cluster ID=%d: %w", clusters[i].ID, err)
 		}
 
 		for j := range c.VPCPeeringList {
@@ -191,15 +192,15 @@ lookup:
 	}
 
 	if cluster == nil {
-		return fmt.Errorf("unable to find cluster for peering connection ID: %q", connID)
+		return diag.Errorf("unable to find cluster for peering connection ID: %q", connID)
 	}
 
 	if vpcPeering == nil {
-		return fmt.Errorf("unrecognized vpc peering connection ID: %q", connID)
+		return diag.Errorf("unrecognized vpc peering connection ID: %q", connID)
 	}
 
 	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
-		return fmt.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
+		return diag.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
 	d.Set("datacenter", cluster.Datacenter.Name)
@@ -214,27 +215,27 @@ lookup:
 	return nil
 }
 
-func resourceVPCPeeringUpdate(d *schema.ResourceData, meta interface{}) error {
-	return fmt.Errorf(`updating "scylla_vpc_peering" resource is not supported`)
+func resourceVPCPeeringUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	return diag.Errorf(`updating "scylla_vpc_peering" resource is not supported`)
 }
 
-func resourceVPCPeeringDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c = meta.(*scylla.Client)
 	)
 
 	peerID, ok := d.GetOk("vpc_peering_id")
 	if !ok {
-		return fmt.Errorf("unable to read VPC peering ID from state file")
+		return diag.Errorf("unable to read VPC peering ID from state file")
 	}
 
 	clusterID, ok := d.GetOk("cluster_id")
 	if !ok {
-		return fmt.Errorf("unable to read cluster ID from state file")
+		return diag.Errorf("unable to read cluster ID from state file")
 	}
 
-	if err := c.DeleteClusterVPCPeering(int64(clusterID.(int)), int64(peerID.(int))); err != nil {
-		return fmt.Errorf("error deleting vpc peering: %w", err)
+	if err := c.DeleteClusterVPCPeering(ctx, int64(clusterID.(int)), int64(peerID.(int))); err != nil {
+		return diag.Errorf("error deleting vpc peering: %w", err)
 	}
 
 	return nil

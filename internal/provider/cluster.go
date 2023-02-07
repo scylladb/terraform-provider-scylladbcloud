@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
@@ -22,10 +24,10 @@ const (
 
 func ResourceCluster() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceClusterCreate,
-		Read:   resourceClusterRead,
-		Update: resourceClusterUpdate,
-		Delete: resourceClusterDelete,
+		CreateContext: resourceClusterCreate,
+		ReadContext:   resourceClusterRead,
+		UpdateContext: resourceClusterUpdate,
+		DeleteContext: resourceClusterDelete,
 
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -160,7 +162,7 @@ func ResourceCluster() *schema.Resource {
 	}
 }
 
-func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c = meta.(*scylla.Client)
 		r = &model.ClusterCreateRequest{
@@ -199,7 +201,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 
 	p := c.Meta.ProviderByName(cloud)
 	if p == nil {
-		return fmt.Errorf(`unrecognized value %q for "cloud" attribute`, cloud)
+		return diag.Errorf(`unrecognized value %q for "cloud" attribute`, cloud)
 	}
 
 	r.CidrBlock = cidr.(string)
@@ -209,13 +211,13 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	if mr := p.RegionByName(region); mr != nil {
 		r.RegionID = mr.ID
 	} else {
-		return fmt.Errorf(`unrecognized value %q for "region" attribute`, region)
+		return diag.Errorf(`unrecognized value %q for "region" attribute`, region)
 	}
 
 	if mi := p.InstanceByName(nodeType); mi != nil {
 		r.InstanceID = mi.ID
 	} else {
-		return fmt.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
+		return diag.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
 	}
 
 	if !versionOK {
@@ -223,26 +225,26 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	} else if mv := c.Meta.VersionByName(version.(string)); mv != nil {
 		r.ScyllaVersionID = mv.VersionID
 	} else {
-		return fmt.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
+		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
 	}
 
-	cr, err := c.CreateCluster(r)
+	cr, err := c.CreateCluster(ctx, r)
 	if err != nil {
-		return fmt.Errorf("error creating cluster: %w", err)
+		return diag.Errorf("error creating cluster: %w", err)
 	}
 
-	if err := waitForCluster(c, cr.ID); err != nil {
-		return fmt.Errorf("error waiting for cluster: %w", err)
+	if err := waitForCluster(ctx, c, cr.ID); err != nil {
+		return diag.Errorf("error waiting for cluster: %w", err)
 	}
 
-	cluster, err := c.GetCluster(cr.ClusterID)
+	cluster, err := c.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
-		return fmt.Errorf("error reading cluster: %w", err)
+		return diag.Errorf("error reading cluster: %w", err)
 	}
 
 	err = setClusterKVs(d, cluster, p)
 	if err != nil {
-		return fmt.Errorf("error setting cluster values: %w", err)
+		return diag.Errorf("error setting cluster values: %w", err)
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
@@ -251,48 +253,48 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
+func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c = meta.(*scylla.Client)
 	)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return fmt.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
 	}
 
-	reqs, err := c.ListClusterRequest(clusterID, "CREATE_CLUSTER")
+	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
 	if err != nil {
-		return fmt.Errorf("error reading cluster request: %w", err)
+		return diag.Errorf("error reading cluster request: %w", err)
 	}
 	if len(reqs) != 1 {
-		return fmt.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
+		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
 	}
 	d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := waitForCluster(c, reqs[0].ID); err != nil {
-			return fmt.Errorf("error waiting for cluster: %w", err)
+		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
+			return diag.Errorf("error waiting for cluster: %w", err)
 		}
 	}
 
-	cluster, err := c.GetCluster(clusterID)
+	cluster, err := c.GetCluster(ctx, clusterID)
 	if err != nil {
-		return fmt.Errorf("error reading cluster: %w", err)
+		return diag.Errorf("error reading cluster: %w", err)
 	}
 
 	p := c.Meta.ProviderByID(cluster.CloudProviderID)
 	if p == nil {
-		return fmt.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
+		return diag.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
 	}
 
 	if n := len(cluster.Datacenters); n > 1 {
-		return fmt.Errorf("multi-datacenter clusters are not currently supported: %d", n)
+		return diag.Errorf("multi-datacenter clusters are not currently supported: %d", n)
 	}
 
 	err = setClusterKVs(d, cluster, p)
 	if err != nil {
-		return fmt.Errorf("error setting cluster values: %w", err)
+		return diag.Errorf("error setting cluster values: %w", err)
 	}
 
 	return nil
@@ -320,45 +322,45 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	return nil
 }
 
-func resourceClusterUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	// Scylla Cloud API does not support updating a cluster,
 	// thus the update always fails
-	return fmt.Errorf(`updating "scylla_cluster" resource is not supported`)
+	return diag.Errorf(`updating "scylla_cluster" resource is not supported`)
 }
 
-func resourceClusterDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c = meta.(*scylla.Client)
 	)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return fmt.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
 	}
 
 	name, ok := d.GetOk("name")
 	if !ok {
-		return fmt.Errorf("unable to read cluster name from state file")
+		return diag.Errorf("unable to read cluster name from state file")
 	}
 
-	r, err := c.DeleteCluster(clusterID, name.(string))
+	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
 	if err != nil {
-		return fmt.Errorf("error deleting cluster: %w", err)
+		return diag.Errorf("error deleting cluster: %w", err)
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") {
-		return fmt.Errorf("delete request failure: %q", r.UserFriendlyError)
+		return diag.Errorf("delete request failure: %q", r.UserFriendlyError)
 	}
 
 	return nil
 }
 
-func waitForCluster(c *scylla.Client, requestID int64) error {
+func waitForCluster(ctx context.Context, c *scylla.Client, requestID int64) error {
 	t := time.NewTicker(clusterPollInterval)
 	defer t.Stop()
 
 	for range t.C {
-		r, err := c.GetClusterRequest(requestID)
+		r, err := c.GetClusterRequest(ctx, requestID)
 		if err != nil {
 			return fmt.Errorf("error reading cluster request: %w", err)
 		}
