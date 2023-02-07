@@ -84,15 +84,15 @@ func (c *Client) Auth(ctx context.Context, token string) error {
 
 	c.Headers.Set("Authorization", "Bearer "+token)
 
-	if err := c.findAndSaveAccountID(ctx); err != nil {
-		return err
-	}
-
 	if c.Meta == nil {
 		var err error
 		if c.Meta, err = BuildCloudmeta(ctx, c); err != nil {
 			return fmt.Errorf("error building metadata: %w", err)
 		}
+	}
+
+	if err := c.findAndSaveAccountID(ctx); err != nil {
+		return err
 	}
 
 	return nil
