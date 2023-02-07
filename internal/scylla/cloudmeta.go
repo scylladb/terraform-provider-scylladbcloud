@@ -73,14 +73,14 @@ func BuildCloudmeta(ctx context.Context, c *Client) (*Cloudmeta, error) {
 
 	meta.ErrCodes = m
 
-	versions, err := c.ListScyllaVersions()
+	versions, err := c.ListScyllaVersions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read scylla versions: %w", err)
 	}
 
 	meta.ScyllaVersions = versions
 
-	providers, err := c.ListCloudProviders()
+	providers, err := c.ListCloudProviders(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cloud providers: %w", err)
 	}
@@ -88,7 +88,7 @@ func BuildCloudmeta(ctx context.Context, c *Client) (*Cloudmeta, error) {
 	for i := range providers {
 		p := &providers[i]
 
-		regions, err := c.ListCloudProviderRegions(p.ID)
+		regions, err := c.ListCloudProviderRegions(ctx, p.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read regions for cloud provider %d: %w", p.ID, err)
 		}

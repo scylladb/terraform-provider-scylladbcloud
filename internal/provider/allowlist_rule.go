@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"fmt"
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
@@ -21,10 +22,10 @@ const (
 
 func ResourceAllowlistRule() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAllowlistRuleCreate,
-		Read:   resourceAllowlistRuleRead,
-		Update: resourceAllowlistRuleUpdate,
-		Delete: resourceAllowlistRuleDelete,
+		CreateContext: resourceAllowlistRuleCreate,
+		ReadContext:   resourceAllowlistRuleRead,
+		UpdateContext: resourceAllowlistRuleUpdate,
+		DeleteContext: resourceAllowlistRuleDelete,
 
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -58,7 +59,7 @@ func ResourceAllowlistRule() *schema.Resource {
 	}
 }
 
-func resourceAllowlistRuleCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceAllowlistRuleCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c         = meta.(*scylla.Client)
 		clusterID = d.Get("cluster_id").(int)
@@ -66,9 +67,9 @@ func resourceAllowlistRuleCreate(d *schema.ResourceData, meta interface{}) error
 		rule      *model.AllowedIP
 	)
 
-	rules, err := c.CreateAllowlistRule(int64(clusterID), cidrBlock)
+	rules, err := c.CreateAllowlistRule(ctx, int64(clusterID), cidrBlock)
 	if err != nil {
-		return fmt.Errorf("error creating allowlist rule: %w", err)
+		return diag.Errorf("error creating allowlist rule: %w", err)
 	}
 
 	for i := range rules {
@@ -81,7 +82,7 @@ func resourceAllowlistRuleCreate(d *schema.ResourceData, meta interface{}) error
 	}
 
 	if rule == nil {
-		return fmt.Errorf("unable to find allowlist rule for %q cidr block", cidrBlock)
+		return diag.Errorf("unable to find allowlist rule for %q cidr block", cidrBlock)
 	}
 
 	d.SetId(strconv.Itoa(int(rule.ID)))
@@ -90,7 +91,7 @@ func resourceAllowlistRuleCreate(d *schema.ResourceData, meta interface{}) error
 	return nil
 }
 
-func resourceAllowlistRuleRead(d *schema.ResourceData, meta interface{}) error {
+func resourceAllowlistRuleRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c       = meta.(*scylla.Client)
 		cluster *model.Cluster
@@ -99,21 +100,21 @@ func resourceAllowlistRuleRead(d *schema.ResourceData, meta interface{}) error {
 
 	ruleID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return fmt.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
 	}
 
-	clusters, err := c.ListClusters()
+	clusters, err := c.ListClusters(ctx)
 	if err != nil {
-		return fmt.Errorf("error reading cluster list: %w", err)
+		return diag.Errorf("error reading cluster list: %w", err)
 	}
 
 lookup:
 	for i := range clusters {
 		cl := &clusters[i]
 
-		rules, err := c.ListAllowlistRules(cl.ID)
+		rules, err := c.ListAllowlistRules(ctx, cl.ID)
 		if err != nil {
-			return fmt.Errorf("error reading allowlist rules for cluster ID=%d: %w", cl.ID, err)
+			return diag.Errorf("error reading allowlist rules for cluster ID=%d: %w", cl.ID, err)
 		}
 
 		for j := range rules {
@@ -128,7 +129,7 @@ lookup:
 	}
 
 	if rule == nil {
-		return fmt.Errorf("unrecognized rule %d", ruleID)
+		return diag.Errorf("unrecognized rule %d", ruleID)
 	}
 
 	d.Set("cidr_block", rule.Address)
@@ -137,27 +138,27 @@ lookup:
 	return nil
 }
 
-func resourceAllowlistRuleUpdate(d *schema.ResourceData, meta interface{}) error {
-	return fmt.Errorf(`updating "scylla_allowlist_rule" resource is not supported`)
+func resourceAllowlistRuleUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	return diag.Errorf(`updating "scylla_allowlist_rule" resource is not supported`)
 }
 
-func resourceAllowlistRuleDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceAllowlistRuleDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c = meta.(*scylla.Client)
 	)
 
 	ruleID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return fmt.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
 	}
 
 	clusterID, ok := d.GetOk("cluster_id")
 	if !ok {
-		return fmt.Errorf("unable to read cluster ID from state file")
+		return diag.Errorf("unable to read cluster ID from state file")
 	}
 
-	if err := c.DeleteAllowlistRule(int64(clusterID.(int)), ruleID); err != nil {
-		return fmt.Errorf("error deleting allowlist rule: %w", err)
+	if err := c.DeleteAllowlistRule(ctx, int64(clusterID.(int)), ruleID); err != nil {
+		return diag.Errorf("error deleting allowlist rule: %w", err)
 	}
 
 	return nil
