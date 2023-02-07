@@ -109,14 +109,9 @@ func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
 			Owner:     d.Get("peer_account_id").(string),
 		}
 		clusterID = d.Get("cluster_id").(int)
+		p         *scylla.CloudProvider
+		dc        *model.Datacenter
 	)
-
-	region := c.Meta.AWS.RegionByName(pr)
-	if region == nil {
-		return fmt.Errorf("unrecognized region %q", pr)
-	}
-
-	r.RegionID = region.ID
 
 	dcs, err := c.ListDataCenters(int64(clusterID))
 	if err != nil {
@@ -124,13 +119,28 @@ func resourceVPCPeeringCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	for i := range dcs {
-		dc := &dcs[i]
+		dc = &dcs[i]
 
 		if strings.EqualFold(dc.Name, dcName) {
 			r.DatacenterID = dc.ID
+			p = c.Meta.ProviderByID(dc.CloudProviderID)
 			break
 		}
 	}
+
+	if dc == nil {
+		return fmt.Errorf("unable to find %q datacenter", dcName)
+	}
+	if p == nil {
+		return fmt.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
+	}
+
+	region := p.RegionByName(pr)
+	if region == nil {
+		return fmt.Errorf("unrecognized region %q", pr)
+	}
+
+	r.RegionID = region.ID
 
 	if r.DatacenterID == 0 {
 		return fmt.Errorf("unrecognized datacenter %q", dcName)
@@ -154,6 +164,7 @@ func resourceVPCPeeringRead(d *schema.ResourceData, meta interface{}) error {
 		connID     = d.Id()
 		cluster    *model.Cluster
 		vpcPeering *model.VPCPeering
+		p          *scylla.CloudProvider
 	)
 
 	clusters, err := c.ListClusters()
@@ -179,14 +190,22 @@ lookup:
 		}
 	}
 
+	if cluster == nil {
+		return fmt.Errorf("unable to find cluster for peering connection ID: %q", connID)
+	}
+
 	if vpcPeering == nil {
-		return fmt.Errorf("unrecognized vpc peering connection ID %q", connID)
+		return fmt.Errorf("unrecognized vpc peering connection ID: %q", connID)
+	}
+
+	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
+		return fmt.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
 	d.Set("datacenter", cluster.Datacenter.Name)
 	d.Set("peer_vpc_id", vpcPeering.VPCID)
 	d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
-	d.Set("peer_region", c.Meta.AWS.RegionByID(vpcPeering.RegionID).ExternalID)
+	d.Set("peer_region", p.RegionByID(vpcPeering.RegionID).ExternalID)
 	d.Set("peer_account_id", vpcPeering.OwnerID)
 	d.Set("vpc_peering_id", vpcPeering.ID)
 	d.Set("connection_id", vpcPeering.ExternalID)

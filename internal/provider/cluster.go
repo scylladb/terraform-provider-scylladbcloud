@@ -43,6 +43,13 @@ func ResourceCluster() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
+			"cloud": {
+				Description: "Cluster name",
+				Optional:    true,
+				ForceNew:    true,
+				Default:     "AWS",
+				Type:        schema.TypeString,
+			},
 			"name": {
 				Description: "Cluster name",
 				Required:    true,
@@ -157,7 +164,6 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 	var (
 		c = meta.(*scylla.Client)
 		r = &model.ClusterCreateRequest{
-			AccountCredentialID:  1,
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
 			ReplicationFactor:    3,
@@ -165,6 +171,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 		}
+		cloud              = d.Get("cloud").(string)
 		cidr, cidrOK       = d.GetOk("cidr_block")
 		byoa, byoaOK       = d.GetOk("byoa_id")
 		region             = d.Get("region").(string)
@@ -190,17 +197,22 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		d.Set("cidr_block", cidr)
 	}
 
+	p := c.Meta.ProviderByName(cloud)
+	if p == nil {
+		return fmt.Errorf(`unrecognized value %q for "cloud" attribute`, cloud)
+	}
+
 	r.CidrBlock = cidr.(string)
 
-	r.CloudProviderID = c.Meta.AWS.CloudProvider.ID
+	r.CloudProviderID = p.CloudProvider.ID
 
-	if mr := c.Meta.AWS.RegionByName(region); mr != nil {
+	if mr := p.RegionByName(region); mr != nil {
 		r.RegionID = mr.ID
 	} else {
 		return fmt.Errorf(`unrecognized value %q for "region" attribute`, region)
 	}
 
-	if mi := c.Meta.AWS.InstanceByName(nodeType); mi != nil {
+	if mi := p.InstanceByName(nodeType); mi != nil {
 		r.InstanceID = mi.ID
 	} else {
 		return fmt.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
@@ -228,7 +240,7 @@ func resourceClusterCreate(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("error reading cluster: %w", err)
 	}
 
-	err = setClusterKVs(d, cluster, c.Meta)
+	err = setClusterKVs(d, cluster, p)
 	if err != nil {
 		return fmt.Errorf("error setting cluster values: %w", err)
 	}
@@ -269,11 +281,16 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("error reading cluster: %w", err)
 	}
 
+	p := c.Meta.ProviderByID(cluster.CloudProviderID)
+	if p == nil {
+		return fmt.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
+	}
+
 	if n := len(cluster.Datacenters); n > 1 {
 		return fmt.Errorf("multi-datacenter clusters are not currently supported: %d", n)
 	}
 
-	err = setClusterKVs(d, cluster, c.Meta)
+	err = setClusterKVs(d, cluster, p)
 	if err != nil {
 		return fmt.Errorf("error setting cluster values: %w", err)
 	}
@@ -281,13 +298,14 @@ func resourceClusterRead(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, meta *scylla.Cloudmeta) error {
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.CloudProvider) error {
 	d.Set("cluster_id", cluster.ID)
 	d.Set("name", cluster.ClusterName)
+	d.Set("cloud", p.CloudProvider.Name)
 	d.Set("region", cluster.Region.ExternalID)
 	d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
 	d.Set("user_api_interface", cluster.UserAPIInterface)
-	d.Set("node_type", meta.AWS.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
+	d.Set("node_type", p.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
 	d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
 	d.Set("cidr_block", cluster.Datacenter.CIDRBlock)

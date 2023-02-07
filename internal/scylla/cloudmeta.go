@@ -58,8 +58,6 @@ func (p *CloudProvider) InstanceByName(name string) *model.CloudProviderInstance
 }
 
 type Cloudmeta struct {
-	AWS *CloudProvider
-
 	CloudProviders []CloudProvider
 	ScyllaVersions *model.ScyllaVersions
 	ErrCodes       map[string]string
@@ -100,13 +98,6 @@ func BuildCloudmeta(ctx context.Context, c *Client) (*Cloudmeta, error) {
 			CloudProviderRegions: regions,
 		})
 	}
-
-	aws := meta.ProviderByName("AWS")
-	if aws == nil {
-		return nil, fmt.Errorf("unexpected error, %q provider not found", "AWS")
-	}
-
-	meta.AWS = aws
 
 	return &meta, nil
 }
