@@ -57,6 +57,18 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 	return &result.Cluster, err
 }
 
+func (c *Client) Bundle(ctx context.Context, clusterID int64) ([]byte, error) {
+	var raw []byte
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/bundle", c.AccountID, clusterID)
+
+	if err := c.get(ctx, path, &raw); err != nil {
+		return nil, err
+	}
+
+	return raw, nil
+}
+
 func (c *Client) Connect(ctx context.Context, clusterID int64) (*model.ClusterConnection, error) {
 	var result model.ClusterConnection
 

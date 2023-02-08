@@ -186,7 +186,17 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 		fmt.Printf("%s\n\n", &buf)
 	}()
 
-	d := json.NewDecoder(io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf))
+	var body io.Reader = io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf)
+
+	if p, ok := resType.(*[]byte); ok {
+		if *p, err = io.ReadAll(body); err != nil {
+			return fmt.Errorf("error reading body: %w", err)
+		}
+
+		return nil
+	}
+
+	d := json.NewDecoder(body)
 	d.UseNumber()
 
 	var data = struct {
