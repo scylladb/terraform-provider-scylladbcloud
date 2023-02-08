@@ -106,6 +106,7 @@ type ClusterCreateRequest struct {
 	ReplicationFactor        int64    `json:"replicationFactor"`
 	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
 	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
+	Provisioning             string   `json:"provisioning,omitempty"`
 }
 
 type Cluster struct {
