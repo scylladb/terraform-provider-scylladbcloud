@@ -1,5 +1,7 @@
-resource "scylladbcloud_cluster" "scylladbcloud" {
+# Create a cluster on AWS cloud.
+resource "scylladbcloud_cluster" "example" {
 	name       = "My Cluster"
+	cloud      = "AWS"
 	region     = "us-east-1"
 	node_count = 3
 	node_type  = "i3.xlarge"
@@ -10,9 +12,9 @@ resource "scylladbcloud_cluster" "scylladbcloud" {
 }
 
 output "scylladbcloud_cluster_id" {
-	value = scylladbcloud_cluster.scylladbcloud.id
+	value = scylladbcloud_cluster.example.id
 }
 
 output "scylladbcloud_cluster_datacenter" {
-	value = scylladbcloud_cluster.scylladbcloud.datacenter
+	value = scylladbcloud_cluster.example.datacenter
 }
