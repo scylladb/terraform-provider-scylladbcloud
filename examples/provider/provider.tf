@@ -6,6 +6,7 @@ terraform {
 	}
 }
 
+# Configuration-based authentication.
 provider "scylladbcloud" {
 	token = "..." # Replace with bearer token obtained from ScyllaDB Cloud
 }
