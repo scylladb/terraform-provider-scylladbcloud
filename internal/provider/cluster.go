@@ -71,7 +71,7 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"byoa_id": {
-				Description: "BYOA credential ID",
+				Description: "BYOA credential ID (only for AWS)",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeInt,
@@ -192,6 +192,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if byoaOK {
 		r.AccountCredentialID = int64(byoa.(int))
+
+		if !strings.EqualFold(cloud, "AWS") {
+			return diag.Errorf(`setting "byoa_id" attribute is not supported for cloud=%q`, cloud)
+		}
 	}
 
 	if !cidrOK {
@@ -317,7 +321,10 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	d.Set("datacenter_id", cluster.Datacenter.ID)
 	d.Set("datacenter", cluster.Datacenter.Name)
 	d.Set("status", cluster.Status)
-	d.Set("byoa_id", cluster.Datacenter.AccountCloudProviderCredentialID)
+
+	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
+		d.Set("byoa_id", id)
+	}
 
 	return nil
 }
