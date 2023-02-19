@@ -1,4 +1,4 @@
-# Create a VPC peering connection top the specified datacenter.
+# Create a VPC peering connection to the specified datacenter.
 resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
 	datacenter = "AWS_US_EAST_1"
