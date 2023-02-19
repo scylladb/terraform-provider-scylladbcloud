@@ -56,7 +56,7 @@ func ResourceVPCPeering() *schema.Resource {
 			},
 			"peer_cidr_block": {
 				Description: "Peer VPC CIDR block",
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
@@ -105,14 +105,14 @@ func ResourceVPCPeering() *schema.Resource {
 
 func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c      = meta.(*scylla.Client)
-		pr     = d.Get("peer_region").(string)
-		dcName = d.Get("datacenter").(string)
-		r      = &model.VPCPeeringRequest{
-			AllowCQL:  d.Get("allow_cql").(bool),
-			VPC:       d.Get("peer_vpc_id").(string),
-			CidrBlock: d.Get("peer_cidr_block").(string),
-			Owner:     d.Get("peer_account_id").(string),
+		c            = meta.(*scylla.Client)
+		pr           = d.Get("peer_region").(string)
+		dcName       = d.Get("datacenter").(string)
+		cidr, cidrOK = d.GetOk("peer_cidr_block")
+		r            = &model.VPCPeeringRequest{
+			AllowCQL: d.Get("allow_cql").(bool),
+			VPC:      d.Get("peer_vpc_id").(string),
+			Owner:    d.Get("peer_account_id").(string),
 		}
 		clusterID = d.Get("cluster_id").(int)
 		p         *scylla.CloudProvider
@@ -137,6 +137,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	if dc == nil {
 		return diag.Errorf("unable to find %q datacenter", dcName)
 	}
+
 	if p == nil {
 		return diag.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 	}
@@ -147,6 +148,23 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	r.RegionID = region.ID
+
+	if !cidrOK {
+		if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
+			return diag.Errorf(`"peer_cidr_block" is required for %q cloud`, p.CloudProvider.Name)
+		}
+
+		var ok bool
+		if cidr, ok = c.Meta.GCPBlocks[pr]; !ok {
+			return diag.Errorf("no default peer CIDR block found for %q region", pr)
+		}
+	} else if strings.EqualFold(p.CloudProvider.Name, "GCP") {
+		if c.Meta.GCPBlocks[pr] == cidr.(string) {
+			return diag.Errorf(`omit "peer_cidr_block" attribute for default GCP cidr blocks`)
+		}
+	}
+
+	r.CidrBlock = cidr.(string)
 
 	if r.DatacenterID == 0 {
 		return diag.Errorf("unrecognized datacenter %q", dcName)
@@ -211,15 +229,20 @@ lookup:
 		return diag.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
+	r := p.RegionByID(vpcPeering.RegionID)
+
 	d.Set("datacenter", cluster.Datacenter.Name)
 	d.Set("peer_vpc_id", vpcPeering.VPCID)
-	d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
-	d.Set("peer_region", p.RegionByID(vpcPeering.RegionID).ExternalID)
+	d.Set("peer_region", r.ExternalID)
 	d.Set("peer_account_id", vpcPeering.OwnerID)
 	d.Set("vpc_peering_id", vpcPeering.ID)
 	d.Set("connection_id", vpcPeering.ExternalID)
 	d.Set("cluster_id", cluster.ID)
 	d.Set("network_link", vpcPeering.NetworkLink())
+
+	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
+		d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
+	}
 
 	return nil
 }
