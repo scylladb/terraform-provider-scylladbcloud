@@ -268,8 +268,11 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	}
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
-	if err != nil {
-		return diag.Errorf("error reading cluster request: %w", err)
+	if scylla.IsDeletedErr(err) {
+		d.Set("status", "DELETED")
+		return nil
+	} else if err != nil {
+		return diag.Errorf("error reading cluster request: %+v", err)
 	}
 	if len(reqs) != 1 {
 		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
@@ -352,6 +355,9 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 
 	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
 	if err != nil {
+		if scylla.IsDeletedErr(err) {
+			return nil // cluster was already deleted
+		}
 		return diag.Errorf("error deleting cluster: %w", err)
 	}
 

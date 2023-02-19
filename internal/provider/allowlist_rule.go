@@ -158,6 +158,9 @@ func resourceAllowlistRuleDelete(ctx context.Context, d *schema.ResourceData, me
 	}
 
 	if err := c.DeleteAllowlistRule(ctx, int64(clusterID.(int)), ruleID); err != nil {
+		if scylla.IsDeletedErr(err) {
+			return nil // cluster was already deleted
+		}
 		return diag.Errorf("error deleting allowlist rule: %w", err)
 	}
 
