@@ -86,16 +86,16 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 
 	cr, err := c.CreateCluster(ctx, r)
 	if err != nil {
-		return diag.Errorf("error creating serverless cluster: %w", err)
+		return diag.Errorf("error creating serverless cluster: %s", err)
 	}
 
 	if err := waitForCluster(ctx, c, cr.ID); err != nil {
-		return diag.Errorf("error waiting for serverless cluster: %w", err)
+		return diag.Errorf("error waiting for serverless cluster: %s", err)
 	}
 
 	cluster, err := c.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
-		return diag.Errorf("error reading serverless cluster: %w", err)
+		return diag.Errorf("error reading serverless cluster: %s", err)
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
@@ -111,12 +111,12 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
 	if err != nil {
-		return diag.Errorf("error reading serverless cluster request: %w", err)
+		return diag.Errorf("error reading serverless cluster request: %s", err)
 	}
 	if len(reqs) != 1 {
 		return diag.Errorf("unexpected number of serverless cluster requests, expected 1, got: %+v", reqs)
@@ -124,13 +124,13 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 
 	if reqs[0].Status != "COMPLETED" {
 		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
-			return diag.Errorf("error waiting for serverless cluster: %w", err)
+			return diag.Errorf("error waiting for serverless cluster: %s", err)
 		}
 	}
 
 	cluster, err := c.GetCluster(ctx, clusterID)
 	if err != nil {
-		return diag.Errorf("error reading serverless cluster: %w", err)
+		return diag.Errorf("error reading serverless cluster: %s", err)
 	}
 
 	d.SetId(strconv.Itoa(int(clusterID)))
@@ -152,7 +152,7 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	name, ok := d.GetOk("name")
@@ -162,7 +162,7 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 
 	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
 	if err != nil {
-		return diag.Errorf("error deleting serverlessCluster: %w", err)
+		return diag.Errorf("error deleting serverlessCluster: %s", err)
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {

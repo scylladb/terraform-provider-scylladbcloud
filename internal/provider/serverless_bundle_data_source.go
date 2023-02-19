@@ -45,7 +45,7 @@ func dataSourceServerlessBundleRead(ctx context.Context, d *schema.ResourceData,
 
 	bundle, err := c.Bundle(ctx, clusterID)
 	if err != nil {
-		return diag.Errorf("error reading connection bundle: %w", err)
+		return diag.Errorf("error reading connection bundle: %s", err)
 	}
 
 	var resource struct {
@@ -53,7 +53,7 @@ func dataSourceServerlessBundleRead(ctx context.Context, d *schema.ResourceData,
 	}
 
 	if err := yaml.Unmarshal(bundle, &resource); err != nil {
-		return diag.Errorf("error parsing connection bundle: %w", err)
+		return diag.Errorf("error parsing connection bundle: %s", err)
 	}
 
 	if want := "CQLConnectionConfig"; !strings.EqualFold(resource.Kind, want) {

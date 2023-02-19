@@ -67,7 +67,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 
 	conn, err := c.Connect(ctx, clusterID)
 	if err != nil {
-		return diag.Errorf("error reading connection details: %w", err)
+		return diag.Errorf("error reading connection details: %s", err)
 	}
 
 	if len(conn.Datacenters) == 0 {
@@ -79,7 +79,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 	if dcOK {
 		datacenters, err := c.ListDataCenters(ctx, clusterID)
 		if err != nil {
-			return diag.Errorf("error reading datacenters: %w", err)
+			return diag.Errorf("error reading datacenters: %s", err)
 		}
 
 	lookup:
