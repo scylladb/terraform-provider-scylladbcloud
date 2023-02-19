@@ -234,21 +234,21 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	cr, err := c.CreateCluster(ctx, r)
 	if err != nil {
-		return diag.Errorf("error creating cluster: %w", err)
+		return diag.Errorf("error creating cluster: %s", err)
 	}
 
 	if err := waitForCluster(ctx, c, cr.ID); err != nil {
-		return diag.Errorf("error waiting for cluster: %w", err)
+		return diag.Errorf("error waiting for cluster: %s", err)
 	}
 
 	cluster, err := c.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
-		return diag.Errorf("error reading cluster: %w", err)
+		return diag.Errorf("error reading cluster: %s", err)
 	}
 
 	err = setClusterKVs(d, cluster, p)
 	if err != nil {
-		return diag.Errorf("error setting cluster values: %w", err)
+		return diag.Errorf("error setting cluster values: %s", err)
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
@@ -264,7 +264,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
@@ -272,7 +272,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		d.Set("status", "DELETED")
 		return nil
 	} else if err != nil {
-		return diag.Errorf("error reading cluster request: %+v", err)
+		return diag.Errorf("error reading cluster request: %s", err)
 	}
 	if len(reqs) != 1 {
 		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
@@ -281,13 +281,13 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	if reqs[0].Status != "COMPLETED" {
 		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
-			return diag.Errorf("error waiting for cluster: %w", err)
+			return diag.Errorf("error waiting for cluster: %s", err)
 		}
 	}
 
 	cluster, err := c.GetCluster(ctx, clusterID)
 	if err != nil {
-		return diag.Errorf("error reading cluster: %w", err)
+		return diag.Errorf("error reading cluster: %s", err)
 	}
 
 	p := c.Meta.ProviderByID(cluster.CloudProviderID)
@@ -301,7 +301,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	err = setClusterKVs(d, cluster, p)
 	if err != nil {
-		return diag.Errorf("error setting cluster values: %w", err)
+		return diag.Errorf("error setting cluster values: %s", err)
 	}
 
 	return nil
@@ -345,7 +345,7 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	name, ok := d.GetOk("name")
@@ -358,7 +358,7 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 		if scylla.IsDeletedErr(err) {
 			return nil // cluster was already deleted
 		}
-		return diag.Errorf("error deleting cluster: %w", err)
+		return diag.Errorf("error deleting cluster: %s", err)
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {

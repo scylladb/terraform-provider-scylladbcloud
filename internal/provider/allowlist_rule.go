@@ -69,7 +69,7 @@ func resourceAllowlistRuleCreate(ctx context.Context, d *schema.ResourceData, me
 
 	rules, err := c.CreateAllowlistRule(ctx, int64(clusterID), cidrBlock)
 	if err != nil {
-		return diag.Errorf("error creating allowlist rule: %w", err)
+		return diag.Errorf("error creating allowlist rule: %s", err)
 	}
 
 	for i := range rules {
@@ -100,12 +100,12 @@ func resourceAllowlistRuleRead(ctx context.Context, d *schema.ResourceData, meta
 
 	ruleID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
-		return diag.Errorf("error reading cluster list: %w", err)
+		return diag.Errorf("error reading cluster list: %s", err)
 	}
 
 lookup:
@@ -114,7 +114,7 @@ lookup:
 
 		rules, err := c.ListAllowlistRules(ctx, cl.ID)
 		if err != nil {
-			return diag.Errorf("error reading allowlist rules for cluster ID=%d: %w", cl.ID, err)
+			return diag.Errorf("error reading allowlist rules for cluster ID=%d: %s", cl.ID, err)
 		}
 
 		for j := range rules {
@@ -149,7 +149,7 @@ func resourceAllowlistRuleDelete(ctx context.Context, d *schema.ResourceData, me
 
 	ruleID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
-		return diag.Errorf("error reading id=%q: %w", d.Id(), err)
+		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
 	clusterID, ok := d.GetOk("cluster_id")
@@ -161,7 +161,7 @@ func resourceAllowlistRuleDelete(ctx context.Context, d *schema.ResourceData, me
 		if scylla.IsDeletedErr(err) {
 			return nil // cluster was already deleted
 		}
-		return diag.Errorf("error deleting allowlist rule: %w", err)
+		return diag.Errorf("error deleting allowlist rule: %s", err)
 	}
 
 	return nil

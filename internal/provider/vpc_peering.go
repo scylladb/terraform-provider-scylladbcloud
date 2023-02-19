@@ -121,7 +121,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 	dcs, err := c.ListDataCenters(ctx, int64(clusterID))
 	if err != nil {
-		return diag.Errorf("error reading clusters: %w", err)
+		return diag.Errorf("error reading clusters: %s", err)
 	}
 
 	for i := range dcs {
@@ -194,14 +194,14 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
-		return diag.Errorf("error reading cluster list: %w", err)
+		return diag.Errorf("error reading cluster list: %s", err)
 	}
 
 lookup:
 	for i := range clusters {
 		c, err := c.GetCluster(ctx, clusters[i].ID)
 		if err != nil {
-			return diag.Errorf("error reading cluster ID=%d: %w", clusters[i].ID, err)
+			return diag.Errorf("error reading cluster ID=%d: %s", clusters[i].ID, err)
 		}
 
 		for j := range c.VPCPeeringList {
@@ -271,7 +271,7 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 			return nil // cluster was already deleted
 		}
 
-		return diag.Errorf("error deleting vpc peering: %w", err)
+		return diag.Errorf("error deleting vpc peering: %s", err)
 	}
 
 	return nil
