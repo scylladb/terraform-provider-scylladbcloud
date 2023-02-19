@@ -13,6 +13,14 @@ description: |-
 
 {{ tffile (printf "examples/resources/%s/resource.tf" .Name)}}
 
+## Example Usage for AWS
+
+{{ tffile (printf "examples/resources/%s/aws.tf" .Name)}}
+
+## Example Usage for GCP
+
+{{ tffile (printf "examples/resources/%s/gcp.tf" .Name)}}
+
 {{ .SchemaMarkdown | trimspace }}
 
 ## Import
