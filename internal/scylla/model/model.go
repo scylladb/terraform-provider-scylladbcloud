@@ -229,6 +229,10 @@ type VPCPeering struct {
 	ExpiresAt        string   `json:"expiresAt"`
 }
 
+func (vp *VPCPeering) NetworkLink() string {
+	return "projects/" + vp.ProjectID + "/global/networks/" + vp.NetworkName
+}
+
 type ClusterConnection struct {
 	BroadcastType string `json:"broadcastType"`
 	Credentials   struct {

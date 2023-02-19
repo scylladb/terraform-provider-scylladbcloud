@@ -94,6 +94,11 @@ func ResourceVPCPeering() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
+			"network_link": {
+				Description: "(GCP) Cluster VPC network self_link",
+				Computed:    true,
+				Type:        schema.TypeString,
+			},
 		},
 	}
 }
@@ -149,12 +154,13 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 	vp, err := c.CreateClusterVPCPeering(ctx, int64(clusterID), r)
 	if err != nil {
-		return diag.Errorf("error creating vpc peering: %w", err)
+		return diag.Errorf("error creating vpc peering: %s", err)
 	}
 
 	d.SetId(vp.ExternalID)
 	d.Set("vpc_peering_id", vp.ID)
 	d.Set("connection_id", vp.ExternalID)
+	d.Set("network_link", vp.NetworkLink())
 
 	return nil
 }
@@ -213,6 +219,7 @@ lookup:
 	d.Set("vpc_peering_id", vpcPeering.ID)
 	d.Set("connection_id", vpcPeering.ExternalID)
 	d.Set("cluster_id", cluster.ID)
+	d.Set("network_link", vpcPeering.NetworkLink())
 
 	return nil
 }
