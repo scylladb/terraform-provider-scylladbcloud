@@ -192,11 +192,13 @@ lookup:
 	}
 
 	if cluster == nil {
-		return diag.Errorf("unable to find cluster for peering connection ID: %q", connID)
+		// cluster was deleted manually
+		return nil
 	}
 
 	if vpcPeering == nil {
-		return diag.Errorf("unrecognized vpc peering connection ID: %q", connID)
+		// vpc peering was deleted manually
+		return nil
 	}
 
 	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
@@ -235,6 +237,10 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	if err := c.DeleteClusterVPCPeering(ctx, int64(clusterID.(int)), int64(peerID.(int))); err != nil {
+		if scylla.IsDeletedErr(err) {
+			return nil // cluster was already deleted
+		}
+
 		return diag.Errorf("error deleting vpc peering: %w", err)
 	}
 
