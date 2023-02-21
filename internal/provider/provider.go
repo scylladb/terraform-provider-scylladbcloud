@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"runtime"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
+
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -70,7 +72,7 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		token    = d.Get("token").(string)
 		c        = p.Meta().(*scylla.Client)
 	)
-
+	ctx = tfcontext.AddProviderInfo(ctx, endpoint)
 	var err error
 	if c.Endpoint, err = url.Parse(endpoint); err != nil {
 		return nil, diag.FromErr(err)
