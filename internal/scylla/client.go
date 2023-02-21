@@ -12,6 +12,9 @@ import (
 	"net/url"
 	stdpath "path"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
 )
 
 var (
@@ -69,8 +72,6 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 		if err != nil {
 			return nil, err
 		}
-
-		fmt.Printf("[DEBUG] %s %s body:\n%s\n", method, path, body)
 	}
 
 	url := *c.Endpoint
@@ -129,6 +130,7 @@ func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryB
 }
 
 func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
+	ctx = tfcontext.AddHttpRequestInfo(ctx, method, path)
 	req, err := c.newHttpRequest(ctx, method, path, reqBody, query...)
 	if err != nil {
 		return err
@@ -143,18 +145,22 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "[DEBUG] (%d) %s %s:\n\n", resp.StatusCode, req.Method, req.URL)
-	defer func() {
-		fmt.Printf("%s\n\n", &buf)
-	}()
-
 	var body io.Reader = io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf)
 
 	if p, ok := resType.(*[]byte); ok {
 		if *p, err = io.ReadAll(body); err != nil {
+			tflog.Trace(ctx, "failed to read body: "+err.Error(), map[string]interface{}{
+				"code":   resp.StatusCode,
+				"status": resp.Status,
+				"error":  err.Error(),
+			})
 			return fmt.Errorf("error reading body: %w", err)
 		}
-
+		tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
+			"code":   resp.StatusCode,
+			"status": resp.Status,
+			"body":   buf.String(),
+		})
 		return nil
 	}
 
@@ -167,6 +173,12 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	}{"", resType}
 
 	if err := d.Decode(&data); err != nil {
+		tflog.Trace(ctx, "failed to unmarshal data: "+err.Error(), map[string]interface{}{
+			"code":   resp.StatusCode,
+			"status": resp.Status,
+			"error":  err.Error(),
+			"body":   buf.String(),
+		})
 		return err
 	}
 
@@ -177,9 +189,21 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	}
 
 	if data.Error != "" {
-		return makeError(data.Error, c.Meta.ErrCodes, resp)
+		err = makeError(data.Error, c.Meta.ErrCodes, resp)
+		tflog.Trace(ctx, "api returned error: "+err.Error(), map[string]interface{}{
+			"code":   resp.StatusCode,
+			"status": resp.Status,
+			"body":   buf.String(),
+			"error":  err.Error(),
+		})
+		return err
 	}
 
+	tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
+		"code":   resp.StatusCode,
+		"status": resp.Status,
+		"body":   buf.String(),
+	})
 	return nil
 }
 
