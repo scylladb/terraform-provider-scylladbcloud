@@ -7,15 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	stdpath "path"
-	"time"
+
+	rhttp "github.com/hashicorp/go-retryablehttp"
 )
 
 var (
-	defaultTimeout              = 60 * time.Second
 	retriesAllowed              = 3
 	maxResponseBodyLength int64 = 1 << 20
 )
@@ -31,13 +30,13 @@ type Client struct {
 	Endpoint *url.URL
 	// HTTPClient is the underlying HTTP client used to run the requests.
 	// It may be overloaded but a default one is provided in ``NewClient`` by default.
-	HTTPClient *http.Client
+	HTTPClient *rhttp.Client
 }
 
 // NewClient represents a new client to call the API
 func (c *Client) Auth(ctx context.Context, token string) error {
 	if c.HTTPClient == nil {
-		c.HTTPClient = &http.Client{Timeout: defaultTimeout}
+		c.HTTPClient = rhttp.NewClient()
 	}
 
 	if c.Headers == nil {
@@ -60,7 +59,7 @@ func (c *Client) Auth(ctx context.Context, token string) error {
 	return nil
 }
 
-func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
+func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*rhttp.Request, error) {
 	var body []byte
 	var err error
 
@@ -76,7 +75,7 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	url := *c.Endpoint
 	url.Path = stdpath.Join("/", url.Path, path)
 
-	req, err := http.NewRequestWithContext(ctx, method, url.String(), bytes.NewReader(body))
+	req, err := rhttp.NewRequestWithContext(ctx, method, url.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -102,32 +101,6 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	return req, nil
 }
 
-func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporaryErr bool, err error) {
-	resp, err = c.HTTPClient.Do(req)
-	if err != nil {
-		if oe, ok := err.(*net.OpError); ok {
-			temporaryErr = oe.Temporary()
-		}
-
-		return
-	}
-
-	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout
-	return
-}
-
-func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
-	resp, temporaryErr, err := c.doHttpRequest(req)
-	if temporaryErr && retries > 0 {
-		if err == nil {
-			_ = resp.Body.Close() // We want to retry anyway.
-		}
-		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
-	}
-
-	return resp, err
-}
-
 func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
 	req, err := c.newHttpRequest(ctx, method, path, reqBody, query...)
 	if err != nil {
@@ -135,7 +108,7 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.doHttpRequestWithRetries(req, retriesAllowed, time.Second)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
