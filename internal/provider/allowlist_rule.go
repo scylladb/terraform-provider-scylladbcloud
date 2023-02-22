@@ -28,7 +28,7 @@ func ResourceAllowlistRule() *schema.Resource {
 		DeleteContext: resourceAllowlistRuleDelete,
 
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 
 		Timeouts: &schema.ResourceTimeout{

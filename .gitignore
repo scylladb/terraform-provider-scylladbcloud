@@ -3,3 +3,4 @@ terraform-provider-scylladbcloud
 
 # editor config
 .vscode
+.idea
