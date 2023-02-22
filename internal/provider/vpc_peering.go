@@ -27,7 +27,7 @@ func ResourceVPCPeering() *schema.Resource {
 		DeleteContext: resourceVPCPeeringDelete,
 
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 
 		Timeouts: &schema.ResourceTimeout{

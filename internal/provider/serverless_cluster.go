@@ -29,7 +29,7 @@ func ResourceServerlessCluster() *schema.Resource {
 		DeleteContext: resourceServerlessClusterDelete,
 
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 
 		Timeouts: &schema.ResourceTimeout{
