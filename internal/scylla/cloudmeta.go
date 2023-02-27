@@ -60,19 +60,11 @@ func (p *CloudProvider) InstanceByName(name string) *model.CloudProviderInstance
 type Cloudmeta struct {
 	CloudProviders []CloudProvider
 	ScyllaVersions *model.ScyllaVersions
-	ErrCodes       map[string]string // code -> message
 	GCPBlocks      map[string]string // region -> cidr block
 }
 
 func BuildCloudmeta(ctx context.Context, c *Client) (*Cloudmeta, error) {
 	var meta Cloudmeta
-
-	m, err := parse(codes, codesDelim, codesFunc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse error codes: %w", err)
-	}
-
-	meta.ErrCodes = m
 
 	b, err := parse(blocks, blocksDelim, blocksFunc)
 	if err != nil {

@@ -28,13 +28,30 @@ type Client struct {
 	Meta *Cloudmeta
 	// headers holds headers that will be set for all http requests.
 	Headers http.Header
-	// AccountID holds the account ID used in requests to the API.
-	AccountID int64
 	// API endpoint
 	Endpoint *url.URL
+	// ErrCodes provides a human-readable translation of ScyllaDB API errors
+	ErrCodes map[string]string // code -> message
 	// HTTPClient is the underlying HTTP client used to run the requests.
 	// It may be overloaded but a default one is provided in ``NewClient`` by default.
 	HTTPClient *http.Client
+	// AccountID holds the account ID used in requests to the API.
+	AccountID int64
+}
+
+func NewClient() (*Client, error) {
+	errCodes, err := parse(codes, codesDelim, codesFunc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse error codes: %w", err)
+	}
+
+	c := &Client{
+		ErrCodes:   errCodes,
+		Headers:    make(http.Header),
+		HTTPClient: http.DefaultClient,
+	}
+
+	return c, nil
 }
 
 // NewClient represents a new client to call the API
@@ -189,7 +206,7 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	}
 
 	if data.Error != "" {
-		err = makeError(data.Error, c.Meta.ErrCodes, resp)
+		err = makeError(data.Error, c.ErrCodes, resp)
 		tflog.Trace(ctx, "api returned error: "+err.Error(), map[string]interface{}{
 			"code":   resp.StatusCode,
 			"status": resp.Status,
