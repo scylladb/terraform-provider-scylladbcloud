@@ -137,13 +137,8 @@ func (m *Cloudmeta) DefaultVersion() *model.ScyllaVersion {
 }
 
 func (m *Cloudmeta) VersionByID(id int64) *model.ScyllaVersion {
-	fmt.Printf("[DEBUG] DefaultScyllaVersionID=%d\n", m.ScyllaVersions.DefaultScyllaVersionID)
-
 	for i := range m.ScyllaVersions.ScyllaVersions {
 		v := &m.ScyllaVersions.ScyllaVersions[i]
-
-		fmt.Printf("[DEBUG] version[%d]: %+v\n", i, v)
-
 		if v.VersionID == id {
 			return v
 		}
