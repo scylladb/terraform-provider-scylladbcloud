@@ -86,7 +86,7 @@ func resourceAllowlistRuleCreate(ctx context.Context, d *schema.ResourceData, me
 	}
 
 	d.SetId(strconv.Itoa(int(rule.ID)))
-	d.Set("rule_id", rule.ID)
+	_ = d.Set("rule_id", rule.ID)
 
 	return nil
 }
@@ -132,8 +132,8 @@ lookup:
 		return diag.Errorf("unrecognized rule %d", ruleID)
 	}
 
-	d.Set("cidr_block", rule.Address)
-	d.Set("cluster_id", cluster.ID)
+	_ = d.Set("cidr_block", rule.Address)
+	_ = d.Set("cluster_id", cluster.ID)
 
 	return nil
 }

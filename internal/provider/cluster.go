@@ -200,7 +200,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if !cidrOK {
 		cidr = "172.31.0.0/16"
-		d.Set("cidr_block", cidr)
+		_ = d.Set("cidr_block", cidr)
 	}
 
 	p := c.Meta.ProviderByName(cloud)
@@ -252,7 +252,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	d.Set("request_id", cr.ID)
+	_ = d.Set("request_id", cr.ID)
 
 	return nil
 }
@@ -269,7 +269,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
 	if scylla.IsDeletedErr(err) {
-		d.Set("status", "DELETED")
+		_ = d.Set("status", "DELETED")
 		return nil
 	} else if err != nil {
 		return diag.Errorf("error reading cluster request: %s", err)
@@ -277,7 +277,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	if len(reqs) != 1 {
 		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
 	}
-	d.Set("request_id", reqs[0].ID)
+	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
 		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
@@ -308,25 +308,25 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 }
 
 func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.CloudProvider) error {
-	d.Set("cluster_id", cluster.ID)
-	d.Set("name", cluster.ClusterName)
-	d.Set("cloud", p.CloudProvider.Name)
-	d.Set("region", cluster.Region.ExternalID)
-	d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
-	d.Set("user_api_interface", cluster.UserAPIInterface)
-	d.Set("node_type", p.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
-	d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
-	d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
-	d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
-	d.Set("scylla_version", cluster.ScyllaVersion.Version)
-	d.Set("enable_vpc_peering", !strings.EqualFold(cluster.BroadcastType, "PUBLIC"))
-	d.Set("enable_dns", cluster.DNS)
-	d.Set("datacenter_id", cluster.Datacenter.ID)
-	d.Set("datacenter", cluster.Datacenter.Name)
-	d.Set("status", cluster.Status)
+	_ = d.Set("cluster_id", cluster.ID)
+	_ = d.Set("name", cluster.ClusterName)
+	_ = d.Set("cloud", p.CloudProvider.Name)
+	_ = d.Set("region", cluster.Region.ExternalID)
+	_ = d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
+	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
+	_ = d.Set("node_type", p.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
+	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
+	_ = d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
+	_ = d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
+	_ = d.Set("scylla_version", cluster.ScyllaVersion.Version)
+	_ = d.Set("enable_vpc_peering", !strings.EqualFold(cluster.BroadcastType, "PUBLIC"))
+	_ = d.Set("enable_dns", cluster.DNS)
+	_ = d.Set("datacenter_id", cluster.Datacenter.ID)
+	_ = d.Set("datacenter", cluster.Datacenter.Name)
+	_ = d.Set("status", cluster.Status)
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
-		d.Set("byoa_id", id)
+		_ = d.Set("byoa_id", id)
 	}
 
 	return nil
