@@ -61,7 +61,7 @@ func dataSourceServerlessBundleRead(ctx context.Context, d *schema.ResourceData,
 	}
 
 	d.SetId(strconv.Itoa(int(clusterID)))
-	d.Set("connection_bundle", string(bundle))
+	_ = d.Set("connection_bundle", string(bundle))
 
 	return nil
 }

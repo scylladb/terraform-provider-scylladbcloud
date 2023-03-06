@@ -1,5 +1,0 @@
-linters:
-  # Disable specific linter
-  # https://golangci-lint.run/usage/linters/#disabled-by-default
-  disable:
-    - errcheck # TODO: disable it after https://github.com/scylladb/terraform-provider-scylladbcloud/issues/71

@@ -99,7 +99,7 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	d.Set("free_tier", cluster.FreeTier)
+	_ = d.Set("free_tier", cluster.FreeTier)
 
 	return nil
 }
@@ -134,7 +134,7 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	d.SetId(strconv.Itoa(int(clusterID)))
-	d.Set("free_tier", cluster.FreeTier)
+	_ = d.Set("free_tier", cluster.FreeTier)
 
 	return nil
 }

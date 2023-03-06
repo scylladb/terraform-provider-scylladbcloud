@@ -130,9 +130,9 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	d.SetId(seeds)
-	d.Set("username", conn.Credentials.Username)
-	d.Set("password", conn.Credentials.Password)
-	d.Set("seeds", seeds)
+	_ = d.Set("username", conn.Credentials.Username)
+	_ = d.Set("password", conn.Credentials.Password)
+	_ = d.Set("seeds", seeds)
 
 	return nil
 }

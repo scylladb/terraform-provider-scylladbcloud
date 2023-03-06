@@ -176,9 +176,9 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	d.SetId(vp.ExternalID)
-	d.Set("vpc_peering_id", vp.ID)
-	d.Set("connection_id", vp.ExternalID)
-	d.Set("network_link", vp.NetworkLink())
+	_ = d.Set("vpc_peering_id", vp.ID)
+	_ = d.Set("connection_id", vp.ExternalID)
+	_ = d.Set("network_link", vp.NetworkLink())
 
 	return nil
 }
@@ -231,17 +231,17 @@ lookup:
 
 	r := p.RegionByID(vpcPeering.RegionID)
 
-	d.Set("datacenter", cluster.Datacenter.Name)
-	d.Set("peer_vpc_id", vpcPeering.VPCID)
-	d.Set("peer_region", r.ExternalID)
-	d.Set("peer_account_id", vpcPeering.OwnerID)
-	d.Set("vpc_peering_id", vpcPeering.ID)
-	d.Set("connection_id", vpcPeering.ExternalID)
-	d.Set("cluster_id", cluster.ID)
-	d.Set("network_link", vpcPeering.NetworkLink())
+	_ = d.Set("datacenter", cluster.Datacenter.Name)
+	_ = d.Set("peer_vpc_id", vpcPeering.VPCID)
+	_ = d.Set("peer_region", r.ExternalID)
+	_ = d.Set("peer_account_id", vpcPeering.OwnerID)
+	_ = d.Set("vpc_peering_id", vpcPeering.ID)
+	_ = d.Set("connection_id", vpcPeering.ExternalID)
+	_ = d.Set("cluster_id", cluster.ID)
+	_ = d.Set("network_link", vpcPeering.NetworkLink())
 
 	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
-		d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
+		_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
 	}
 
 	return nil
