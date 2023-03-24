@@ -6,8 +6,13 @@ description: |-
   
 ---
 
-# scylladbcloud Provider
+# ScyllaDB Cloud Provider
 
+This provider allows you to manage [ScyllaDB Cloud](https://cloud.scylladb.com/) resources using Terraform.
+You must configure the provider with proper credentials before you can use it. See 
+[Obtaining an API Key](https://cloud.docs.scylladb.com/stable/api-docs/api-get-started.html#obtaining-an-api-key-beta) for instructions on getting an API access token.
+
+Use the navigation menu on the left to read about the available data sources and resources.
 
 
 ## Example Usage
@@ -37,3 +42,13 @@ provider "scylladbcloud" {
 ### Optional
 
 - `endpoint` (String) URL of the Scylla Cloud endpoint.
+
+## Useful Links
+
+[Reporting bugs or feature requests](https://github.com/scylladb/terraform-provider-scylladbcloud/issues)
+
+[ScyllaDB Cloud documentation](https://cloud.docs.scylladb.com/)
+
+[ScyllaDB Cloud support](https://cloud.scylladb.com/support)
+
+[ScyllaDB community forum](https://forum.scylladb.com/)
