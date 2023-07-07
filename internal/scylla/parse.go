@@ -14,7 +14,7 @@ import (
 var codes []byte
 
 var (
-	codesDelim = " "
+	codesDelim = "\t"
 	codesFunc  = func(k, v string) (string, string, error) {
 		if _, err := strconv.Atoi(k); err != nil {
 			return "", "", fmt.Errorf("error parsing %q code: %w", k, err)
