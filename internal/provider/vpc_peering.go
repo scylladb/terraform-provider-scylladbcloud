@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -55,10 +56,19 @@ func ResourceVPCPeering() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"peer_cidr_block": {
-				Description: "Peer VPC CIDR block",
+				Description: "Peer VPC CIDR block, this attribute also supports comma separated list of CIDR blocks, but this is deprecated and will be removed in the future versions of the provider, for multiple CIDR blocks use peer_cidr_blocks attribute instead",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
+			},
+			"peer_cidr_blocks": {
+				Description: "Peer VPC CIDR block list",
+				Optional:    true,
+				ForceNew:    true,
+				Type:        schema.TypeList,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"peer_region": {
 				Description: "Peer VPC region",
@@ -105,11 +115,12 @@ func ResourceVPCPeering() *schema.Resource {
 
 func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c            = meta.(*scylla.Client)
-		pr           = d.Get("peer_region").(string)
-		dcName       = d.Get("datacenter").(string)
-		cidr, cidrOK = d.GetOk("peer_cidr_block")
-		r            = &model.VPCPeeringRequest{
+		c                        = meta.(*scylla.Client)
+		pr                       = d.Get("peer_region").(string)
+		dcName                   = d.Get("datacenter").(string)
+		cidr, cidrOK             = d.GetOk("peer_cidr_block")
+		cidrBlocks, cidrBlocksOK = d.GetOk("peer_cidr_blocks")
+		r                        = &model.VPCPeeringRequest{
 			AllowCQL: d.Get("allow_cql").(bool),
 			VPC:      d.Get("peer_vpc_id").(string),
 			Owner:    d.Get("peer_account_id").(string),
@@ -148,8 +159,11 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	r.RegionID = region.ID
+	if cidrOK && cidrBlocksOK {
+		return diag.Errorf(`"peer_cidr_block" and "peer_cidr_blocks" are mutually exclusive, please specify only one of them`)
+	}
 
-	if !cidrOK {
+	if !cidrOK && !cidrBlocksOK {
 		if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
 			return diag.Errorf(`"peer_cidr_block" is required for %q cloud`, p.CloudProvider.Name)
 		}
@@ -164,7 +178,22 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		}
 	}
 
-	r.CidrBlock = cidr.(string)
+	if cidrBlocksOK {
+		if len(cidrBlocks.([]any)) == 0 {
+			return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
+		}
+
+		cidrList, err := CIDRList(cidrBlocks)
+		if err != nil {
+			return diag.Errorf(`"peer_cidr_blocks" must be a list of strings`)
+		}
+
+		// TODO: Use appropriate API field type that supports multiple CIDR blocks
+		// once that is done done there's no need to join the CIDR blocks into a string.
+		r.CidrBlock = strings.Join(cidrList, ",")
+	} else {
+		r.CidrBlock = cidr.(string)
+	}
 
 	if r.DatacenterID == 0 {
 		return diag.Errorf("unrecognized datacenter %q", dcName)
@@ -181,6 +210,26 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	_ = d.Set("network_link", vp.NetworkLink())
 
 	return nil
+}
+
+// CIDRList converts a list of CIDR blocks to a comma-separated string.
+func CIDRList(cidrBlocks any) ([]string, error) {
+	cidrBlocksSlice, ok := cidrBlocks.([]any)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T", cidrBlocks)
+	}
+
+	var cidrList []string
+	for _, cidrBlock := range cidrBlocksSlice {
+		cidrBlockString, ok := cidrBlock.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type %T", cidrBlock)
+		}
+
+		cidrList = append(cidrList, cidrBlockString)
+	}
+
+	return cidrList, nil
 }
 
 func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -252,9 +301,7 @@ func resourceVPCPeeringUpdate(ctx context.Context, d *schema.ResourceData, meta 
 }
 
 func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	peerID, ok := d.GetOk("vpc_peering_id")
 	if !ok {
