@@ -115,12 +115,16 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
-	if err != nil {
+	switch {
+	case scylla.IsDeletedErr(err):
+		_ = d.Set("status", "DELETED")
+		return nil
+	case err != nil:
 		return diag.Errorf("error reading serverless cluster request: %s", err)
-	}
-	if len(reqs) != 1 {
+	case len(reqs) != 1:
 		return diag.Errorf("unexpected number of serverless cluster requests, expected 1, got: %+v", reqs)
 	}
+	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
 		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
