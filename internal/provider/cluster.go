@@ -268,13 +268,13 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	}
 
 	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
-	if scylla.IsDeletedErr(err) {
+	switch {
+	case scylla.IsDeletedErr(err):
 		_ = d.Set("status", "DELETED")
 		return nil
-	} else if err != nil {
+	case err != nil:
 		return diag.Errorf("error reading cluster request: %s", err)
-	}
-	if len(reqs) != 1 {
+	case len(reqs) != 1:
 		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
 	}
 	_ = d.Set("request_id", reqs[0].ID)
