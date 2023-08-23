@@ -116,6 +116,15 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 			req.URL.RawQuery = q.Encode()
 		}
 	}
+	headers := bytes.NewBuffer([]byte{})
+	_ = req.Header.Write(headers)
+
+	tflog.Trace(ctx, "Sending api request: "+req.Method+" "+req.URL.String(), map[string]interface{}{
+		"host":        req.Host,
+		"remote_addr": req.RemoteAddr,
+		"body":        string(body),
+		"headers":     headers,
+	})
 
 	return req, nil
 }
@@ -196,6 +205,7 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 			"error":  err.Error(),
 			"body":   buf.String(),
 		})
+		err = makeError("failed to unmarshal data: "+err.Error(), c.ErrCodes, resp)
 		return err
 	}
 
