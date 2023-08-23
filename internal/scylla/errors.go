@@ -19,6 +19,7 @@ type APIError struct {
 	URL        string
 	Code       string
 	Message    string
+	Method     string
 	StatusCode int
 }
 
@@ -44,9 +45,10 @@ func makeError(text string, errCodes map[string]string, r *http.Response) *APIEr
 	if err.StatusCode == 0 {
 		err.StatusCode = r.StatusCode
 	}
+	err.Method = r.Request.Method
 	return &err
 }
 
 func (err *APIError) Error() string {
-	return fmt.Sprintf("Error %q: %s (http status %d, url %q)", err.Code, err.Message, err.StatusCode, err.URL)
+	return fmt.Sprintf("Error %q: %s (http status %d, method %s url %q)", err.Code, err.Message, err.StatusCode, err.Method, err.URL)
 }
