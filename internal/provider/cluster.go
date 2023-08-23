@@ -138,8 +138,8 @@ func ResourceCluster() *schema.Resource {
 				// being ForceNew; Scylla Cloud API does not allow for
 				// updating existing clusters, thus update the implementation
 				// always returns a non-nil error.
-				// ForceNew:    true,
-				Default: true,
+				ForceNew: true,
+				Default:  true,
 			},
 			"request_id": {
 				Description: "Cluster creation request ID",

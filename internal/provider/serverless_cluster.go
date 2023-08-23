@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
 
 const (
@@ -43,22 +43,42 @@ func ResourceServerlessCluster() *schema.Resource {
 				Description: "Serverless cluster id",
 				Computed:    true,
 				Type:        schema.TypeInt,
+				Required:    false,
+				Optional:    true,
 			},
 			"name": {
 				Description: "Serverless cluster name",
 				Required:    true,
-				// NOTE(rjeczalik): ForceNew is commented out here, otherwise
-				// internal provider validate fails due to all the attrs
-				// being ForceNew; Scylla Cloud API does not allow for
-				// updating existing clusters, thus update the implementation
-				// always returns a non-nil error.
-				// ForceNew: true,
-				Type: schema.TypeString,
+				ForceNew:    true,
+				Type:        schema.TypeString,
 			},
 			"free_tier": {
 				Description: "Whether a cluster is in a free tier",
-				Computed:    true,
+				Default:     true,
 				Type:        schema.TypeBool,
+				Optional:    true,
+				ForceNew:    true,
+			},
+			"enable_dns": {
+				Description: "Whether to enable CNAME for seed nodes",
+				Optional:    true,
+				Type:        schema.TypeBool,
+				ForceNew:    true,
+				Default:     true,
+			},
+			"units": {
+				Description: "Processing units",
+				Default:     0,
+				Type:        schema.TypeInt,
+				Optional:    true,
+				ForceNew:    true,
+			},
+			"hours": {
+				Description: "Hours for cluster to last",
+				Default:     0,
+				Type:        schema.TypeInt,
+				Optional:    true,
+				ForceNew:    true,
 			},
 		},
 	}
@@ -66,7 +86,22 @@ func ResourceServerlessCluster() *schema.Resource {
 
 func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c = meta.(*scylla.Client)
+		hours    string
+		units    int
+		err      error
+		c        = meta.(*scylla.Client)
+		freeTier = d.Get("free_tier").(bool)
+	)
+
+	if freeTier {
+		units = d.Get("units").(int)
+		intHours := d.Get("hours").(int)
+		if intHours != 0 {
+			hours = strconv.Itoa(intHours) + "h"
+		}
+	}
+
+	var (
 		r = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PUBLIC",
@@ -78,9 +113,11 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 			NumberOfNodes:        3,
 			UserAPIInterface:     "CQL",
 			InstanceID:           74,
-			FreeTier:             true,
-			EnableDNSAssociation: true,
+			FreeTier:             freeTier,
+			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Provisioning:         "serverless",
+			ProcessingUnits:      units,
+			Expiration:           hours,
 		}
 	)
 
@@ -98,8 +135,8 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error reading serverless cluster: %s", err)
 	}
 
-	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	_ = d.Set("free_tier", cluster.FreeTier)
+	d.SetId(strconv.Itoa(int(cluster.ID)))
+	_ = d.Set("cluster_id", int(cluster.ID))
 
 	return nil
 }
@@ -137,8 +174,8 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 		return diag.Errorf("error reading serverless cluster: %s", err)
 	}
 
-	d.SetId(strconv.Itoa(int(clusterID)))
-	_ = d.Set("free_tier", cluster.FreeTier)
+	d.SetId(strconv.Itoa(int(cluster.ID)))
+	_ = d.Set("cluster_id", int(cluster.ID))
 
 	return nil
 }
