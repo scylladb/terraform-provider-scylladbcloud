@@ -148,6 +148,7 @@ func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryB
 			timeToSleep = retryBackoffDuration
 		}
 		timer := time.NewTimer(timeToSleep)
+		defer timer.Stop()
 		select {
 		case <-timer.C:
 		case <-req.Context().Done():
