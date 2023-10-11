@@ -11,13 +11,14 @@ import (
 	"net/http"
 	"net/url"
 	stdpath "path"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
 )
 
-var (
+const (
 	defaultTimeout              = 60 * time.Second
 	retriesAllowed              = 3
 	maxResponseBodyLength int64 = 1 << 20
@@ -130,7 +131,7 @@ func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporar
 		return
 	}
 
-	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout
+	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusTooManyRequests
 	return
 }
 
@@ -140,10 +141,34 @@ func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryB
 		if err == nil {
 			_ = resp.Body.Close() // We want to retry anyway.
 		}
+		var timeToSleep time.Duration
+		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
+			timeToSleep = d
+		} else {
+			timeToSleep = retryBackoffDuration
+		}
+		timer := time.NewTimer(timeToSleep)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
+
 		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
 	}
 
 	return resp, err
+}
+
+func parseRetryAfter(val string) (time.Duration, bool) {
+	if n, err := strconv.ParseUint(val, 10, 64); err == nil {
+		return time.Duration(n) * time.Second, true
+	}
+	if t, err := time.Parse(time.RFC1123, val); err == nil {
+		return time.Until(t), true
+	}
+	return 0, false
 }
 
 func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
