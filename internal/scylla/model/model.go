@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 type CloudProvider struct {
@@ -107,6 +108,8 @@ type ClusterCreateRequest struct {
 	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
 	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
 	Provisioning             string   `json:"provisioning,omitempty"`
+	ProcessingUnits          int      `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
+	Expiration               string   `json:"expiration,omitempty" example:"12"`
 }
 
 type Cluster struct {
@@ -196,6 +199,16 @@ type Node struct {
 	ServiceID        int64                `json:"serviceID"`
 	ServiceVersionID int64                `json:"serviceVersionID"`
 	Status           string               `json:"status"`
+}
+
+type AccountDeal struct {
+	Type           string
+	ProviderID     int
+	IsEligible     bool
+	ExpirationDate *time.Time `json:",omitempty" yaml:",omitempty"`
+	StartDate      *time.Time `json:",omitempty" yaml:",omitempty"`
+	Total          uint       `json:",omitempty" yaml:",omitempty"`
+	Used           uint       `json:",omitempty" yaml:",omitempty"`
 }
 
 type VPC struct {
