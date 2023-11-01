@@ -35,3 +35,8 @@ values for the `token` and `endpoint` keys.
 Run `terraform plan` or `terraform apply` and be happy!
 
 For debugging / troubleshooting please [Terraform debugging documentation](https://developer.hashicorp.com/terraform/internals/debugging).
+
+
+### Demo Video
+
+[![Watch a demo of using Scylla Cloud Terrafrom Provider](https://img.youtube.com/vi/ccsACgHHDYo/hqdefault.jpg)](https://www.youtube.com/embed/ccsACgHHDYo)
