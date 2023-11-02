@@ -41,3 +41,8 @@ resource "scylladbcloud_cluster" "mycluster" { }
 Run `terraform import scylladbcloud_cluster.mycluster 123` to import an existing cluster into the state file.
 
 For debugging / troubleshooting please [Terraform debugging documentation](https://developer.hashicorp.com/terraform/internals/debugging).
+
+
+### Demo Video
+
+[![Watch a demo of using Scylla Cloud Terrafrom Provider](https://img.youtube.com/vi/ccsACgHHDYo/hqdefault.jpg)](https://www.youtube.com/embed/ccsACgHHDYo)
