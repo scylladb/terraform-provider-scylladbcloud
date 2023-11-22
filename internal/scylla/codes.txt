@@ -132,6 +132,8 @@
 040720	Jump start is time expired
 040721	Free trial is supported on serverless only
 040722	Account billing is not verified
+040723	Account does not have encryption at rest enabled
+040724	General error related to key service
 040801	Invalid request format
 040802	General error deleting the cluster
 040803	Cluster name is invalid
@@ -140,6 +142,10 @@
 041001	Invalid request format
 041002	General error resizing the cluster
 041003	Cluster DC must be active to resize the cluster
+041004	Feature is not enabled on cluster
+041005	Resizing by this number of nodes is not permitted. Please contact support for assistance
+041006	Active resize request exists
+041007	Node count is not multiplication of Replication Factor
 041116	Invalid request format
 040103	Firewall rule already exist
 041107	Cluster has no VPC
@@ -196,7 +202,6 @@
 0420003	Ill-formed datacenter ID
 0420004	Datacenter not found
 0420005	Datacenter does not belong to cluster
-0420006	Datacenter is not active
 0420002	General error getting datacenter info
 0420007	General error requesting to add data center
 0420008	Provided CIDR block overlaps with another data center
@@ -206,6 +211,7 @@
 0420012	CIDR does not belong to a private network
 0420014	CIDR range overlaps a reserved network
 0420015	General error creating datacenter rescale request
+0420006	Datacenter is not active
 0420017	Current and new sizes are the same
 0420018	Free tier clusters cannot be rescaled
 0420019	Development clusters cannot be rescaled
