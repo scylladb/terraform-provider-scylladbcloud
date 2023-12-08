@@ -26,7 +26,6 @@ func ResourceCluster() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceClusterCreate,
 		ReadContext:   resourceClusterRead,
-		UpdateContext: resourceClusterUpdate,
 		DeleteContext: resourceClusterDelete,
 
 		Importer: &schema.ResourceImporter{
@@ -35,7 +34,6 @@ func ResourceCluster() *schema.Resource {
 
 		Timeouts: &schema.ResourceTimeout{
 			Create: schema.DefaultTimeout(clusterRetryTimeout),
-			Update: schema.DefaultTimeout(clusterRetryTimeout),
 			Delete: schema.DefaultTimeout(clusterDeleteTimeout),
 		},
 
@@ -328,12 +326,6 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	}
 
 	return nil
-}
-
-func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	// Scylla Cloud API does not support updating a cluster,
-	// thus the update always fails
-	return diag.Errorf(`updating "scylla_cluster" resource is not supported`)
 }
 
 func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
