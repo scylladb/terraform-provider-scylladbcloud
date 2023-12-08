@@ -22,6 +22,7 @@ const (
 	defaultTimeout              = 60 * time.Second
 	retriesAllowed              = 3
 	maxResponseBodyLength int64 = 1 << 20
+	maxRetry                    = 10
 )
 
 // Client represents a client to call the Scylla Cloud API
@@ -41,10 +42,6 @@ type Client struct {
 }
 
 func NewClient() (*Client, error) {
-	errCodes, err := parse(codes, codesDelim, codesFunc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse error codes: %w", err)
-	}
 
 	c := &Client{
 		ErrCodes:   errCodes,
@@ -126,57 +123,30 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	return req, nil
 }
 
-func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporaryErr bool, err error) {
-	resp, err = c.HTTPClient.Do(req)
-	if err != nil {
-		if oe, ok := err.(*net.OpError); ok {
-			temporaryErr = oe.Temporary()
-		}
-
-		return
-	}
-
-	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusTooManyRequests
-	return
-}
-
-func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
-	resp, temporaryErr, err := c.doHttpRequest(req)
-	if temporaryErr && retries > 0 {
-		if err == nil {
-			_ = resp.Body.Close() // We want to retry anyway.
-		}
-		var timeToSleep time.Duration
-		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
-			timeToSleep = d
-		} else {
-			timeToSleep = retryBackoffDuration
-		}
-		timer := time.NewTimer(timeToSleep)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		}
-
-		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
-	}
-
-	return resp, err
-}
-
-func parseRetryAfter(val string) (time.Duration, bool) {
+func parseRetryAfter(val string) time.Duration {
 	if n, err := strconv.ParseUint(val, 10, 64); err == nil {
-		return time.Duration(n) * time.Second, true
+		return time.Duration(n) * time.Second
 	}
 	if t, err := time.Parse(time.RFC1123, val); err == nil {
-		return time.Until(t), true
+		return time.Until(t)
 	}
-	return 0, false
+	return 0
 }
 
-func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
+func (c *Client) callAPIonce(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) (err error) {
+	traceData := map[string]interface{}{
+		"method": method,
+		"path":   path,
+	}
+
+	defer func() {
+		if err == nil {
+			tflog.Trace(ctx, "api call succeeded", traceData)
+			return
+		}
+		tflog.Trace(ctx, "api call failed:"+err.Error(), traceData)
+	}()
+
 	ctx = tfcontext.AddHttpRequestInfo(ctx, method, path)
 	req, err := c.newHttpRequest(ctx, method, path, reqBody, query...)
 	if err != nil {
@@ -184,30 +154,28 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.doHttpRequestWithRetries(req, retriesAllowed, time.Second)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	var buf bytes.Buffer
+	rqURL := resp.Request.URL.String()
+	statusCode := resp.StatusCode
+	status := resp.Status
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 
-	var body io.Reader = io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf)
+	var buf bytes.Buffer
+	var body = io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf)
+
+	traceData["status"] = buf.String()
+	traceData["code"] = statusCode
+	traceData["status"] = status
 
 	if p, ok := resType.(*[]byte); ok {
 		if *p, err = io.ReadAll(body); err != nil {
-			tflog.Trace(ctx, "failed to read body: "+err.Error(), map[string]interface{}{
-				"code":   resp.StatusCode,
-				"status": resp.Status,
-				"error":  err.Error(),
-			})
-			return fmt.Errorf("error reading body: %w", err)
+			return makeAPIError("error reading body: "+err.Error(), c.ErrCodes, rqURL, method, statusCode, retryAfter)
 		}
-		tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"body":   buf.String(),
-		})
 		return nil
 	}
 
@@ -219,40 +187,43 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 		Data  interface{} `json:"data"`
 	}{"", resType}
 
-	if err := d.Decode(&data); err != nil {
-		tflog.Trace(ctx, "failed to unmarshal data: "+err.Error(), map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"error":  err.Error(),
-			"body":   buf.String(),
-		})
-		err = makeError("failed to unmarshal data: "+err.Error(), c.ErrCodes, resp)
-		return err
+	if err = d.Decode(&data); err != nil {
+		return makeAPIError("failed to unmarshal data: "+err.Error(), c.ErrCodes, rqURL, method, statusCode, retryAfter)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if statusCode < 200 || statusCode >= 300 {
 		if data.Error == "" {
-			data.Error = http.StatusText(resp.StatusCode)
+			data.Error = http.StatusText(statusCode)
 		}
 	}
 
 	if data.Error != "" {
-		err = makeError(data.Error, c.ErrCodes, resp)
-		tflog.Trace(ctx, "api returned error: "+err.Error(), map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"body":   buf.String(),
-			"error":  err.Error(),
-		})
-		return err
+		return makeAPIError(data.Error, c.ErrCodes, rqURL, method, statusCode, retryAfter)
 	}
 
-	tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
-		"code":   resp.StatusCode,
-		"status": resp.Status,
-		"body":   buf.String(),
-	})
 	return nil
+}
+
+func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) (err error) {
+	for retry := 0; retry <= maxRetry; retry++ {
+		err = c.callAPIonce(ctx, method, path, reqBody, resType, query...)
+		if err == nil {
+			return nil
+		}
+		tflog.Trace(ctx, fmt.Sprintf("ERRRRRRR %T %+v", err, err))
+		isRetryable, timeToSleep := getRetryInfo(ctx, err)
+		tflog.Trace(ctx, fmt.Sprintf("isRetryable=%t, timeToSleep=%s", isRetryable, timeToSleep))
+		if !isRetryable {
+			return err
+		}
+		if timeToSleep == 0 {
+			timeToSleep = 100 * time.Millisecond
+		}
+		if err = sleepUntilCanceled(ctx, timeToSleep); err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 func (c *Client) get(ctx context.Context, path string, resultType interface{}, query ...string) error {
@@ -279,4 +250,35 @@ func (c *Client) findAndSaveAccountID(ctx context.Context) error {
 	c.AccountID = result.AccountID
 
 	return nil
+}
+
+func getRetryInfo(ctx context.Context, err error) (retryable bool, retryAfter time.Duration) {
+	if oe, ok := err.(*net.OpError); ok {
+		return oe.Temporary(), 0
+	}
+
+	if apiErr := castToAPIError(err); apiErr != nil {
+		tflog.Trace(ctx, fmt.Sprintf("APIError code=%q, statuscode=%d", apiErr.Code, apiErr.StatusCode))
+		return apiErr.Temporary(), apiErr.RetryAfter
+	}
+	return false, 0
+}
+
+func sleepUntilCanceled(ctx context.Context, timeToSleep time.Duration) error {
+	timer := time.NewTimer(timeToSleep)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func init() {
+	var err error
+	errCodes, err = parse(codes, codesDelim, codesFunc)
+	if err != nil {
+		panic(fmt.Errorf("failed to parse error codes: %w", err))
+	}
 }

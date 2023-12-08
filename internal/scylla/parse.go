@@ -21,6 +21,7 @@ var (
 		}
 		return k, v, nil
 	}
+	errCodes = map[string]string{}
 )
 
 //go:embed blocks.txt

@@ -5,11 +5,20 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 )
 
+func castToAPIError(err error) *APIError {
+	var apiErr APIError
+	if errors.As(err, &apiErr) {
+		return &apiErr
+	}
+	return nil
+}
+
 func IsDeletedErr(err error) bool {
-	if e := new(APIError); errors.As(err, &e) && e.Code == "040001" {
-		return true
+	if apiErr := castToAPIError(err); apiErr != nil {
+		return apiErr.IsDeleted()
 	}
 	return false
 }
@@ -21,9 +30,10 @@ type APIError struct {
 	Message    string
 	Method     string
 	StatusCode int
+	RetryAfter time.Duration
 }
 
-func makeError(text string, errCodes map[string]string, r *http.Response) *APIError {
+func makeAPIError(text string, errCodes map[string]string, url, method string, statusCode int, retryAfter time.Duration) APIError {
 	var err APIError
 	if _, e := strconv.Atoi(text); e == nil {
 		err.Code = text
@@ -40,15 +50,28 @@ func makeError(text string, errCodes map[string]string, r *http.Response) *APIEr
 		err.Message = text
 	}
 	if err.URL == "" {
-		err.URL = r.Request.URL.String()
+		err.URL = url
 	}
 	if err.StatusCode == 0 {
-		err.StatusCode = r.StatusCode
+		err.StatusCode = statusCode
 	}
-	err.Method = r.Request.Method
-	return &err
+	err.Method = method
+	err.RetryAfter = retryAfter
+	return err
 }
 
-func (err *APIError) Error() string {
+func (err APIError) Temporary() bool {
+	switch err.StatusCode {
+	case http.StatusBadGateway, http.StatusGatewayTimeout, http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return true
+	}
+	return err.Code == "000001"
+}
+
+func (err APIError) IsDeleted() bool {
+	return err.Code == "040001"
+}
+
+func (err APIError) Error() string {
 	return fmt.Sprintf("Error %q: %s (http status %d, method %s url %q)", err.Code, err.Message, err.StatusCode, err.Method, err.URL)
 }
