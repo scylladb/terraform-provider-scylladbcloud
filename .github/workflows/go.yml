@@ -13,19 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     name: lint
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: "stable"
       - run: go build -v ./...
-      - uses: scylladb/goimports-action@v1.0.2
+      # TODO(rjeczalik): Remove (#104)
+      - uses: scylladb/goimports-action@v1.0.3
         with:
           goimports-path: './'
+      # TODO(rjeczalik): Remove (#104)
       - uses: scylladb/gofmt-action@v1.0.5
         with:
           gofmt-path: './'
           gofmt-flags: '-l -d'
-      - uses: golangci/golangci-lint-action@v3
+      - uses: golangci/golangci-lint-action@v4
         with:
           version: v1.56.2
       - run: go test -v -race ./...
@@ -38,9 +40,10 @@ jobs:
     needs: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-      - run: go build -v ./...
-      - run: go test -v -race ./...
+          go-version: stable
+      - run: |
+          go build -v ./...
+          go test -v -race ./...
