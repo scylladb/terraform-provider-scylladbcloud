@@ -136,8 +136,51 @@ func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporar
 		return
 	}
 
-	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusTooManyRequests
+	body, err := getBody(resp)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get response body: %w", err)
+	}
+
+	code, err := getErrorCode(body)
+	if err != nil {
+		tflog.Trace(req.Context(), "failed to get error code from body: "+err.Error(), map[string]interface{}{
+			"code":   resp.StatusCode,
+			"status": resp.Status,
+			"error":  err.Error(),
+		})
+	} else if code == "000001" {
+		return resp, true, fmt.Errorf("too many request response")
+	}
+	temporaryErr = temporaryErr || resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusTooManyRequests
 	return
+}
+
+func getBody(resp *http.Response) ([]byte, error) {
+	if resp.Body == nil || resp.Body == http.NoBody {
+		return nil, nil
+	}
+	defer resp.Body.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		return nil, err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+	return buf.Bytes(), nil
+}
+
+func getErrorCode(body []byte) (string, error) {
+	if len(body) == 0 {
+		return "", nil
+	}
+
+	var data = struct {
+		Error string `json:"error"`
+	}{}
+
+	if err := json.Unmarshal(body, &data); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+	return data.Error, nil
 }
 
 func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
