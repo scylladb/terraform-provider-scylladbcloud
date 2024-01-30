@@ -291,6 +291,7 @@ lookup:
 
 	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
 		_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
+		_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
 	}
 
 	return nil
