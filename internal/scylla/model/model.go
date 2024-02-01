@@ -240,6 +240,7 @@ type VPCPeering struct {
 	ProjectID        string   `json:"projectID"`
 	Status           string   `json:"status"`
 	ExpiresAt        string   `json:"expiresAt"`
+	AllowCQL         string   `json:"allowCQL"`
 }
 
 func (vp *VPCPeering) NetworkLink() string {

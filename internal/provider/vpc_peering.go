@@ -288,6 +288,7 @@ lookup:
 	_ = d.Set("connection_id", vpcPeering.ExternalID)
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("network_link", vpcPeering.NetworkLink())
+	_ = d.Set("allow_cql", vpcPeering.AllowCQL)
 
 	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
 		_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
