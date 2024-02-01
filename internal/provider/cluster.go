@@ -140,7 +140,7 @@ func ResourceCluster() *schema.Resource {
 				// being ForceNew; Scylla Cloud API does not allow for
 				// updating existing clusters, thus update the implementation
 				// always returns a non-nil error.
-				//ForceNew: true,
+				// ForceNew: true,
 				Default: true,
 			},
 			"request_id": {
@@ -258,9 +258,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 }
 
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
@@ -325,6 +323,10 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("status", cluster.Status)
 
+	if cluster.UserAPIInterface == "ALTERNATOR" {
+		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
+	}
+
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
 		_ = d.Set("byoa_id", id)
 	}
@@ -339,9 +341,7 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 }
 
 func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
