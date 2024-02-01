@@ -322,6 +322,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	_ = d.Set("datacenter_id", cluster.Datacenter.ID)
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("status", cluster.Status)
+	_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
 		_ = d.Set("byoa_id", id)

@@ -133,17 +133,18 @@ type Cluster struct {
 	JumpStart           *ExpirationTime        `json:"jumpStart"`
 	Progress            *Progress              `json:"progress"`
 
-	ReplicationFactor int64        `json:"replicationFactor,omitempty"`
-	BroadcastType     string       `json:"broadcastType,omitempty"`
-	GrafanaURL        string       `json:"grafanaUrl,omitempty"`
-	ClientIP          string       `json:"clientIp,omitempty"`
-	CreatedAt         string       `json:"createdAt,omitempty"`
-	PromProxyEnabled  bool         `json:"promProxyEnabled,omitempty"`
-	AllowedIPs        []AllowedIP  `json:"allowedIps,omitempty"`
-	Datacenters       []Datacenter `json:"dataCenters,omitempty"`
-	Nodes             []Node       `json:"nodes,omitempty"`
-	VPCList           []VPC        `json:"vpcList,omitempty"`
-	VPCPeeringList    []VPCPeering `json:"vpcPeeringList,omitempty"`
+	ReplicationFactor        int64        `json:"replicationFactor,omitempty"`
+	BroadcastType            string       `json:"broadcastType,omitempty"`
+	GrafanaURL               string       `json:"grafanaUrl,omitempty"`
+	ClientIP                 string       `json:"clientIp,omitempty"`
+	CreatedAt                string       `json:"createdAt,omitempty"`
+	PromProxyEnabled         bool         `json:"promProxyEnabled,omitempty"`
+	AllowedIPs               []AllowedIP  `json:"allowedIps,omitempty"`
+	Datacenters              []Datacenter `json:"dataCenters,omitempty"`
+	Nodes                    []Node       `json:"nodes,omitempty"`
+	VPCList                  []VPC        `json:"vpcList,omitempty"`
+	VPCPeeringList           []VPCPeering `json:"vpcPeeringList,omitempty"`
+	AlternatorWriteIsolation string       `json:"alternatorWriteIsolation,omitempty"`
 }
 
 type Progress struct {
