@@ -290,8 +290,11 @@ lookup:
 	_ = d.Set("network_link", vpcPeering.NetworkLink())
 
 	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
-		_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
-		_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
+		if len(vpcPeering.CIDRList) == 1 {
+			_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
+		}else {
+			_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
+		}
 	}
 
 	return nil
