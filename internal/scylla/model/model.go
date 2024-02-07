@@ -248,7 +248,38 @@ func (vp *VPCPeering) NetworkLink() string {
 	return "projects/" + vp.ProjectID + "/global/networks/" + vp.NetworkName
 }
 
+type ClusterConnectionCreateRequest struct {
+	Name        string            `json:"name"`
+	CIDRList    []string          `json:"cidrList"`
+	ClusterDCID int64             `json:"clusterDCID"`
+	Data        map[string]string `json:"data"`
+	Type        string            `json:"type"`
+}
+
+type ClusterConnectionUpdateRequest struct {
+	Name     string   `json:"name"`
+	CIDRList []string `json:"cidrList"`
+	Status   string   `json:"status"`
+}
+
 type ClusterConnection struct {
+	ID                int64             `json:"id"`
+	Name              string            `json:"name"`
+	ExternalID        string            `json:"externalId"`
+	AwaitingData      map[string]string `json:"awaitingData"`
+	AwaitingForClient bool              `json:"awaitingForClient"`
+	CIDRList          []string          `json:"cidrList"`
+	ClusterDCID       int64             `json:"clusterDCID"`
+	ClusterVPCID      int64             `json:"clusterVPCID"`
+	ClusterID         int64             `json:"clusterId"`
+	Data              map[string]string `json:"data"`
+	Stage             string            `json:"stage"`
+	StageMessage      string            `json:"stageMessage"`
+	Status            string            `json:"status"`
+	Type              string            `json:"type"`
+}
+
+type ClusterConnectionInformation struct {
 	BroadcastType string `json:"broadcastType"`
 	Credentials   struct {
 		Username string `json:"username"`

@@ -7,8 +7,22 @@ import (
 	"strconv"
 )
 
+func IsClusterConnectionDeletedErr(err error) bool {
+	if e := new(APIError); errors.As(err, &e) && e.Code == "083002" {
+		return true
+	}
+	return false
+}
+
 func IsDeletedErr(err error) bool {
 	if e := new(APIError); errors.As(err, &e) && e.Code == "040001" {
+		return true
+	}
+	return false
+}
+
+func IsNotFound(err error) bool {
+	if e := new(APIError); errors.As(err, &e) && e.StatusCode == http.StatusNotFound {
 		return true
 	}
 	return false

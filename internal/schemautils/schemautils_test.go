@@ -1,11 +1,13 @@
-package vpcpeering
+package schemautils_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/schemautils"
 )
 
-func TestCIDRList(t *testing.T) {
+func TestConvertList(t *testing.T) {
 	type args struct {
 		cidrBlocks any
 	}
@@ -51,13 +53,13 @@ func TestCIDRList(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := CIDRList(tt.args.cidrBlocks)
+			got, err := schemautils.ConvertListToConcrete[string](tt.args.cidrBlocks)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("CIDRList() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ConvertListToConcrete() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("CIDRList() = %v, want %v", got, tt.want)
+				t.Errorf("ConvertListToConcrete() = %v, want %v", got, tt.want)
 			}
 		})
 	}

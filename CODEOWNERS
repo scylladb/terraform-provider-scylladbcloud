@@ -4,3 +4,4 @@
 /internal/provider/cqlauth/        @rjeczalik
 /internal/provider/serverless/     @rjeczalik
 /internal/provider/vpcpeering/     @rjeczalik
+/internal/provider/connection/     @dkropachev @charconstpointer

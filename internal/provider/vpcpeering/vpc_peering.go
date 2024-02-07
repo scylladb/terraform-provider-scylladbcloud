@@ -2,10 +2,10 @@ package vpcpeering
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/schemautils"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
@@ -190,7 +190,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
 	}
 
-	cidrList, err := CIDRList(cidrBlocks)
+	cidrList, err := schemautils.ConvertListToConcrete[string](cidrBlocks)
 	if err != nil {
 		return diag.Errorf(`"peer_cidr_blocks" must be a list of strings`)
 	}
@@ -215,26 +215,6 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	_ = d.Set("network_link", vp.NetworkLink())
 
 	return nil
-}
-
-// CIDRList converts a list of CIDR blocks to a comma-separated string.
-func CIDRList(cidrBlocks any) ([]string, error) {
-	cidrBlocksSlice, ok := cidrBlocks.([]any)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", cidrBlocks)
-	}
-
-	var cidrList []string
-	for _, cidrBlock := range cidrBlocksSlice {
-		cidrBlockString, ok := cidrBlock.(string)
-		if !ok {
-			return nil, fmt.Errorf("unexpected type %T", cidrBlock)
-		}
-
-		cidrList = append(cidrList, cidrBlockString)
-	}
-
-	return cidrList, nil
 }
 
 func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {

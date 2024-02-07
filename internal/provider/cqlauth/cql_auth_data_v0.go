@@ -76,7 +76,7 @@ func dataSourceCQLAuthUpgradeFrom0(ctx context.Context, rawState map[string]inte
 	}, nil
 }
 
-func getConnectionDCByID(conn *model.ClusterConnection, datacenters []model.Datacenter, dcID int64) (*model.DatacenterConnection, error) {
+func getConnectionDCByID(conn *model.ClusterConnectionInformation, datacenters []model.Datacenter, dcID int64) (*model.DatacenterConnection, error) {
 	if len(conn.Datacenters) == 0 {
 		return nil, fmt.Errorf("error reading datacenter connections: not found")
 	}

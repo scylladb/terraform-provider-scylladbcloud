@@ -7,6 +7,7 @@ import (
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
@@ -50,6 +51,7 @@ func New(_ context.Context) (*schema.Provider, error) {
 			"scylladbcloud_allowlist_rule":     allowlistrule.ResourceAllowlistRule(),
 			"scylladbcloud_vpc_peering":        vpcpeering.ResourceVPCPeering(),
 			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
+			"scylladbcloud_cluster_connection": connection.ResourceClusterConnection(),
 		},
 	}
 
