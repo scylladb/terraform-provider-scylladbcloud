@@ -244,6 +244,10 @@ func (c *Client) post(ctx context.Context, path string, requestBody, resultType 
 	return c.retryCall(ctx, http.MethodPost, path, requestBody, resultType)
 }
 
+func (c *Client) patch(ctx context.Context, path string, requestBody, resultType interface{}) error {
+	return c.retryCall(ctx, http.MethodPatch, path, requestBody, resultType)
+}
+
 func (c *Client) delete(ctx context.Context, path string) error {
 	return c.retryCall(ctx, http.MethodDelete, path, nil, nil)
 }
