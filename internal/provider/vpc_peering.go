@@ -37,6 +37,16 @@ func ResourceVPCPeering() *schema.Resource {
 			Delete: schema.DefaultTimeout(vpcPeeringDeleteTimeout),
 		},
 
+		SchemaVersion: 1,
+
+		StateUpgraders: []schema.StateUpgrader{
+			{
+				Version: 0,
+				Type:    resourceVPCPeeringV0().CoreConfigSchema().ImpliedType(),
+				Upgrade: resourceVPCPeeringUpgradeV0,
+			},
+		},
+
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
 				Description: "Cluster ID",
@@ -52,12 +62,6 @@ func ResourceVPCPeering() *schema.Resource {
 			"peer_vpc_id": {
 				Description: "Peer VPC ID",
 				Required:    true,
-				ForceNew:    true,
-				Type:        schema.TypeString,
-			},
-			"peer_cidr_block": {
-				Description: "Peer VPC CIDR block, this attribute also supports comma separated list of CIDR blocks, but this is deprecated and will be removed in the future versions of the provider, for multiple CIDR blocks use peer_cidr_blocks attribute instead",
-				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
@@ -118,7 +122,6 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		c                        = meta.(*scylla.Client)
 		pr                       = d.Get("peer_region").(string)
 		dcName                   = d.Get("datacenter").(string)
-		cidr, cidrOK             = d.GetOk("peer_cidr_block")
 		cidrBlocks, cidrBlocksOK = d.GetOk("peer_cidr_blocks")
 		r                        = &model.VPCPeeringRequest{
 			AllowCQL: d.Get("allow_cql").(bool),
@@ -159,41 +162,42 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	r.RegionID = region.ID
-	if cidrOK && cidrBlocksOK {
-		return diag.Errorf(`"peer_cidr_block" and "peer_cidr_blocks" are mutually exclusive, please specify only one of them`)
-	}
-
-	if !cidrOK && !cidrBlocksOK {
+	if !cidrBlocksOK {
 		if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
-			return diag.Errorf(`"peer_cidr_block" is required for %q cloud`, p.CloudProvider.Name)
+			return diag.Errorf(`"peer_cidr_blocks" is required for %q cloud`, p.CloudProvider.Name)
 		}
 
-		var ok bool
-		if cidr, ok = c.Meta.GCPBlocks[pr]; !ok {
+		cidr, ok := c.Meta.GCPBlocks[pr]
+		if !ok {
 			return diag.Errorf("no default peer CIDR block found for %q region", pr)
 		}
+
+		cidrBlocks = []any{cidr}
 	} else if strings.EqualFold(p.CloudProvider.Name, "GCP") {
-		if c.Meta.GCPBlocks[pr] == cidr.(string) {
-			return diag.Errorf(`omit "peer_cidr_block" attribute for default GCP cidr blocks`)
+		cidr, ok := c.Meta.GCPBlocks[pr]
+		if !ok {
+			return diag.Errorf("no default peer CIDR block found for %q region", pr)
+		}
+
+		if blocks := cidrBlocks.([]any); len(blocks) > 1 {
+			if blocks[0].(string) == cidr {
+				return diag.Errorf(`omit "peer_cidr_blocks" attribute for default GCP cidr blocks`)
+			}
 		}
 	}
 
-	if cidrBlocksOK {
-		if len(cidrBlocks.([]any)) == 0 {
-			return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
-		}
-
-		cidrList, err := CIDRList(cidrBlocks)
-		if err != nil {
-			return diag.Errorf(`"peer_cidr_blocks" must be a list of strings`)
-		}
-
-		// TODO: Use appropriate API field type that supports multiple CIDR blocks
-		// once that is done done there's no need to join the CIDR blocks into a string.
-		r.CidrBlock = strings.Join(cidrList, ",")
-	} else {
-		r.CidrBlock = cidr.(string)
+	if len(cidrBlocks.([]any)) == 0 {
+		return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
 	}
+
+	cidrList, err := CIDRList(cidrBlocks)
+	if err != nil {
+		return diag.Errorf(`"peer_cidr_blocks" must be a list of strings`)
+	}
+
+	// TODO: Use appropriate API field type that supports multiple CIDR blocks
+	// once that is done done there's no need to join the CIDR blocks into a string.
+	r.CidrBlock = strings.Join(cidrList, ",")
 
 	if r.DatacenterID == 0 {
 		return diag.Errorf("unrecognized datacenter %q", dcName)
@@ -205,6 +209,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	d.SetId(vp.ExternalID)
+
 	_ = d.Set("vpc_peering_id", vp.ID)
 	_ = d.Set("connection_id", vp.ExternalID)
 	_ = d.Set("network_link", vp.NetworkLink())
@@ -290,7 +295,6 @@ lookup:
 	_ = d.Set("network_link", vpcPeering.NetworkLink())
 
 	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
-		_ = d.Set("peer_cidr_block", vpcPeering.CIDRList[0])
 		_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
 	}
 
@@ -323,4 +327,22 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	return nil
+}
+
+func resourceVPCPeeringUpgradeV0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {
+	if cidr, ok := rawState["peer_cidr_block"].(string); ok {
+		rawState["peer_cidr_blocks"] = split(cidr, ",")
+		delete(rawState, "peer_cidr_block")
+	}
+
+	return rawState, nil
+}
+
+func split(s, sep string) (x []any) {
+	for _, v := range strings.Split(s, sep) {
+		if v := strings.TrimSpace(v); v != "" {
+			x = append(x, v)
+		}
+	}
+	return x
 }

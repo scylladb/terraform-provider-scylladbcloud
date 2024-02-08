@@ -22,7 +22,7 @@ resource "aws_vpc_peering_connection_accepter" "app" {
     auto_accept               = true
 }
 
-resource "aws_route_table" "bench" {
+resource "aws_route_table" "app" {
 	vpc_id = aws_vpc.app.id
 
 	route {
