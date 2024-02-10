@@ -26,9 +26,9 @@ func DataSourceCQLAuth() *schema.Resource {
 				Type:        schema.TypeInt,
 				Required:    true,
 			},
-			"datacenter_id": {
-				Description: "Datacenter ID",
-				Type:        schema.TypeInt,
+			"datacenter": {
+				Description: "Datacenter Name",
+				Type:        schema.TypeString,
 				Optional:    true,
 			},
 			"dns": {
@@ -59,10 +59,10 @@ func DataSourceCQLAuth() *schema.Resource {
 
 func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c          = meta.(*scylla.Client)
-		clusterID  = int64(d.Get("cluster_id").(int))
-		dcID, dcOK = d.GetOk("datacenter_id")
-		dns        = d.Get("dns").(bool)
+		c         = meta.(*scylla.Client)
+		clusterID = int64(d.Get("cluster_id").(int))
+		dcName    = d.Get("datacenter").(string)
+		dns       = d.Get("dns").(bool)
 	)
 
 	conn, err := c.Connect(ctx, clusterID)
@@ -76,25 +76,13 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 
 	var dc *model.DatacenterConnection
 
-	if dcOK {
-		datacenters, err := c.ListDataCenters(ctx, clusterID)
-		if err != nil {
-			return diag.Errorf("error reading datacenters: %s", err)
-		}
+	if dcName != "" {
+		for j := range conn.Datacenters {
+			rhs := &conn.Datacenters[j]
 
-	lookup:
-		for i := range datacenters {
-			lhs := &datacenters[i]
-
-			if lhs.ID == int64(dcID.(int)) {
-				for j := range conn.Datacenters {
-					rhs := &conn.Datacenters[j]
-
-					if strings.EqualFold(lhs.Name, rhs.Name) {
-						dc = rhs
-						break lookup
-					}
-				}
+			if strings.EqualFold(dcName, rhs.Name) {
+				dc = rhs
+				break
 			}
 		}
 
