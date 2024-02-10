@@ -321,7 +321,6 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 	_ = d.Set("scylla_version", cluster.ScyllaVersion.Version)
 	_ = d.Set("enable_vpc_peering", !strings.EqualFold(cluster.BroadcastType, "PUBLIC"))
 	_ = d.Set("enable_dns", cluster.DNS)
-	_ = d.Set("datacenter_id", cluster.Datacenter.ID)
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("status", cluster.Status)
 
