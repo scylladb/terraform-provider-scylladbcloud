@@ -29,6 +29,13 @@ func DataSourceCQLAuth() *schema.Resource {
 			"datacenter_id": {
 				Description: "Datacenter ID",
 				Type:        schema.TypeInt,
+				Computed:    true,
+				Optional:    true,
+			},
+			"datacenter": {
+				Description: "Datacenter Name",
+				Type:        schema.TypeString,
+				Computed:    true,
 				Optional:    true,
 			},
 			"dns": {
@@ -59,10 +66,11 @@ func DataSourceCQLAuth() *schema.Resource {
 
 func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c          = meta.(*scylla.Client)
-		clusterID  = int64(d.Get("cluster_id").(int))
-		dcID, dcOK = d.GetOk("datacenter_id")
-		dns        = d.Get("dns").(bool)
+		c         = meta.(*scylla.Client)
+		clusterID = int64(d.Get("cluster_id").(int))
+		dcName    = d.Get("datacenter").(string)
+		dcID      = d.Get("datacenter_id").(int)
+		dns       = d.Get("dns").(bool)
 	)
 
 	conn, err := c.Connect(ctx, clusterID)
@@ -76,7 +84,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 
 	var dc *model.DatacenterConnection
 
-	if dcOK {
+	if dcName != "" || dcID != 0 {
 		datacenters, err := c.ListDataCenters(ctx, clusterID)
 		if err != nil {
 			return diag.Errorf("error reading datacenters: %s", err)
@@ -86,11 +94,15 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 		for i := range datacenters {
 			lhs := &datacenters[i]
 
-			if lhs.ID == int64(dcID.(int)) {
+			if lhs.ID == int64(dcID) || strings.EqualFold(lhs.Name, dcName) {
 				for j := range conn.Datacenters {
 					rhs := &conn.Datacenters[j]
 
 					if strings.EqualFold(lhs.Name, rhs.Name) {
+						dcID = int(lhs.ID)
+						if dcName == "" {
+							dcName = rhs.Name
+						}
 						dc = rhs
 						break lookup
 					}
@@ -133,6 +145,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 	_ = d.Set("username", conn.Credentials.Username)
 	_ = d.Set("password", conn.Credentials.Password)
 	_ = d.Set("seeds", seeds)
-
+	_ = d.Set("datacenter", dcName)
+	_ = d.Set("datacenter_id", dcID)
 	return nil
 }
