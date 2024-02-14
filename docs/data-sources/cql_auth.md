@@ -59,5 +59,3 @@ output "scylladbcloud_cql_password" {
 Optional:
 
 - `read` (String)
-
-

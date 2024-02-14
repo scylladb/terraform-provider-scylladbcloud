@@ -31,16 +31,16 @@ output "scylladbcloud_serverless_cluster_id" {
 
 ### Optional
 
+- `cluster_id` (Number) Serverless cluster id
+- `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
+- `free_tier` (Boolean) Whether a cluster is in a free tier
+- `hours` (Number) Hours for cluster to last
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
+- `units` (Number) Processing units
 
 ### Read-Only
 
-- `cluster_id` (Number) Serverless cluster id
-- `free_tier` (Boolean) Whether a cluster is in a free tier. True by default.
 - `id` (String) The ID of this resource.
-- `enable_dns` (Boolean) Whether to enable CNAME for seed nodes. True by default.
-- `units` (Number) Processing units designated for each cluster node
-- `hours` (Number) Number of hours for cluster to last. Applicable only when `free_tier` is True
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`

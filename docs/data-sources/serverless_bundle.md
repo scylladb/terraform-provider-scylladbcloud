@@ -46,5 +46,3 @@ output "scylladbcloud_serverless_bundle" {
 Optional:
 
 - `read` (String)
-
-
