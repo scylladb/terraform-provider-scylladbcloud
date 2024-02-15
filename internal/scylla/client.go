@@ -184,6 +184,10 @@ func getErrorCode(body []byte) (string, error) {
 }
 
 func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
+	reqCpy, err := cloneRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to clone request: %w", err)
+	}
 	resp, temporaryErr, err := c.doHttpRequest(req)
 	if temporaryErr && retries > 0 {
 		if err == nil {
@@ -203,7 +207,7 @@ func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryB
 			return nil, req.Context().Err()
 		}
 
-		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
+		return c.doHttpRequestWithRetries(reqCpy, retries-1, retryBackoffDuration*2)
 	}
 
 	return resp, err
@@ -322,4 +326,31 @@ func (c *Client) findAndSaveAccountID(ctx context.Context) error {
 	c.AccountID = result.AccountID
 
 	return nil
+}
+
+// cloneRequest returns a clone of the provided *http.Request to make it retryable
+func cloneRequest(req *http.Request) (cpy *http.Request, err error) {
+	cpy = req.Clone(req.Context())
+	if req.Body == nil || req.Body == http.NoBody {
+		return req, nil
+	}
+
+	if req.GetBody != nil {
+		cpy.Body, err = req.GetBody()
+		if err != nil {
+			return nil, err
+		}
+		return cpy, nil
+	}
+
+	oldBody := req.Body
+	defer oldBody.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(oldBody); err != nil {
+		return nil, err
+	}
+
+	cpy.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+	req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+	return cpy, nil
 }
