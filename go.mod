@@ -5,6 +5,7 @@ go 1.22
 toolchain go1.22.0
 
 require (
+	github.com/eapache/go-resiliency v1.6.0
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-go v0.22.1
 	github.com/hashicorp/terraform-plugin-log v0.9.0
