@@ -425,7 +425,7 @@ func WaitForCluster(ctx context.Context, c *scylla.Client, requestID int64) erro
 	return nil
 }
 
-func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {
+func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta any) (map[string]any, error) {
 	var (
 		c                    = meta.(*scylla.Client)
 		cloud, cloudOK       = rawState["cloud"].(string)
