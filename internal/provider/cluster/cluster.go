@@ -41,6 +41,14 @@ func ResourceCluster() *schema.Resource {
 
 		SchemaVersion: 1,
 
+		StateUpgraders: []schema.StateUpgrader{
+			{
+				Version: 0,
+				Type:    resourceClusterV0().CoreConfigSchema().ImpliedType(),
+				Upgrade: resourceClusterUpgradeV0,
+			},
+		},
+
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
 				Description: "Cluster id",
@@ -415,4 +423,33 @@ func WaitForCluster(ctx context.Context, c *scylla.Client, requestID int64) erro
 	}
 
 	return nil
+}
+
+func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {
+	var (
+		c                    = meta.(*scylla.Client)
+		cloud, cloudOK       = rawState["cloud"].(string)
+		nodeType, nodeTypeOK = rawState["node_type"].(string)
+	)
+
+	if !cloudOK {
+		return nil, fmt.Errorf(`"cloud" is undefined`)
+	}
+
+	if !nodeTypeOK {
+		return nil, fmt.Errorf(`"node_type" is undefined`)
+	}
+
+	p := c.Meta.ProviderByName(cloud)
+	if p == nil {
+		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
+	}
+
+	mi := p.InstanceByName(nodeType)
+	if mi == nil {
+		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, cloud)
+	}
+
+	rawState["node_disk_size"] = int(mi.TotalStorage)
+	return rawState, nil
 }
