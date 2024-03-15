@@ -1,4 +1,4 @@
-package provider
+package cluster
 
 import (
 	"context"
@@ -237,7 +237,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("error creating cluster: %s", err)
 	}
 
-	if err := waitForCluster(ctx, c, cr.ID); err != nil {
+	if err := WaitForCluster(ctx, c, cr.ID); err != nil {
 		return diag.Errorf("error waiting for cluster: %s", err)
 	}
 
@@ -278,7 +278,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
+		if err := WaitForCluster(ctx, c, reqs[0].ID); err != nil {
 			return diag.Errorf("error waiting for cluster: %s", err)
 		}
 	}
@@ -368,7 +368,7 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 	return nil
 }
 
-func waitForCluster(ctx context.Context, c *scylla.Client, requestID int64) error {
+func WaitForCluster(ctx context.Context, c *scylla.Client, requestID int64) error {
 	t := time.NewTicker(clusterPollInterval)
 	defer t.Stop()
 

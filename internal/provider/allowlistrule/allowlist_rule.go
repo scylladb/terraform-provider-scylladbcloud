@@ -1,4 +1,4 @@
-package provider
+package allowlistrule
 
 import (
 	"context"
@@ -143,9 +143,7 @@ func resourceAllowlistRuleUpdate(ctx context.Context, d *schema.ResourceData, me
 }
 
 func resourceAllowlistRuleDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	ruleID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {

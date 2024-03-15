@@ -5,6 +5,11 @@ import (
 	"net/url"
 	"runtime"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
@@ -13,12 +18,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-var (
-	defaultEndpoint = &url.URL{
-		Scheme: "https",
-		Host:   "api.cloud.scylladb.com",
-	}
-)
+var defaultEndpoint = &url.URL{
+	Scheme: "https",
+	Host:   "api.cloud.scylladb.com",
+}
 
 func New(_ context.Context) (*schema.Provider, error) {
 	p := &schema.Provider{
@@ -38,15 +41,15 @@ func New(_ context.Context) (*schema.Provider, error) {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
-			"scylladbcloud_cql_auth":          DataSourceCQLAuth(),
-			"scylladbcloud_serverless_bundle": DataSourceServerlessBundle(),
+			"scylladbcloud_cql_auth":          cqlauth.DataSourceCQLAuth(),
+			"scylladbcloud_serverless_bundle": serverless.DataSourceServerlessBundle(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"scylladbcloud_cluster":            ResourceCluster(),
-			"scylladbcloud_allowlist_rule":     ResourceAllowlistRule(),
-			"scylladbcloud_vpc_peering":        ResourceVPCPeering(),
-			"scylladbcloud_serverless_cluster": ResourceServerlessCluster(),
+			"scylladbcloud_cluster":            cluster.ResourceCluster(),
+			"scylladbcloud_allowlist_rule":     allowlistrule.ResourceAllowlistRule(),
+			"scylladbcloud_vpc_peering":        vpcpeering.ResourceVPCPeering(),
+			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
 		},
 	}
 

@@ -1,4 +1,4 @@
-package provider
+package serverless
 
 import (
 	"context"
@@ -20,6 +20,8 @@ func DataSourceServerlessBundle() *schema.Resource {
 		Timeouts: &schema.ResourceTimeout{
 			Read: schema.DefaultTimeout(20 * time.Minute),
 		},
+
+		DeprecationMessage: "This data source is deprecated and will be removed in one of the future releases of the provider.",
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {

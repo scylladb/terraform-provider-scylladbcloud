@@ -1,4 +1,4 @@
-package provider
+package serverless
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
@@ -37,6 +38,8 @@ func ResourceServerlessCluster() *schema.Resource {
 			Update: schema.DefaultTimeout(serverlessClusterRetryTimeout),
 			Delete: schema.DefaultTimeout(serverlessClusterDeleteTimeout),
 		},
+
+		DeprecationMessage: "This resource is deprecated and will be removed in one of the future releases of the provider.",
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
@@ -68,7 +71,7 @@ func ResourceServerlessCluster() *schema.Resource {
 				// being ForceNew; Scylla Cloud API does not allow for
 				// updating existing clusters, thus update the implementation
 				// always returns a non-nil error.
-				//ForceNew: true,
+				// ForceNew: true,
 				Default: true,
 			},
 			"units": {
@@ -106,32 +109,30 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 		}
 	}
 
-	var (
-		r = &model.ClusterCreateRequest{
-			ClusterName:          d.Get("name").(string),
-			BroadcastType:        "PUBLIC",
-			CidrBlock:            "172.31.0.0/16",
-			CloudProviderID:      1,
-			AccountCredentialID:  1,
-			RegionID:             1,
-			ReplicationFactor:    3,
-			NumberOfNodes:        3,
-			UserAPIInterface:     "CQL",
-			InstanceID:           74,
-			FreeTier:             freeTier,
-			EnableDNSAssociation: d.Get("enable_dns").(bool),
-			Provisioning:         "serverless",
-			ProcessingUnits:      units,
-			Expiration:           hours,
-		}
-	)
+	r := &model.ClusterCreateRequest{
+		ClusterName:          d.Get("name").(string),
+		BroadcastType:        "PUBLIC",
+		CidrBlock:            "172.31.0.0/16",
+		CloudProviderID:      1,
+		AccountCredentialID:  1,
+		RegionID:             1,
+		ReplicationFactor:    3,
+		NumberOfNodes:        3,
+		UserAPIInterface:     "CQL",
+		InstanceID:           74,
+		FreeTier:             freeTier,
+		EnableDNSAssociation: d.Get("enable_dns").(bool),
+		Provisioning:         "serverless",
+		ProcessingUnits:      units,
+		Expiration:           hours,
+	}
 
 	cr, err := c.CreateCluster(ctx, r)
 	if err != nil {
 		return diag.Errorf("error creating serverless cluster: %s", err)
 	}
 
-	if err := waitForCluster(ctx, c, cr.ID); err != nil {
+	if err := cluster.WaitForCluster(ctx, c, cr.ID); err != nil {
 		return diag.Errorf("error waiting for serverless cluster: %s", err)
 	}
 
@@ -147,9 +148,7 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 }
 
 func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
@@ -169,7 +168,7 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := waitForCluster(ctx, c, reqs[0].ID); err != nil {
+		if err := cluster.WaitForCluster(ctx, c, reqs[0].ID); err != nil {
 			return diag.Errorf("error waiting for serverless cluster: %s", err)
 		}
 	}
@@ -192,9 +191,7 @@ func resourceServerlessClusterUpdate(ctx context.Context, d *schema.ResourceData
 }
 
 func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	var (
-		c = meta.(*scylla.Client)
-	)
+	c := meta.(*scylla.Client)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
