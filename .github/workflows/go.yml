@@ -27,7 +27,7 @@ jobs:
           gofmt-flags: '-l -d'
       - uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.51.2
+          version: v1.56.2
       - run: go test -v -race ./...
   test-build:
     strategy:
