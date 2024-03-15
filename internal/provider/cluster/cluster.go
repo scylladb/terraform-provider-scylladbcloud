@@ -39,6 +39,8 @@ func ResourceCluster() *schema.Resource {
 			Delete: schema.DefaultTimeout(clusterDeleteTimeout),
 		},
 
+		SchemaVersion: 1,
+
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
 				Description: "Cluster id",
@@ -158,6 +160,13 @@ func ResourceCluster() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
+			"node_disk_size": {
+				Description: "The disk size in gigabytes of the node",
+				ForceNew:    true,
+				Optional:    true,
+				Computed:    true,
+				Type:        schema.TypeInt,
+			},
 		},
 	}
 }
@@ -173,13 +182,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 		}
-		cloud              = d.Get("cloud").(string)
-		cidr, cidrOK       = d.GetOk("cidr_block")
-		byoa, byoaOK       = d.GetOk("byoa_id")
-		region             = d.Get("region").(string)
-		nodeType           = d.Get("node_type").(string)
-		version, versionOK = d.GetOk("scylla_version")
-		enableVpcPeering   = d.Get("enable_vpc_peering").(bool)
+		cloud                        = d.Get("cloud").(string)
+		cidr, cidrOK                 = d.GetOk("cidr_block")
+		byoa, byoaOK                 = d.GetOk("byoa_id")
+		region                       = d.Get("region").(string)
+		nodeType                     = d.Get("node_type").(string)
+		version, versionOK           = d.GetOk("scylla_version")
+		enableVpcPeering             = d.Get("enable_vpc_peering").(bool)
+		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
 	)
 
 	if !enableVpcPeering {
@@ -218,11 +228,22 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf(`unrecognized value %q for "region" attribute`, region)
 	}
 
-	if mi := p.InstanceByName(nodeType); mi != nil {
-		r.InstanceID = mi.ID
+	var mi *model.CloudProviderInstance
+	if nodeDiskSizeOK {
+		if mi = p.InstanceByNameAndDiskSize(nodeType, nodeDiskSize.(int)); mi == nil {
+			return diag.Errorf(
+				`unrecognized value combination: %q for "node_type" and %d for "node_disk_size" attributes`,
+				nodeType,
+				nodeDiskSize,
+			)
+		}
 	} else {
-		return diag.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
+		if mi = p.InstanceByName(nodeType); mi == nil {
+			return diag.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
+		}
 	}
+
+	r.InstanceID = mi.ID
 
 	if !versionOK {
 		r.ScyllaVersionID = c.Meta.ScyllaVersions.DefaultScyllaVersionID
@@ -329,6 +350,10 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.Clo
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
 		_ = d.Set("byoa_id", id)
+	}
+
+	if cluster.Instance != nil {
+		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
 	}
 
 	return nil
