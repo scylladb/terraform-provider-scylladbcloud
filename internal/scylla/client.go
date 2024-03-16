@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	stdpath "path"
-	"strconv"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
+
+	"github.com/eapache/go-resiliency/retrier"
 )
 
 const (
@@ -27,17 +27,24 @@ const (
 // Client represents a client to call the Scylla Cloud API
 type Client struct {
 	Meta *Cloudmeta
-	// headers holds headers that will be set for all http requests.
+
+	// Headers holds headers that will be set for all http requests.
 	Headers http.Header
+
 	// API endpoint
 	Endpoint *url.URL
-	// ErrCodes provides a human-readable translation of ScyllaDB API errors
+
+	// ErrCodes provides a human-readable translation of ScyllaDB API errors.
 	ErrCodes map[string]string // code -> message
+
 	// HTTPClient is the underlying HTTP client used to run the requests.
 	// It may be overloaded but a default one is provided in ``NewClient`` by default.
 	HTTPClient *http.Client
+
 	// AccountID holds the account ID used in requests to the API.
 	AccountID int64
+
+	Retry *retrier.Retrier // Retrier is used to retry requests to the API.
 }
 
 func NewClient() (*Client, error) {
@@ -50,6 +57,10 @@ func NewClient() (*Client, error) {
 		ErrCodes:   errCodes,
 		Headers:    make(http.Header),
 		HTTPClient: http.DefaultClient,
+		Retry: retrier.New(
+			retrier.ExponentialBackoff(5, 5*time.Second),
+			DefaultClassifier,
+		),
 	}
 
 	return c, nil
@@ -117,6 +128,7 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 			req.URL.RawQuery = q.Encode()
 		}
 	}
+
 	tflog.Trace(ctx, "api call prepared: "+req.Method+" "+req.URL.String(), map[string]interface{}{
 		"host":        req.Host,
 		"remote_addr": req.RemoteAddr,
@@ -126,73 +138,34 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	return req, nil
 }
 
-func (c *Client) doHttpRequest(req *http.Request) (resp *http.Response, temporaryErr bool, err error) {
-	resp, err = c.HTTPClient.Do(req)
-	if err != nil {
-		if oe, ok := err.(*net.OpError); ok {
-			temporaryErr = oe.Temporary()
-		}
-
-		return
-	}
-
-	temporaryErr = resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout || resp.StatusCode == http.StatusTooManyRequests
-	return
+func (c *Client) retryCall(ctx context.Context, mathod, path string, reqBody, resType interface{}, query ...string) error {
+	return c.Retry.RunCtx(ctx, func(ctx context.Context) error {
+		return c.call(ctx, mathod, path, reqBody, resType, query...)
+	})
 }
 
-func (c *Client) doHttpRequestWithRetries(req *http.Request, retries int, retryBackoffDuration time.Duration) (*http.Response, error) {
-	resp, temporaryErr, err := c.doHttpRequest(req)
-	if temporaryErr && retries > 0 {
-		if err == nil {
-			_ = resp.Body.Close() // We want to retry anyway.
-		}
-		var timeToSleep time.Duration
-		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
-			timeToSleep = d
-		} else {
-			timeToSleep = retryBackoffDuration
-		}
-		timer := time.NewTimer(timeToSleep)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		}
-
-		return c.doHttpRequestWithRetries(req, retries-1, retryBackoffDuration*2)
-	}
-
-	return resp, err
-}
-
-func parseRetryAfter(val string) (time.Duration, bool) {
-	if n, err := strconv.ParseUint(val, 10, 64); err == nil {
-		return time.Duration(n) * time.Second, true
-	}
-	if t, err := time.Parse(time.RFC1123, val); err == nil {
-		return time.Until(t), true
-	}
-	return 0, false
-}
-
-func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
+func (c *Client) call(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
 	ctx = tfcontext.AddHttpRequestInfo(ctx, method, path)
+
 	req, err := c.newHttpRequest(ctx, method, path, reqBody, query...)
 	if err != nil {
 		return err
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := c.doHttpRequestWithRetries(req, retriesAllowed, time.Second)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	var buf bytes.Buffer
-
-	var body io.Reader = io.TeeReader(io.LimitReader(resp.Body, maxResponseBodyLength), &buf)
+	var (
+		buf  bytes.Buffer
+		body io.Reader = io.TeeReader(
+			io.LimitReader(resp.Body, maxResponseBodyLength),
+			&buf,
+		)
+	)
 
 	if p, ok := resType.(*[]byte); ok {
 		if *p, err = io.ReadAll(body); err != nil {
@@ -201,20 +174,23 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 				"status": resp.Status,
 				"error":  err.Error(),
 			})
+
 			return fmt.Errorf("error reading body: %w", err)
 		}
+
 		tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
 			"code":   resp.StatusCode,
 			"status": resp.Status,
 			"body":   buf.String(),
 		})
+
 		return nil
 	}
 
 	d := json.NewDecoder(body)
 	d.UseNumber()
 
-	var data = struct {
+	data := struct {
 		Error string      `json:"error"`
 		Data  interface{} `json:"data"`
 	}{"", resType}
@@ -226,7 +202,9 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 			"error":  err.Error(),
 			"body":   buf.String(),
 		})
+
 		err = makeError("failed to unmarshal data: "+err.Error(), c.ErrCodes, resp)
+
 		return err
 	}
 
@@ -238,12 +216,14 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 
 	if data.Error != "" {
 		err = makeError(data.Error, c.ErrCodes, resp)
+
 		tflog.Trace(ctx, "api returned error: "+err.Error(), map[string]interface{}{
 			"code":   resp.StatusCode,
 			"status": resp.Status,
 			"body":   buf.String(),
 			"error":  err.Error(),
 		})
+
 		return err
 	}
 
@@ -252,19 +232,20 @@ func (c *Client) callAPI(ctx context.Context, method, path string, reqBody, resT
 		"status": resp.Status,
 		"body":   buf.String(),
 	})
+
 	return nil
 }
 
 func (c *Client) get(ctx context.Context, path string, resultType interface{}, query ...string) error {
-	return c.callAPI(ctx, http.MethodGet, path, nil, resultType, query...)
+	return c.retryCall(ctx, http.MethodGet, path, nil, resultType, query...)
 }
 
 func (c *Client) post(ctx context.Context, path string, requestBody, resultType interface{}) error {
-	return c.callAPI(ctx, http.MethodPost, path, requestBody, resultType)
+	return c.retryCall(ctx, http.MethodPost, path, requestBody, resultType)
 }
 
 func (c *Client) delete(ctx context.Context, path string) error {
-	return c.callAPI(ctx, http.MethodDelete, path, nil, nil)
+	return c.retryCall(ctx, http.MethodDelete, path, nil, nil)
 }
 
 func (c *Client) findAndSaveAccountID(ctx context.Context) error {
