@@ -35,26 +35,33 @@ func (p *CloudProvider) RegionByName(name string) *model.CloudProviderRegion {
 	return nil
 }
 
-func (p *CloudProvider) InstanceByID(id int64) *model.CloudProviderInstance {
+func (p *CloudProvider) instanceByFunc(f func(*model.CloudProviderInstance) bool) *model.CloudProviderInstance {
 	for i := range p.CloudProviderRegions.Instances {
 		t := &p.CloudProviderRegions.Instances[i]
 
-		if t.ID == id {
+		if f(t) {
 			return t
 		}
 	}
 	return nil
 }
 
-func (p *CloudProvider) InstanceByName(name string) *model.CloudProviderInstance {
-	for i := range p.CloudProviderRegions.Instances {
-		t := &p.CloudProviderRegions.Instances[i]
+func (p *CloudProvider) InstanceByID(id int64) *model.CloudProviderInstance {
+	return p.instanceByFunc(func(t *model.CloudProviderInstance) bool {
+		return t.ID == id
+	})
+}
 
-		if strings.EqualFold(t.ExternalID, name) {
-			return t
-		}
-	}
-	return nil
+func (p *CloudProvider) InstanceByName(name string) *model.CloudProviderInstance {
+	return p.instanceByFunc(func(t *model.CloudProviderInstance) bool {
+		return strings.EqualFold(t.ExternalID, name)
+	})
+}
+
+func (p *CloudProvider) InstanceByNameAndDiskSize(name string, diskSize int) *model.CloudProviderInstance {
+	return p.instanceByFunc(func(t *model.CloudProviderInstance) bool {
+		return strings.EqualFold(t.ExternalID, name) && t.TotalStorage == int64(diskSize)
+	})
 }
 
 type Cloudmeta struct {

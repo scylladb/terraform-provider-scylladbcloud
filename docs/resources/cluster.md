@@ -52,6 +52,7 @@ output "scylladbcloud_cluster_datacenter" {
 - `cloud` (String) Cluster name
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
+- `node_disk_size` (Number) The disk size in gigabytes of the node
 - `scylla_version` (String) Scylla version
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `user_api_interface` (String) Type of API interface, either CQL or ALTERNATOR
