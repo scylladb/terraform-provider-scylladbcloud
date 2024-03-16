@@ -1,6 +1,6 @@
 /internal/provider/scylla/         @rjeczalik
 /internal/provider/allowlistrule/  @rjeczalik
-/internal/provider/cluster/        @rjeczalik @charconstpointer
+/internal/provider/cluster/        @rjeczalik @charconstpointer @ksinica
 /internal/provider/cqlauth/        @rjeczalik
 /internal/provider/serverless/     @rjeczalik
 /internal/provider/vpcpeering/     @rjeczalik
