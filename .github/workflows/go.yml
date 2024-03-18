@@ -27,7 +27,7 @@ jobs:
         with:
           gofmt-path: './'
           gofmt-flags: '-l -d'
-      - uses: golangci/golangci-lint-action@v3
+      - uses: golangci/golangci-lint-action@v4
         with:
           version: v1.56.2
       - run: go test -v -race ./...
