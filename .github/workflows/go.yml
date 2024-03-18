@@ -19,7 +19,7 @@ jobs:
           go-version: "stable"
       - run: go build -v ./...
       # TODO(rjeczalik): Remove (#104)
-      - uses: scylladb/goimports-action@v1.0.2
+      - uses: scylladb/goimports-action@v1.0.3
         with:
           goimports-path: './'
       # TODO(rjeczalik): Remove (#104)
