@@ -14,12 +14,13 @@ jobs:
     name: lint
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: "stable"
+          go-version-file: 'go.mod'
+          cache: true
       - run: go build -v ./...
       # TODO(rjeczalik): Remove (#104)
-      - uses: scylladb/goimports-action@v1.0.2
+      - uses: scylladb/goimports-action@v1.0.3
         with:
           goimports-path: './'
       # TODO(rjeczalik): Remove (#104)
@@ -27,7 +28,7 @@ jobs:
         with:
           gofmt-path: './'
           gofmt-flags: '-l -d'
-      - uses: golangci/golangci-lint-action@v3
+      - uses: golangci/golangci-lint-action@v4
         with:
           version: v1.56.2
       - run: go test -v -race ./...
@@ -41,7 +42,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: stable
       - run: |
