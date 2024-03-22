@@ -128,8 +128,9 @@ lookup:
 		}
 	}
 
-	if rule == nil {
-		return diag.Errorf("unrecognized rule %d", ruleID)
+	if rule == nil || cluster == nil {
+		d.SetId("")
+		return nil
 	}
 
 	_ = d.Set("cidr_block", rule.Address)
