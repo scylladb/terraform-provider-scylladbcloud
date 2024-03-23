@@ -107,7 +107,7 @@ func dataSourceCQLAuthRead(ctx context.Context, d *schema.ResourceData, meta int
 	return nil
 }
 
-func getSeeds(dns bool, dc *model.DatacenterConnection, conn *model.ClusterConnection) (string, error) {
+func getSeeds(dns bool, dc *model.DatacenterConnection, conn *model.ClusterConnectionInformation) (string, error) {
 	if dns {
 		if len(dc.DNS) == 0 {
 			return "", fmt.Errorf("error reading %q datacenter dns: not found", dc.Name)
@@ -129,7 +129,7 @@ func getSeeds(dns bool, dc *model.DatacenterConnection, conn *model.ClusterConne
 	return strings.Join(dc.PublicIP, ","), nil
 }
 
-func getConnectionDCByName(conn *model.ClusterConnection, dcName string) (*model.DatacenterConnection, error) {
+func getConnectionDCByName(conn *model.ClusterConnectionInformation, dcName string) (*model.DatacenterConnection, error) {
 	if len(conn.Datacenters) == 0 {
 		return nil, fmt.Errorf("error reading datacenter connections: not found")
 	}
