@@ -42,7 +42,7 @@ output "scylladbcloud_cql_password" {
 
 ### Optional
 
-- `datacenter_id` (Number) Datacenter ID
+- `datacenter` (String) Datacenter Name
 - `dns` (Boolean) Use DNS names for seeds
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
