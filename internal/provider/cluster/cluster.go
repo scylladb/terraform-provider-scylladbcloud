@@ -314,6 +314,10 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	cluster, err := c.GetCluster(ctx, clusterID)
 	if err != nil {
+		if scylla.IsClusterDeletedErr(err) {
+			d.SetId("")
+			return nil // cluster was deleted
+		}
 		return diag.Errorf("error reading cluster: %s", err)
 	}
 

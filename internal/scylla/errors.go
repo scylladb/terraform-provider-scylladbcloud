@@ -7,6 +7,13 @@ import (
 	"strconv"
 )
 
+func IsClusterDeletedErr(err error) bool {
+	if e := new(APIError); errors.As(err, &e) && e.Message == "CLUSTER_DELETED" {
+		return true
+	}
+	return false
+}
+
 func IsDeletedErr(err error) bool {
 	if e := new(APIError); errors.As(err, &e) && e.Code == "040001" {
 		return true
