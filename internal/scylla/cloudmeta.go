@@ -120,7 +120,7 @@ func (m *Cloudmeta) ProviderByName(name string) *CloudProvider {
 	return nil
 }
 
-func (m *Cloudmeta) ProviderByID(id int64) *CloudProvider {
+func (m *Cloudmeta) ProviderByID(id model.CloudProviderID) *CloudProvider {
 	for i := range m.CloudProviders {
 		p := &m.CloudProviders[i]
 
