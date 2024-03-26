@@ -16,7 +16,7 @@ func (c *Client) ListCloudProviders(ctx context.Context) ([]model.CloudProvider,
 	return result.CloudProviders, nil
 }
 
-func (c *Client) ListCloudProviderRegions(ctx context.Context, providerID int64) (*model.CloudProviderRegions, error) {
+func (c *Client) ListCloudProviderRegions(ctx context.Context, providerID model.CloudProviderID) (*model.CloudProviderRegions, error) {
 	var result model.CloudProviderRegions
 	path := fmt.Sprintf("/deployment/cloud-provider/%d/regions", providerID)
 	if err := c.get(ctx, path, &result, "defaults", "true"); err != nil {

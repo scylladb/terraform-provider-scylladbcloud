@@ -163,7 +163,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 	r.RegionID = region.ID
 	if !cidrBlocksOK {
-		if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
+		if dc.CloudProviderID != model.CloudProviderIDGCP {
 			return diag.Errorf(`"peer_cidr_blocks" is required for %q cloud`, p.CloudProvider.Name)
 		}
 
@@ -173,7 +173,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		}
 
 		cidrBlocks = []any{cidr}
-	} else if strings.EqualFold(p.CloudProvider.Name, "GCP") {
+	} else if dc.CloudProviderID == model.CloudProviderIDGCP {
 		cidr, ok := c.Meta.GCPBlocks[pr]
 		if !ok {
 			return diag.Errorf("no default peer CIDR block found for %q region", pr)

@@ -6,10 +6,17 @@ import (
 	"time"
 )
 
+type CloudProviderID int64
+
+const (
+	CloudProviderIDAWS CloudProviderID = 1
+	CloudProviderIDGCP CloudProviderID = 2
+)
+
 type CloudProvider struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	RootAccountID string `json:"rootAccountID"`
+	ID            CloudProviderID `json:"id"`
+	Name          string          `json:"name"`
+	RootAccountID string          `json:"rootAccountID"`
 }
 
 type CloudProviders struct {
@@ -29,38 +36,38 @@ type ScyllaVersions struct {
 }
 
 type CloudProviderRegion struct {
-	ID                          int64       `json:"id"`
-	ExternalID                  string      `json:"externalId"`
-	CloudProviderID             int64       `json:"cloudProviderId"`
-	Name                        string      `json:"name"`
-	DatacenterName              string      `json:"dcName"`
-	FullName                    string      `json:"fullName"`
-	Continent                   string      `json:"continent"`
-	BackupStorageGBCost         json.Number `json:"backupStorageGBCost"`
-	TrafficSameRegionInGBCost   json.Number `json:"trafficSameRegionInGBCost"`
-	TrafficSameRegionOutGBCost  json.Number `json:"trafficSameRegionOutGBCost"`
-	TrafficCrossRegionOutGBCost json.Number `json:"trafficCrossRegionOutGBCost"`
-	TrafficInternetOutGBCost    json.Number `json:"trafficInternetOutGBCost"`
+	ID                          int64           `json:"id"`
+	ExternalID                  string          `json:"externalId"`
+	CloudProviderID             CloudProviderID `json:"cloudProviderId"`
+	Name                        string          `json:"name"`
+	DatacenterName              string          `json:"dcName"`
+	FullName                    string          `json:"fullName"`
+	Continent                   string          `json:"continent"`
+	BackupStorageGBCost         json.Number     `json:"backupStorageGBCost"`
+	TrafficSameRegionInGBCost   json.Number     `json:"trafficSameRegionInGBCost"`
+	TrafficSameRegionOutGBCost  json.Number     `json:"trafficSameRegionOutGBCost"`
+	TrafficCrossRegionOutGBCost json.Number     `json:"trafficCrossRegionOutGBCost"`
+	TrafficInternetOutGBCost    json.Number     `json:"trafficInternetOutGBCost"`
 }
 
 type CloudProviderInstance struct {
-	ID                          int64       `json:"id"`
-	ExternalID                  string      `json:"externalId"`
-	CloudProviderID             int64       `json:"cloudProviderId"`
-	GroupDefault                bool        `json:"groupDefault"`
-	DisplayOrder                int64       `json:"displayOrder"`
-	Memory                      int64       `json:"memory"`
-	LocalDiskCount              int64       `json:"localDiskCount"`
-	TotalStorage                int64       `json:"totalStorage"`
-	CPUCount                    int64       `json:"cpuCount"`
-	NetworkSpeed                int64       `json:"networkSpeed"`
-	ExternalStorageNetworkSpeed int64       `json:"externalStorageNetworkSpeed"`
-	CostPerHour                 json.Number `json:"costPerHour"`
-	Environment                 string      `json:"environment"`
-	LicenseCostOnDemandPerHour  json.Number `json:"licenseCostOnDemandPerHour"`
-	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
-	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
-	FreeTierHours               int64       `json:"freeTierHours"`
+	ID                          int64           `json:"id"`
+	ExternalID                  string          `json:"externalId"`
+	CloudProviderID             CloudProviderID `json:"cloudProviderId"`
+	GroupDefault                bool            `json:"groupDefault"`
+	DisplayOrder                int64           `json:"displayOrder"`
+	Memory                      int64           `json:"memory"`
+	LocalDiskCount              int64           `json:"localDiskCount"`
+	TotalStorage                int64           `json:"totalStorage"`
+	CPUCount                    int64           `json:"cpuCount"`
+	NetworkSpeed                int64           `json:"networkSpeed"`
+	ExternalStorageNetworkSpeed int64           `json:"externalStorageNetworkSpeed"`
+	CostPerHour                 json.Number     `json:"costPerHour"`
+	Environment                 string          `json:"environment"`
+	LicenseCostOnDemandPerHour  json.Number     `json:"licenseCostOnDemandPerHour"`
+	SubscriptionCostHourly      json.Number     `json:"subscriptionCostHourly"`
+	InstanceCostHourly          json.Number     `json:"instanceCostHourly"`
+	FreeTierHours               int64           `json:"freeTierHours"`
 }
 
 type CloudProviderRegions struct {
@@ -90,26 +97,26 @@ type ClusterRequest struct {
 }
 
 type ClusterCreateRequest struct {
-	AccountCredentialID      int64    `json:"accountCredentialId,omitempty"`
-	AlternatorWriteIsolation string   `json:"alternatorWriteIsolation,omitempty"`
-	BroadcastType            string   `json:"broadcastType,omitempty"`
-	CidrBlock                string   `json:"cidrBlock,omitempty"`
-	CloudProviderID          int64    `json:"cloudProviderId,omitempty"`
-	InstanceID               int64    `json:"instanceId,omitempty"`
-	RegionID                 int64    `json:"regionId,omitempty"`
-	EnableDNSAssociation     bool     `json:"enableDnsAssociation"`
-	AllowedIPs               []string `json:"allowedIPs,omitempty"`
-	FreeTier                 bool     `json:"freeTier"`
-	JumpStart                bool     `json:"jumpStart"`
-	ClusterName              string   `json:"clusterName"`
-	NumberOfNodes            int64    `json:"numberOfNodes"`
-	PromProxy                bool     `json:"promProxy"`
-	ReplicationFactor        int64    `json:"replicationFactor"`
-	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
-	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
-	Provisioning             string   `json:"provisioning,omitempty"`
-	ProcessingUnits          int      `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
-	Expiration               string   `json:"expiration,omitempty" example:"12"`
+	AccountCredentialID      int64           `json:"accountCredentialId,omitempty"`
+	AlternatorWriteIsolation string          `json:"alternatorWriteIsolation,omitempty"`
+	BroadcastType            string          `json:"broadcastType,omitempty"`
+	CidrBlock                string          `json:"cidrBlock,omitempty"`
+	CloudProviderID          CloudProviderID `json:"cloudProviderId,omitempty"`
+	InstanceID               int64           `json:"instanceId,omitempty"`
+	RegionID                 int64           `json:"regionId,omitempty"`
+	EnableDNSAssociation     bool            `json:"enableDnsAssociation"`
+	AllowedIPs               []string        `json:"allowedIPs,omitempty"`
+	FreeTier                 bool            `json:"freeTier"`
+	JumpStart                bool            `json:"jumpStart"`
+	ClusterName              string          `json:"clusterName"`
+	NumberOfNodes            int64           `json:"numberOfNodes"`
+	PromProxy                bool            `json:"promProxy"`
+	ReplicationFactor        int64           `json:"replicationFactor"`
+	ScyllaVersionID          int64           `json:"scyllaVersionId,omitempty"`
+	UserAPIInterface         string          `json:"userApiInterface,omitempty"`
+	Provisioning             string          `json:"provisioning,omitempty"`
+	ProcessingUnits          int             `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
+	Expiration               string          `json:"expiration,omitempty" example:"12"`
 }
 
 type Cluster struct {
@@ -118,7 +125,7 @@ type Cluster struct {
 	ClusterName         string                 `json:"clusterName"`
 	Status              string                 `json:"status"`
 	InstanceID          int64                  `json:"instanceId"`
-	CloudProviderID     int64                  `json:"cloudProviderID"`
+	CloudProviderID     CloudProviderID        `json:"cloudProviderID"`
 	ScyllaVersionID     int64                  `json:"scyllaVersionID"`
 	UserAPIInterface    string                 `json:"userApiInterface"`
 	PricingModel        int64                  `json:"pricingModel"`
@@ -167,7 +174,7 @@ type Datacenter struct {
 	Name                             string               `json:"Name"`
 	Status                           string               `json:"Status"`
 	ClusterID                        int64                `json:"ClusterID"`
-	CloudProviderID                  int64                `json:"CloudProviderID"`
+	CloudProviderID                  CloudProviderID      `json:"CloudProviderID"`
 	RegionID                         int64                `json:"regionID"`
 	InstanceID                       int64                `json:"instanceId"`
 	ReplicationFactor                int64                `json:"ReplicationFactor"`
