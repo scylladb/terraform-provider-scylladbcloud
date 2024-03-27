@@ -275,7 +275,12 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("error reading cluster: %s", err)
 	}
 
-	err = setClusterKVs(d, cluster, p)
+	i := p.InstanceByID(cluster.Datacenter.InstanceID)
+	if i == nil {
+		return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
+	}
+
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, i.ExternalID)
 	if err != nil {
 		return diag.Errorf("error setting cluster values: %s", err)
 	}
@@ -330,7 +335,15 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("multi-datacenter clusters are not currently supported: %d", n)
 	}
 
-	err = setClusterKVs(d, cluster, p)
+	var instanceExternalID string
+	if cluster.Datacenter.InstanceID != 0 {
+		i := p.InstanceByID(cluster.Datacenter.InstanceID)
+		if i == nil {
+			return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
+		}
+		instanceExternalID = i.ExternalID
+	}
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID)
 	if err != nil {
 		return diag.Errorf("error setting cluster values: %s", err)
 	}
@@ -338,14 +351,14 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, p *scylla.CloudProvider) error {
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID string) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
-	_ = d.Set("cloud", p.CloudProvider.Name)
+	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
 	_ = d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
-	_ = d.Set("node_type", p.InstanceByID(cluster.Datacenter.InstanceID).ExternalID)
+	_ = d.Set("node_type", instanceExternalID)
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	_ = d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
 	_ = d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
