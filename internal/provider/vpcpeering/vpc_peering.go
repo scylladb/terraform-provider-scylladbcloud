@@ -271,11 +271,13 @@ lookup:
 
 	if cluster == nil {
 		// cluster was deleted manually
+		d.SetId("")
 		return nil
 	}
 
 	if vpcPeering == nil {
 		// vpc peering was deleted manually
+		d.SetId("")
 		return nil
 	}
 
