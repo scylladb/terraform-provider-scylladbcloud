@@ -285,21 +285,22 @@ lookup:
 		return diag.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
-	r := p.RegionByID(vpcPeering.RegionID)
+	// RegionID is always 0 for GCP peering
+	if vpcPeering.RegionID != 0 {
+		if r := p.RegionByID(vpcPeering.RegionID); r != nil {
+			_ = d.Set("peer_region", r.ExternalID)
+		}
+	}
 
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("peer_vpc_id", vpcPeering.VPCID)
-	_ = d.Set("peer_region", r.ExternalID)
 	_ = d.Set("peer_account_id", vpcPeering.OwnerID)
 	_ = d.Set("vpc_peering_id", vpcPeering.ID)
 	_ = d.Set("connection_id", vpcPeering.ExternalID)
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("network_link", vpcPeering.NetworkLink())
 	_ = d.Set("allow_cql", vpcPeering.AllowCQL)
-
-	if c.Meta.GCPBlocks[r.ExternalID] != vpcPeering.CIDRList[0] {
-		_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
-	}
+	_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
 
 	return nil
 }
