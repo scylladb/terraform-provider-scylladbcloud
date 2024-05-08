@@ -69,8 +69,8 @@ func (c *Client) Bundle(ctx context.Context, clusterID int64) ([]byte, error) {
 	return raw, nil
 }
 
-func (c *Client) Connect(ctx context.Context, clusterID int64) (*model.ClusterConnection, error) {
-	var result model.ClusterConnection
+func (c *Client) Connect(ctx context.Context, clusterID int64) (*model.ClusterConnectionInformation, error) {
+	var result model.ClusterConnectionInformation
 
 	path := fmt.Sprintf("/account/%d/cluster/connect", c.AccountID)
 
@@ -259,7 +259,61 @@ func (c *Client) DeleteClusterVPCPeering(ctx context.Context, clusterID, peerID 
 	return c.delete(ctx, path)
 }
 
-func fix_sf3112(c *model.ClusterConnection) {
+func (c *Client) CreateClusterConnection(ctx context.Context, clusterID int64, req *model.ClusterConnectionCreateRequest) (*model.ClusterConnection, error) {
+	var result struct {
+		ID           int64 `json:"id"`
+		ConnectionID int64 `json:"connectionID"`
+	}
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/connection", c.AccountID, clusterID)
+
+	if err := c.post(ctx, path, req, &result); err != nil {
+		return nil, err
+	}
+	return c.GetClusterConnection(ctx, clusterID, result.ConnectionID)
+}
+
+func (c *Client) GetClusterConnection(ctx context.Context, clusterID, connectionID int64) (*model.ClusterConnection, error) {
+	var result model.ClusterConnection
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/connection/%d", c.AccountID, clusterID, connectionID)
+
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) ListClusterConnections(ctx context.Context, clusterID int64) ([]model.ClusterConnection, error) {
+	result := struct {
+		Connections []model.ClusterConnection
+	}{}
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/connection", c.AccountID, clusterID)
+
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+
+	return result.Connections, nil
+}
+
+func (c *Client) UpdateClusterConnections(ctx context.Context, clusterID, connectionID int64, req *model.ClusterConnectionUpdateRequest) error {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/connection/%d", c.AccountID, clusterID, connectionID)
+	if err := c.patch(ctx, path, req, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) DeleteClusterConnection(ctx context.Context, clusterID, connectionID int64) error {
+	path := fmt.Sprintf("/account/%d/cluster/%d/network/vpc/connection/%d", c.AccountID, clusterID, connectionID)
+
+	return c.delete(ctx, path)
+}
+
+func fix_sf3112(c *model.ClusterConnectionInformation) {
 	for i := range c.Datacenters {
 		dc := &c.Datacenters[i]
 
