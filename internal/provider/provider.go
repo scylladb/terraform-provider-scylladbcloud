@@ -10,9 +10,8 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
-
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -52,6 +51,7 @@ func New(_ context.Context) (*schema.Provider, error) {
 			"scylladbcloud_vpc_peering":        vpcpeering.ResourceVPCPeering(),
 			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
 			"scylladbcloud_cluster_connection": connection.ResourceClusterConnection(),
+			"scylladbcloud_stack":              stack.ResourceStack(),
 		},
 	}
 
@@ -68,25 +68,9 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		token    = d.Get("token").(string)
 	)
 
-	c, err := scylla.NewClient()
+	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion))
 	if err != nil {
 		return nil, diag.Errorf("could not create new Scylla client: %s", err)
-	}
-
-	ctx = tfcontext.AddProviderInfo(ctx, endpoint)
-	if c.Endpoint, err = url.Parse(endpoint); err != nil {
-		return nil, diag.FromErr(err)
-	}
-
-	if c.Meta, err = scylla.BuildCloudmeta(ctx, c); err != nil {
-		return nil, diag.Errorf("could not build Cloudmeta: %s", err)
-	}
-
-	c.Headers.Set("Accept", "application/json; charset=utf-8")
-	c.Headers.Set("User-Agent", userAgent(p.TerraformVersion))
-
-	if err := c.Auth(ctx, token); err != nil {
-		return nil, diag.FromErr(err)
 	}
 
 	return c, nil
