@@ -2,18 +2,17 @@ package provider
 
 import (
 	"context"
-	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
-
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 
 	"github.com/hashicorp/go-cty/cty"
@@ -29,6 +28,12 @@ func envToken() string {
 
 func envEndpoint() string {
 	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
+}
+
+func ignoreMeta() bool {
+	s := os.Getenv("SCYLLADB_CLOUD_IGNORE_META")
+	ok, _ := strconv.ParseBool(s)
+	return ok
 }
 
 func New(context.Context) (*schema.Provider, error) {
@@ -70,6 +75,7 @@ func New(context.Context) (*schema.Provider, error) {
 			"scylladbcloud_vpc_peering":        vpcpeering.ResourceVPCPeering(),
 			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
 			"scylladbcloud_cluster_connection": connection.ResourceClusterConnection(),
+			"scylladbcloud_stack":              stack.ResourceStack(),
 		},
 	}
 
@@ -84,27 +90,12 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 	var (
 		endpoint = d.Get("endpoint").(string)
 		token    = d.Get("token").(string)
+		ignore   = ignoreMeta()
 	)
 
-	c, err := scylla.NewClient()
+	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), ignore)
 	if err != nil {
 		return nil, diag.Errorf("could not create new Scylla client: %s", err)
-	}
-
-	ctx = tfcontext.AddProviderInfo(ctx, endpoint)
-	if c.Endpoint, err = url.Parse(endpoint); err != nil {
-		return nil, diag.FromErr(err)
-	}
-
-	if c.Meta, err = scylla.BuildCloudmeta(ctx, c); err != nil {
-		return nil, diag.Errorf("could not build Cloudmeta: %s", err)
-	}
-
-	c.Headers.Set("Accept", "application/json; charset=utf-8")
-	c.Headers.Set("User-Agent", userAgent(p.TerraformVersion))
-
-	if err := c.Auth(ctx, token); err != nil {
-		return nil, diag.FromErr(err)
 	}
 
 	return c, nil

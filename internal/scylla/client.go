@@ -12,10 +12,11 @@ import (
 	stdpath "path"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-log/tflog"
+	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/tfcontext"
 
 	"github.com/eapache/go-resiliency/retrier"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -34,6 +35,9 @@ type Client struct {
 	// API endpoint
 	Endpoint *url.URL
 
+	// Token is the API token used to authenticate requests.
+	Token string
+
 	// ErrCodes provides a human-readable translation of ScyllaDB API errors.
 	ErrCodes map[string]string // code -> message
 
@@ -44,52 +48,60 @@ type Client struct {
 	// AccountID holds the account ID used in requests to the API.
 	AccountID int64
 
-	Retry *retrier.Retrier // Retrier is used to retry requests to the API.
+	// Retry is used to retry requests to the API.
+	Retry *retrier.Retrier
+
+	// V2 is the client to call the V2 API, it does not require costly
+	// metadata building.
+	V2 *v2scylla.Client
 }
 
-func NewClient() (*Client, error) {
+func NewClient(endpoint, token, useragent string, ignoreMeta bool) (*Client, error) {
 	errCodes, err := parse(codes, codesDelim, codesFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse error codes: %w", err)
 	}
 
+	end, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	retry := retrier.New(
+		retrier.ExponentialBackoff(5, 5*time.Second),
+		DefaultClassifier,
+	)
+
 	c := &Client{
+		Token:      token,
 		ErrCodes:   errCodes,
 		Headers:    make(http.Header),
-		HTTPClient: http.DefaultClient,
-		Retry: retrier.New(
-			retrier.ExponentialBackoff(5, 5*time.Second),
-			DefaultClassifier,
+		HTTPClient: &http.Client{Timeout: defaultTimeout},
+		Retry:      retry,
+		Endpoint:   end,
+		V2: v2scylla.New(
+			v2scylla.WithRetryPolicy(retry),
+			v2scylla.WithUserAgent(useragent),
+			v2scylla.WithBaseURL(endpoint),
+			v2scylla.WithGlobalCookieJar(),
 		),
 	}
 
-	return c, nil
-}
+	c.Headers.Set("Authorization", "Bearer "+c.Token)
+	c.Headers.Set("Accept", "application/json; charset=utf-8")
+	c.Headers.Set("User-Agent", useragent)
 
-// NewClient represents a new client to call the API
-func (c *Client) Auth(ctx context.Context, token string) error {
-	if c.HTTPClient == nil {
-		c.HTTPClient = &http.Client{Timeout: defaultTimeout}
-	}
-
-	if c.Headers == nil {
-		c.Headers = make(http.Header)
-	}
-
-	c.Headers.Set("Authorization", "Bearer "+token)
-
-	if c.Meta == nil {
-		var err error
+	if !ignoreMeta {
 		if c.Meta, err = BuildCloudmeta(ctx, c); err != nil {
-			return fmt.Errorf("error building metadata: %w", err)
+			return nil, fmt.Errorf("error building metadata: %w", err)
+		}
+		if err = c.findAndSaveAccountID(ctx); err != nil {
+			return nil, err
 		}
 	}
 
-	if err := c.findAndSaveAccountID(ctx); err != nil {
-		return err
-	}
-
-	return nil
+	return c, nil
 }
 
 func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
