@@ -200,6 +200,11 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
 	)
 
+	m, err := c.Meta()
+	if err != nil {
+		return diag.Errorf("error reading metadata: %s", err)
+	}
+
 	if !enableVpcPeering {
 		r.BroadcastType = "PUBLIC"
 	}
@@ -221,7 +226,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		_ = d.Set("cidr_block", cidr)
 	}
 
-	p := c.Meta.ProviderByName(cloud)
+	p := m.ProviderByName(cloud)
 	if p == nil {
 		return diag.Errorf(`unrecognized value %q for "cloud" attribute`, cloud)
 	}
@@ -254,8 +259,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	r.InstanceID = mi.ID
 
 	if !versionOK {
-		r.ScyllaVersionID = c.Meta.ScyllaVersions.DefaultScyllaVersionID
-	} else if mv := c.Meta.VersionByName(version.(string)); mv != nil {
+		r.ScyllaVersionID = m.ScyllaVersions.DefaultScyllaVersionID
+	} else if mv := m.VersionByName(version.(string)); mv != nil {
 		r.ScyllaVersionID = mv.VersionID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
@@ -294,6 +299,11 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	c := meta.(*scylla.Client)
 
+	m, err := c.Meta()
+	if err != nil {
+		return diag.Errorf("error reading metadata: %s", err)
+	}
+
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
 		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
@@ -326,7 +336,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("error reading cluster: %s", err)
 	}
 
-	p := c.Meta.ProviderByID(cluster.CloudProviderID)
+	p := m.ProviderByID(cluster.CloudProviderID)
 	if p == nil {
 		return diag.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
 	}
@@ -448,6 +458,11 @@ func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta
 		nodeType, nodeTypeOK = rawState["node_type"].(string)
 	)
 
+	m, err := c.Meta()
+	if err != nil {
+		return nil, fmt.Errorf("error reading metadata: %w", err)
+	}
+
 	if !cloudOK {
 		return nil, fmt.Errorf(`"cloud" is undefined`)
 	}
@@ -456,7 +471,7 @@ func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta
 		return nil, fmt.Errorf(`"node_type" is undefined`)
 	}
 
-	p := c.Meta.ProviderByName(cloud)
+	p := m.ProviderByName(cloud)
 	if p == nil {
 		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
 	}

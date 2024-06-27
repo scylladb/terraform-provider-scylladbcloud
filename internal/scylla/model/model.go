@@ -331,3 +331,9 @@ func NodesDNSNames(n []Node) []string {
 type Datacenters struct {
 	Datacenters []Datacenter `json:"dataCenters"`
 }
+
+type Stack struct {
+	RequestType        string         `json:"RequestType"`
+	RequestID          string         `json:"RequestId"`
+	ResourceProperties map[string]any `json:"ResourceProperties"`
+}

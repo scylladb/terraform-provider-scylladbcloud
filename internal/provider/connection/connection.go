@@ -150,6 +150,11 @@ func resourceClusterConnectionCreate(ctx context.Context, d *schema.ResourceData
 		p *scylla.CloudProvider
 	)
 
+	m, err := c.Meta()
+	if err != nil {
+		return diag.Errorf("error reading metadata: %s", err)
+	}
+
 	dcs, err := c.ListDataCenters(ctx, int64(clusterID))
 	if err != nil {
 		return diag.Errorf("error reading clusters: %s", err)
@@ -158,7 +163,7 @@ func resourceClusterConnectionCreate(ctx context.Context, d *schema.ResourceData
 	for _, dc := range dcs {
 		if strings.EqualFold(dc.Name, dcName) {
 			r.ClusterDCID = dc.ID
-			p = c.Meta.ProviderByID(dc.CloudProviderID)
+			p = m.ProviderByID(dc.CloudProviderID)
 			if p == nil {
 				return diag.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 			}

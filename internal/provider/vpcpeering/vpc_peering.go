@@ -133,6 +133,11 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		dc        *model.Datacenter
 	)
 
+	m, err := c.Meta()
+	if err != nil {
+		return diag.Errorf("error reading metadata: %s", err)
+	}
+
 	dcs, err := c.ListDataCenters(ctx, int64(clusterID))
 	if err != nil {
 		return diag.Errorf("error reading clusters: %s", err)
@@ -143,7 +148,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 		if strings.EqualFold(dc.Name, dcName) {
 			r.DatacenterID = dc.ID
-			p = c.Meta.ProviderByID(dc.CloudProviderID)
+			p = m.ProviderByID(dc.CloudProviderID)
 			break
 		}
 	}
@@ -167,14 +172,14 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 			return diag.Errorf(`"peer_cidr_blocks" is required for %q cloud`, p.CloudProvider.Name)
 		}
 
-		cidr, ok := c.Meta.GCPBlocks[pr]
+		cidr, ok := m.GCPBlocks[pr]
 		if !ok {
 			return diag.Errorf("no default peer CIDR block found for %q region", pr)
 		}
 
 		cidrBlocks = []any{cidr}
 	} else if strings.EqualFold(p.CloudProvider.Name, "GCP") {
-		cidr, ok := c.Meta.GCPBlocks[pr]
+		cidr, ok := m.GCPBlocks[pr]
 		if !ok {
 			return diag.Errorf("no default peer CIDR block found for %q region", pr)
 		}
@@ -226,6 +231,11 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 		p          *scylla.CloudProvider
 	)
 
+	m, err := c.Meta()
+	if err != nil {
+		return diag.Errorf("error reading metadata: %s", err)
+	}
+
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
 		return diag.Errorf("error reading cluster list: %s", err)
@@ -261,7 +271,7 @@ lookup:
 		return nil
 	}
 
-	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
+	if p = m.ProviderByID(cluster.CloudProviderID); p == nil {
 		return diag.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
