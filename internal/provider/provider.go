@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/url"
+	"os"
 	"runtime"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
@@ -15,28 +16,45 @@ import (
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-var defaultEndpoint = &url.URL{
-	Scheme: "https",
-	Host:   "api.cloud.scylladb.com",
+var defaultEndpoint = "https://api.cloud.scylladb.com"
+
+func envToken() string {
+	return os.Getenv("SCYLLADB_CLOUD_TOKEN")
 }
 
-func New(_ context.Context) (*schema.Provider, error) {
+func envEndpoint() string {
+	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
+}
+
+func New(context.Context) (*schema.Provider, error) {
 	p := &schema.Provider{
 		Schema: map[string]*schema.Schema{
 			"endpoint": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Default:     defaultEndpoint.String(),
+				Default:     nonempty(envEndpoint(), defaultEndpoint),
 				Description: "URL of the Scylla Cloud endpoint.",
 			},
 			"token": {
-				Type:        schema.TypeString,
-				Required:    true,
-				Sensitive:   true,
+				Type:      schema.TypeString,
+				Optional:  true,
+				Sensitive: true,
+				Default:   envToken(),
+				ValidateDiagFunc: func(v any, _ cty.Path) diag.Diagnostics {
+					if tok, ok := v.(string); !ok || tok == "" {
+						return diag.Diagnostics{{
+							Severity: diag.Error,
+							Summary:  "token is required",
+							Detail:   "A token must be provided to authenticate with the Scylla Cloud API.",
+						}}
+					}
+					return nil
+				},
 				Description: "Bearer token used to authenticate with the API.",
 			},
 		},
@@ -100,4 +118,14 @@ func userAgent(tfVersion string) string {
 	}
 
 	return "Terraform/0.11+compatible (" + sysinfo + ")"
+}
+
+func nonempty[T comparable](t ...T) T {
+	var zero T
+	for _, v := range t {
+		if v != zero {
+			return v
+		}
+	}
+	return zero
 }
