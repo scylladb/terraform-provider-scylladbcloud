@@ -56,7 +56,7 @@ type Client struct {
 	V2 *v2scylla.Client
 }
 
-func NewClient(endpoint, token, useragent string, ignoreMeta bool) (*Client, error) {
+func NewClient(endpoint, token, useragent string, metadata bool) (*Client, error) {
 	errCodes, err := parse(codes, codesDelim, codesFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse error codes: %w", err)
@@ -92,7 +92,7 @@ func NewClient(endpoint, token, useragent string, ignoreMeta bool) (*Client, err
 	c.Headers.Set("Accept", "application/json; charset=utf-8")
 	c.Headers.Set("User-Agent", useragent)
 
-	if !ignoreMeta {
+	if metadata {
 		if c.Meta, err = BuildCloudmeta(ctx, c); err != nil {
 			return nil, fmt.Errorf("error building metadata: %w", err)
 		}

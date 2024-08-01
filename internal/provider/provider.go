@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"runtime"
-	"strconv"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
@@ -28,12 +27,6 @@ func envToken() string {
 
 func envEndpoint() string {
 	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
-}
-
-func ignoreMeta() bool {
-	s := os.Getenv("SCYLLADB_CLOUD_IGNORE_META")
-	ok, _ := strconv.ParseBool(s)
-	return ok
 }
 
 func New(context.Context) (*schema.Provider, error) {
@@ -61,6 +54,12 @@ func New(context.Context) (*schema.Provider, error) {
 					return nil
 				},
 				Description: "Bearer token used to authenticate with the API.",
+			},
+			"metadata": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
+				Description: "Whether to preload deployment metadata for the provider.",
 			},
 		},
 
@@ -90,10 +89,10 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 	var (
 		endpoint = d.Get("endpoint").(string)
 		token    = d.Get("token").(string)
-		ignore   = ignoreMeta()
+		metadata = d.Get("metadata").(bool)
 	)
 
-	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), ignore)
+	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), metadata)
 	if err != nil {
 		return nil, diag.Errorf("could not create new Scylla client: %s", err)
 	}
