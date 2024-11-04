@@ -114,8 +114,6 @@ func sendStack(ctx context.Context, c *scylla.Client, s *model.Stack) (string, e
 
 	req := c.V2.Request(ctx, "POST", s, "/")
 
-	req.Header.Set("X-Scylla-Cloud-Stack-Flavor", "tf")
-
 	if err := c.V2.BasicSign(req, auth[0], []byte(auth[1])); err != nil {
 		return "", fmt.Errorf("failed to sign request: %w", err)
 	}
