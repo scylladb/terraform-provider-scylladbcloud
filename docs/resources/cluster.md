@@ -49,7 +49,7 @@ output "scylladbcloud_cluster_datacenter" {
 - `alternator_write_isolation` (String) Default write isolation policy
 - `byoa_id` (Number) BYOA credential ID (only for AWS)
 - `cidr_block` (String) IPv4 CIDR of the cluster
-- `cloud` (String) Cluster name
+- `cloud` (String) Cloud name
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
 - `node_disk_size` (Number) The disk size in gigabytes of the node
