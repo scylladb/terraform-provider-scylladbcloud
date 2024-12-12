@@ -190,7 +190,7 @@ func resourceClusterConnectionCreate(ctx context.Context, d *schema.ResourceData
 	d.SetId(strconv.FormatInt(conn.ID, 10))
 	err = waitForClusterConnection(ctx, c, int64(clusterID), conn.ID, "ACTIVE")
 	if err != nil {
-		return diag.Errorf(err.Error())
+		return diag.Errorf("%+v", err)
 	}
 	conn, err = c.GetClusterConnection(ctx, int64(clusterID), conn.ID)
 	if err != nil {
@@ -283,7 +283,7 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 	}
 	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, req.Status)
 	if err != nil {
-		return diag.Errorf(err.Error())
+		return diag.Errorf("%+v", err)
 	}
 
 	conn, err := c.GetClusterConnection(ctx, int64(clusterID), connID)
