@@ -30,7 +30,7 @@ jobs:
           gofmt-flags: '-l -d'
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.56.2
+          version: v1.62.2
       - run: go test -v -race ./...
   test-build:
     strategy:
