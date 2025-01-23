@@ -1,8 +1,8 @@
-/internal/provider/scylla/         @rjeczalik
-/internal/provider/stack/          @rjeczalik
-/internal/provider/allowlistrule/  @rjeczalik
-/internal/provider/cluster/        @rjeczalik @charconstpointer @ksinica
-/internal/provider/cqlauth/        @rjeczalik
-/internal/provider/serverless/     @rjeczalik
-/internal/provider/vpcpeering/     @rjeczalik
-/internal/provider/connection/     @dkropachev @charconstpointer
+/internal/provider/scylla/         @charconstpointer
+/internal/provider/stack/          @charconstpointer
+/internal/provider/allowlistrule/  @charconstpointer
+/internal/provider/cluster/        @charconstpointer @ksinica
+/internal/provider/cqlauth/        @charconstpointer
+/internal/provider/serverless/     @charconstpointer
+/internal/provider/vpcpeering/     @charconstpointer
+/internal/provider/connection/     @charconstpointer
