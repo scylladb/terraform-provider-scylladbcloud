@@ -85,7 +85,6 @@ type ClusterRequest struct {
 	ProgressPercent     int64  `json:"progressPercent"`
 	ProgressDescription string `json:"progressDescription"`
 	ClusterID           int64  `json:"clusterID"`
-	UserFriendlyError   string `json:"userFriendlyError"`
 	Status              string `json:"status"`
 }
 
