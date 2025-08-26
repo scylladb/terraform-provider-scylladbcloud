@@ -16,3 +16,7 @@ output "scylladbcloud_cql_password" {
     sensitive = true
 	value = data.scylladbcloud_cql_auth.example.password
 }
+
+output "scylladbcloud_cql_cluster_name" {
+  value = data.scylladbcloud_cql_auth.example.cluster_name
+}
