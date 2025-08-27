@@ -10,7 +10,7 @@ The provider is using [Scylla Cloud REST API](https://cloud.docs.scylladb.com/st
 * Terrafrom 0.13+
 * Go 1.18 (to build the provider plugin)
 * [Scylla Cloud](https://cloud.scylladb.com/) Account
-* [Scylla Cloud API Token](https://cloud.docs.scylladb.com/stable/api-docs/api-get-started.html#obtaining-an-api-key-beta)
+* [Scylla Cloud API Token](https://cloud.docs.scylladb.com/stable/api-docs/create-api-token.html)
 
 ### Provider configuration
 
