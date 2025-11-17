@@ -210,10 +210,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if byoaOK {
 		r.AccountCredentialID = int64(byoa.(int))
-
-		if !strings.EqualFold(cloud, "AWS") {
-			return diag.Errorf(`setting "byoa_id" attribute is not supported for cloud=%q`, cloud)
-		}
 	}
 
 	if !cidrOK {
