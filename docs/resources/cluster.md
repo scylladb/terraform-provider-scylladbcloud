@@ -47,7 +47,7 @@ output "scylladbcloud_cluster_datacenter" {
 ### Optional
 
 - `alternator_write_isolation` (String) Default write isolation policy
-- `byoa_id` (Number) BYOA credential ID (only for AWS)
+- `byoa_id` (Number) BYOA credential ID
 - `cidr_block` (String) IPv4 CIDR of the cluster
 - `cloud` (String) Cloud name
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
