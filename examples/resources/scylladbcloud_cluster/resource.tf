@@ -9,6 +9,12 @@ resource "scylladbcloud_cluster" "example" {
 
 	enable_vpc_peering = true
 	enable_dns         = true
+	
+	# Enable encryption at rest (AWS only)
+	encryption_at_rest = true
+	
+	# Replication factor (default is 3)
+	replication_factor = 3
 }
 
 output "scylladbcloud_cluster_id" {

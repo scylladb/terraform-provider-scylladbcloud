@@ -175,6 +175,20 @@ func ResourceCluster() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
+			"encryption_at_rest": {
+				Description: "Enable encryption at rest (only supported for AWS)",
+				ForceNew:    true,
+				Optional:    true,
+				Type:        schema.TypeBool,
+				Default:     false,
+			},
+			"replication_factor": {
+				Description: "Replication factor for the cluster",
+				Optional:    true,
+				ForceNew:    true,
+				Type:        schema.TypeInt,
+				Default:     3,
+			},
 		},
 	}
 }
@@ -185,7 +199,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		r = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
-			ReplicationFactor:    3,
+			ReplicationFactor:    int64(d.Get("replication_factor").(int)),
 			NumberOfNodes:        int64(d.Get("node_count").(int)),
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
@@ -198,7 +212,13 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		version, versionOK           = d.GetOk("scylla_version")
 		enableVpcPeering             = d.Get("enable_vpc_peering").(bool)
 		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
+		encryptionAtRest             = d.Get("encryption_at_rest").(bool)
 	)
+
+	// Validate encryption_at_rest is only used with AWS
+	if encryptionAtRest && !strings.EqualFold(cloud, "AWS") {
+		return diag.Errorf("encryption_at_rest is only supported for AWS cloud provider")
+	}
 
 	if !enableVpcPeering {
 		r.BroadcastType = "PUBLIC"
@@ -255,6 +275,13 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		r.ScyllaVersionID = mv.VersionID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
+	}
+
+	// Set encryption at rest if enabled
+	if encryptionAtRest {
+		r.EncryptionAtRest = &model.EncryptionAtRest{
+			Provider: "scylla-aws",
+		}
 	}
 
 	cr, err := c.CreateCluster(ctx, r)
@@ -375,6 +402,14 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	if cluster.Instance != nil {
 		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
 	}
+
+	if cluster.EncryptionAtRest != nil && cluster.EncryptionAtRest.Provider == "scylla-aws" {
+		_ = d.Set("encryption_at_rest", true)
+	} else {
+		_ = d.Set("encryption_at_rest", false)
+	}
+
+	_ = d.Set("replication_factor", cluster.ReplicationFactor)
 
 	return nil
 }
