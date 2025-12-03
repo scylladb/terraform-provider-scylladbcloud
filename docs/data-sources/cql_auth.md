@@ -49,6 +49,7 @@ output "scylladbcloud_cql_password" {
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+- `cluster_name` (String) The name of the cluster
 - `password` (String, Sensitive) CQL password
 - `seeds` (String) Comma-separate seed node addresses
 - `username` (String) CQL username
