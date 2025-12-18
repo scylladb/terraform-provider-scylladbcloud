@@ -1,5 +1,6 @@
-# binary
+# Binaries
 terraform-provider-scylladbcloud
+/dist
 
 # editor config
 .vscode
