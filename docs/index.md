@@ -47,6 +47,13 @@ Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environ
 
 - `endpoint` (String) URL of the Scylla Cloud endpoint.
 
+## Limitation
+
+The provider deletes and recreates the cluster:
+
+* When scaling up or down.
+* If the ``node_type`` property is changed.
+
 ## Useful Links
 
 [Reporting bugs or feature requests](https://github.com/scylladb/terraform-provider-scylladbcloud/issues)
