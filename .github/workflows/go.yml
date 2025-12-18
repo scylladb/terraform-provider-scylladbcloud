@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     name: lint
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -28,10 +28,9 @@ jobs:
         with:
           gofmt-path: './'
           gofmt-flags: '-l -d'
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.62.2
-      - run: go test -v -race ./...
+          version: v2.7
   test-build:
     strategy:
       matrix:
@@ -41,8 +40,8 @@ jobs:
     needs: lint
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
       - run: |
