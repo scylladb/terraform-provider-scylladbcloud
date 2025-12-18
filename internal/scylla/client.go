@@ -169,11 +169,11 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var (
 		buf  bytes.Buffer
-		body io.Reader = io.TeeReader(
+		body = io.TeeReader(
 			io.LimitReader(resp.Body, maxResponseBodyLength),
 			&buf,
 		)
