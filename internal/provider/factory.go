@@ -13,7 +13,6 @@ import (
 // The primary (Plugin SDK) provider server is also returned (useful for testing).
 func ProtoV5ProviderServerFactory(ctx context.Context) (func() tfprotov5.ProviderServer, *schema.Provider, error) {
 	primary, err := New(ctx)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -23,7 +22,6 @@ func ProtoV5ProviderServerFactory(ctx context.Context) (func() tfprotov5.Provide
 	}
 
 	muxServer, err := tf5muxserver.NewMuxServer(ctx, servers...)
-
 	if err != nil {
 		return nil, nil, err
 	}
