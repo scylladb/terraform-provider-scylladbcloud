@@ -8,8 +8,10 @@ import (
 
 const endpointContextKey = "endpoint"
 
-const methodContextKey = "method"
-const apiPathContextKey = "path"
+const (
+	methodContextKey  = "method"
+	apiPathContextKey = "path"
+)
 
 func AddProviderInfo(ctx context.Context, endpoint string) context.Context {
 	return tflog.SetField(ctx, endpointContextKey, endpoint)

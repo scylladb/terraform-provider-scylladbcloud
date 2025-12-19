@@ -11,14 +11,13 @@ import (
 )
 
 // Generate the Terraform provider documentation using `tfplugindocs`:
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate --examples-dir ./examples --website-source-dir ./templates
+//go:generate go tool tfplugindocs generate --rendered-provider-name "ScyllaDB Cloud" --examples-dir ./examples --website-source-dir ./templates
 
 func main() {
 	debugFlag := flag.Bool("debug", false, "Start provider in debug mode.")
 	flag.Parse()
 
 	serverFactory, _, err := provider.ProtoV5ProviderServerFactory(context.Background())
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,7 +37,6 @@ func main() {
 		serverFactory,
 		serveOpts...,
 	)
-
 	if err != nil {
 		log.Fatal(err)
 	}
