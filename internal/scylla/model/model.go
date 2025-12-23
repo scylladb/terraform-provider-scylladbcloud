@@ -17,7 +17,7 @@ type CloudProviders struct {
 }
 
 type ScyllaVersion struct {
-	VersionID   int64  `json:"id"`
+	VersionID   int64  `json:"versionId"`
 	Version     string `json:"version"`
 	Description string `json:"description"`
 	NewCluster  string `json:"newCluster"`
@@ -117,8 +117,8 @@ type Cluster struct {
 	ClusterName         string                 `json:"clusterName"`
 	Status              string                 `json:"status"`
 	InstanceID          int64                  `json:"instanceId"`
-	CloudProviderID     int64                  `json:"cloudProviderID"`
-	ScyllaVersionID     int64                  `json:"scyllaVersionID"`
+	CloudProviderID     int64                  `json:"cloudProviderId"`
+	ScyllaVersionID     int64                  `json:"scyllaVersionId"`
 	UserAPIInterface    string                 `json:"userApiInterface"`
 	PricingModel        int64                  `json:"pricingModel"`
 	MaxAllowedCIDRRange int64                  `json:"maxAllowedCidrRange"`
