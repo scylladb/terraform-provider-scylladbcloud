@@ -47,12 +47,12 @@ Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environ
 
 - `endpoint` (String) URL of the Scylla Cloud endpoint.
 
-## Limitation
+## Limitations
 
 The provider deletes and recreates the cluster:
 
 * When scaling up or down.
-* If the ``node_type`` property is changed.
+* If the `node_type` property is changed.
 
 ## Useful Links
 
