@@ -5,10 +5,12 @@ updates:
   schedule:
     interval: weekly
   assignees:
-  - rjeczalik
+  - charconstpointer
+  - adambabik
 - package-ecosystem: gomod
   directory: /
   schedule:
     interval: weekly
   assignees:
-  - rjeczalik
+  - charconstpointer
+  - adambabik
