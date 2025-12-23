@@ -123,9 +123,8 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 		return nil, err
 	}
 
-	req.Header = c.Headers
+	req.Header = c.Headers.Clone()
 	if body != nil {
-		req.Header = req.Header.Clone()
 		req.Header.Add("Content-Type", "application/json;charset=utf-8")
 	}
 
@@ -134,11 +133,11 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 			return nil, errors.New("odd number of query arguments")
 		}
 
+		q := req.URL.Query()
 		for i := 0; i < len(query); i += 2 {
-			q := req.URL.Query()
 			q.Set(query[i], query[i+1])
-			req.URL.RawQuery = q.Encode()
 		}
+		req.URL.RawQuery = q.Encode()
 	}
 
 	tflog.Trace(ctx, "api call prepared: "+req.Method+" "+req.URL.String(), map[string]interface{}{
@@ -150,9 +149,9 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	return req, nil
 }
 
-func (c *Client) retryCall(ctx context.Context, mathod, path string, reqBody, resType interface{}, query ...string) error {
+func (c *Client) retryCall(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
 	return c.Retry.RunCtx(ctx, func(ctx context.Context) error {
-		return c.call(ctx, mathod, path, reqBody, resType, query...)
+		return c.call(ctx, method, path, reqBody, resType, query...)
 	})
 }
 
