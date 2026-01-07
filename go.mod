@@ -91,6 +91,6 @@ require (
 )
 
 tool (
-	github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
-	mvdan.cc/gofumpt
+	github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
+	mvdan.cc/gofumpt@v0.9.2
 )
