@@ -333,9 +333,9 @@ func fix_sf3112(c *model.ClusterConnectionInformation) {
 }
 
 func nonempty(s []string) (f []string) {
-	for _, s := range s {
-		if s != "" {
-			f = append(f, s)
+	for _, str := range s {
+		if str != "" {
+			f = append(f, str)
 		}
 	}
 
