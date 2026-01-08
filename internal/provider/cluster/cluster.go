@@ -181,8 +181,8 @@ func ResourceCluster() *schema.Resource {
 
 func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c = meta.(*scylla.Client)
-		r = &model.ClusterCreateRequest{
+		scyllaClient         = meta.(*scylla.Client)
+		clusterCreateRequest = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
 			ReplicationFactor:    3,
@@ -201,15 +201,15 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	)
 
 	if !enableVpcPeering {
-		r.BroadcastType = "PUBLIC"
+		clusterCreateRequest.BroadcastType = "PUBLIC"
 	}
 
-	if r.UserAPIInterface == "ALTERNATOR" {
-		r.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
+	if clusterCreateRequest.UserAPIInterface == "ALTERNATOR" {
+		clusterCreateRequest.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
 	}
 
 	if byoaOK {
-		r.AccountCredentialID = int64(byoa.(int))
+		clusterCreateRequest.AccountCredentialID = int64(byoa.(int))
 	}
 
 	if !cidrOK {
@@ -217,24 +217,30 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		_ = d.Set("cidr_block", cidr)
 	}
 
-	p := c.Meta.ProviderByName(cloud)
-	if p == nil {
+	cloudProvider := scyllaClient.Meta.ProviderByName(cloud)
+	if cloudProvider == nil {
 		return diag.Errorf(`unrecognized value %q for "cloud" attribute`, cloud)
 	}
 
-	r.CidrBlock = cidr.(string)
+	clusterCreateRequest.CidrBlock = cidr.(string)
 
-	r.CloudProviderID = p.CloudProvider.ID
+	clusterCreateRequest.CloudProviderID = cloudProvider.CloudProvider.ID
 
-	if mr := p.RegionByName(region); mr != nil {
-		r.RegionID = mr.ID
+	mr := cloudProvider.RegionByName(region)
+	if mr != nil {
+		clusterCreateRequest.RegionID = mr.ID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "region" attribute`, region)
 	}
 
+	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cloudProvider.CloudProvider.ID, mr.ID)
+	if err != nil {
+		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
+	}
+
 	var mi *model.CloudProviderInstance
 	if nodeDiskSizeOK {
-		if mi = p.InstanceByNameAndDiskSize(nodeType, nodeDiskSize.(int)); mi == nil {
+		if mi = cloudProvider.InstanceByNameAndDiskSizeFromInstances(nodeType, nodeDiskSize.(int), instances); mi == nil {
 			return diag.Errorf(
 				`unrecognized value combination: %q for "node_type" and %d for "node_disk_size" attributes`,
 				nodeType,
@@ -242,41 +248,41 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			)
 		}
 	} else {
-		if mi = p.InstanceByName(nodeType); mi == nil {
+		if mi = cloudProvider.InstanceByNameFromInstances(nodeType, instances); mi == nil {
 			return diag.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
 		}
 	}
 
-	r.InstanceID = mi.ID
+	clusterCreateRequest.InstanceID = mi.ID
 
 	if !versionOK {
-		r.ScyllaVersionID = c.Meta.ScyllaVersions.DefaultScyllaVersionID
-	} else if mv := c.Meta.VersionByName(version.(string)); mv != nil {
-		r.ScyllaVersionID = mv.VersionID
+		clusterCreateRequest.ScyllaVersionID = scyllaClient.Meta.ScyllaVersions.DefaultScyllaVersionID
+	} else if mv := scyllaClient.Meta.VersionByName(version.(string)); mv != nil {
+		clusterCreateRequest.ScyllaVersionID = mv.VersionID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
 	}
 
-	cr, err := c.CreateCluster(ctx, r)
+	cr, err := scyllaClient.CreateCluster(ctx, clusterCreateRequest)
 	if err != nil {
 		return diag.Errorf("error creating cluster: %s", err)
 	}
 
-	if err := WaitForCluster(ctx, c, cr.ID); err != nil {
+	if err := WaitForCluster(ctx, scyllaClient, cr.ID); err != nil {
 		return diag.Errorf("error waiting for cluster: %s", err)
 	}
 
-	cluster, err := c.GetCluster(ctx, cr.ClusterID)
+	cluster, err := scyllaClient.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
 		return diag.Errorf("error reading cluster: %s", err)
 	}
 
-	i := p.InstanceByID(cluster.Datacenter.InstanceID)
+	i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 	if i == nil {
 		return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
 	}
 
-	err = setClusterKVs(d, cluster, p.CloudProvider.Name, i.ExternalID)
+	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, i.ExternalID)
 	if err != nil {
 		return diag.Errorf("error setting cluster values: %s", err)
 	}
@@ -288,14 +294,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 }
 
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	c := meta.(*scylla.Client)
+	scyllaClient := meta.(*scylla.Client)
 
 	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
 	if err != nil {
 		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
-	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
+	reqs, err := scyllaClient.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
 	switch {
 	case scylla.IsDeletedErr(err):
 		_ = d.Set("status", "DELETED")
@@ -308,12 +314,12 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := WaitForCluster(ctx, c, reqs[0].ID); err != nil {
+		if err := WaitForCluster(ctx, scyllaClient, reqs[0].ID); err != nil {
 			return diag.Errorf("error waiting for cluster: %s", err)
 		}
 	}
 
-	cluster, err := c.GetCluster(ctx, clusterID)
+	cluster, err := scyllaClient.GetCluster(ctx, clusterID)
 	if err != nil {
 		if scylla.IsClusterDeletedErr(err) {
 			d.SetId("")
@@ -322,7 +328,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("error reading cluster: %s", err)
 	}
 
-	p := c.Meta.ProviderByID(cluster.CloudProviderID)
+	p := scyllaClient.Meta.ProviderByID(cluster.CloudProviderID)
 	if p == nil {
 		return diag.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
 	}
@@ -333,7 +339,12 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 	var instanceExternalID string
 	if cluster.Datacenter.InstanceID != 0 {
-		i := p.InstanceByID(cluster.Datacenter.InstanceID)
+		instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
+		if err != nil {
+			return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
+		}
+
+		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
 			return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
 		}
@@ -439,9 +450,10 @@ func WaitForCluster(ctx context.Context, c *scylla.Client, requestID int64) erro
 
 func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta any) (map[string]any, error) {
 	var (
-		c                    = meta.(*scylla.Client)
+		scyllaClient         = meta.(*scylla.Client)
 		cloud, cloudOK       = rawState["cloud"].(string)
 		nodeType, nodeTypeOK = rawState["node_type"].(string)
+		region, regionOK     = rawState["region"].(string)
 	)
 
 	if !cloudOK {
@@ -452,14 +464,28 @@ func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta
 		return nil, fmt.Errorf(`"node_type" is undefined`)
 	}
 
-	p := c.Meta.ProviderByName(cloud)
+	if !regionOK {
+		return nil, fmt.Errorf(`"region" is undefined`)
+	}
+
+	p := scyllaClient.Meta.ProviderByName(cloud)
 	if p == nil {
 		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
 	}
 
-	mi := p.InstanceByName(nodeType)
+	mr := p.RegionByName(region)
+	if mr == nil {
+		return nil, fmt.Errorf(`unrecognized value %q for "region"`, region)
+	}
+
+	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, p.CloudProvider.ID, mr.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
+	}
+
+	mi := p.InstanceByNameFromInstances(nodeType, instances)
 	if mi == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, cloud)
+		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, nodeType)
 	}
 
 	rawState["node_disk_size"] = int(mi.TotalStorage)
