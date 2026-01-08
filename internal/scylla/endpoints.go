@@ -322,7 +322,7 @@ func (c *Client) DeleteClusterConnection(ctx context.Context, clusterID, connect
 	return c.delete(ctx, path)
 }
 
-func fix_sf3112(c *model.ClusterConnectionInformation) {
+func fixSF3112(c *model.ClusterConnectionInformation) {
 	for i := range c.Datacenters {
 		dc := &c.Datacenters[i]
 
