@@ -87,7 +87,7 @@ func (c *Client) Connect(ctx context.Context, clusterID int64) (*model.ClusterCo
 		return nil, err
 	}
 
-	fix_sf3112(&result) // TODO(rjeczalik): remove when scylladb/siren-frontend#3112 gets fixed
+	fixSF3112(&result) // TODO(rjeczalik): remove when scylladb/siren-frontend#3112 gets fixed
 
 	return &result, nil
 }
