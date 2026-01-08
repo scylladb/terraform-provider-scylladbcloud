@@ -22,24 +22,17 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
       - run: go build -v ./...
-      # TODO(rjeczalik): Remove (#104)
-      - uses: scylladb/goimports-action@v1.0.3
-        with:
-          goimports-path: './'
-      # TODO(rjeczalik): Remove (#104)
-      - uses: scylladb/gofmt-action@v1.0.5
-        with:
-          gofmt-path: './'
-          gofmt-flags: '-l -d'
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.7
-  test-build:
+          install-only: true
+      - run: make lint
+  test-and-build:
     strategy:
       matrix:
         go: [ "stable" ]
         os: [ macos-latest, windows-latest, ubuntu-latest ]
-    name: test-build
+    name: test-and-build
     needs: lint
     runs-on: ${{ matrix.os }}
     steps:
