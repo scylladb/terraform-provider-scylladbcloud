@@ -25,6 +25,7 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.7
+          install-only: true
       - run: make lint
   test-and-build:
     strategy:
