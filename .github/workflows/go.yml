@@ -21,7 +21,7 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
-      - run: go build -v ./...
+      - run: make build
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.7
@@ -41,5 +41,5 @@ jobs:
         with:
           go-version: stable
       - run: |
-          go build -v ./...
-          go test -v -race ./...
+          make build
+          make test

@@ -12,10 +12,7 @@ import (
 // This factory function is suitable for use with the terraform-plugin-go Serve function.
 // The primary (Plugin SDK) provider server is also returned (useful for testing).
 func ProtoV5ProviderServerFactory(ctx context.Context) (func() tfprotov5.ProviderServer, *schema.Provider, error) {
-	primary, err := New(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+	primary := New(ctx)
 
 	servers := []func() tfprotov5.ProviderServer{
 		primary.GRPCProvider,

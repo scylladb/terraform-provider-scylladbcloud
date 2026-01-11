@@ -13,8 +13,6 @@ func TestParseCodes(t *testing.T) {
 	if len(m) == 0 {
 		t.Fatalf("want len(m) != %d, got %d", 0, len(m))
 	}
-
-	t.Log(m)
 }
 
 func TestParseCIDRBlocks(t *testing.T) {
@@ -26,6 +24,4 @@ func TestParseCIDRBlocks(t *testing.T) {
 	if len(m) == 0 {
 		t.Fatalf("want len(m) != %d, got %d", 0, len(m))
 	}
-
-	t.Log(m)
 }
