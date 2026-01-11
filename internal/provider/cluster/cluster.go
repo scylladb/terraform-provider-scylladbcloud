@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -238,6 +239,12 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
 	}
 
+	tflog.Debug(ctx, "Listing cloud provider instances", map[string]interface{}{
+		"cloud_provider_id": cloudProvider.CloudProvider.ID,
+		"region_id":         mr.ID,
+		"instances":         instances,
+	})
+
 	var mi *model.CloudProviderInstance
 	if nodeDiskSizeOK {
 		if mi = cloudProvider.InstanceByNameAndDiskSizeFromInstances(nodeType, nodeDiskSize.(int), instances); mi == nil {
@@ -249,7 +256,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		}
 	} else {
 		if mi = cloudProvider.InstanceByNameFromInstances(nodeType, instances); mi == nil {
-			return diag.Errorf(`unrecognized value %q for "node_type" attribute`, nodeType)
+			return diag.Errorf(`unsupported node_type %q in region %s`, nodeType, mr.ExternalID)
 		}
 	}
 

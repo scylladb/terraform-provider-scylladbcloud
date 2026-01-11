@@ -29,7 +29,7 @@ func envEndpoint() string {
 	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
 }
 
-func New(context.Context) (*schema.Provider, error) {
+func New(context.Context) *schema.Provider {
 	p := &schema.Provider{
 		Schema: map[string]*schema.Schema{
 			"endpoint": {
@@ -82,7 +82,7 @@ func New(context.Context) (*schema.Provider, error) {
 		return configure(ctx, p, d)
 	}
 
-	return p, nil
+	return p
 }
 
 func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) (*scylla.Client, diag.Diagnostics) {
