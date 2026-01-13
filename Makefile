@@ -1,5 +1,3 @@
-SHELL:=/bin/bash
-
 GOPATH?=$(shell go env GOPATH)
 
 build:
