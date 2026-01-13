@@ -26,6 +26,7 @@ jobs:
         with:
           version: v2.7
           install-only: true
+      - run: go tool -sync
       - run: make lint
   test-and-build:
     strategy:
