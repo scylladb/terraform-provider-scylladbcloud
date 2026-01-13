@@ -97,3 +97,7 @@ tool (
 	github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
 	mvdan.cc/gofumpt
 )
+
+ignore (
+	.git
+)

@@ -15,9 +15,9 @@ lint: $(GOPATH)/bin/golangci-lint
 
 # Install golangci-lint following https://golangci-lint.run/docs/welcome/install/local/.
 # go tool is not recommended.
-# Pin to specific commit SHA (instead of mutable HEAD) for supply-chain security.
+# Pin to specific commit SHA aligned with the requested version.
 # The install.sh script performs checksum verification of the downloaded binary.
 $(GOPATH)/bin/golangci-lint:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/3a6eaa424b519c8f0b6376c9a4006934c4aac72a/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/9f61b0f53f80672872fced07b6874397c3ed197b/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
 
 .PHONY: build fmt generate lint
