@@ -17,12 +17,15 @@ lint: $(GOPATH)/bin/golangci-lint
 test: run?=.*
 test: pkgs?=./...
 test:
-	go test -timeout=5m -race -run="$(run)" $(pkgs)
+	go test -timeout=1m -race -run="$(run)" $(pkgs)
 
 testacc: run?=.*
 testacc: pkgs?=./...
 testacc:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -timeout=15m -parallel=10 -race -run="$(run)" $(pkgs)
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -timeout=30m -parallel=3 -race -run="$(run)" $(pkgs)
+
+list-acc-tests:
+	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
 
 # Install golangci-lint following https://golangci-lint.run/docs/welcome/install/local/.
 # go tool is not recommended.

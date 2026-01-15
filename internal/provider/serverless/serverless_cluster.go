@@ -132,7 +132,7 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error creating serverless cluster: %s", err)
 	}
 
-	if err := cluster.WaitForCluster(ctx, c, cr.ID); err != nil {
+	if err := cluster.WaitForClusterRequestID(ctx, c, cr.ID); err != nil {
 		return diag.Errorf("error waiting for serverless cluster: %s", err)
 	}
 
@@ -155,7 +155,11 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
-	reqs, err := c.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
+	reqs, err := c.ListClusterRequest(
+		ctx,
+		clusterID,
+		scylla.ListClusterRequestParams{Type: "CREATE_CLUSTER"},
+	)
 	switch {
 	case scylla.IsDeletedErr(err):
 		_ = d.Set("status", "DELETED")
@@ -168,7 +172,7 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := cluster.WaitForCluster(ctx, c, reqs[0].ID); err != nil {
+		if err := cluster.WaitForClusterRequestID(ctx, c, reqs[0].ID); err != nil {
 			return diag.Errorf("error waiting for serverless cluster: %s", err)
 		}
 	}
@@ -209,7 +213,7 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {
-		return diag.Errorf("delete request failure, cluster request id: %q", r.ID)
+		return diag.Errorf("delete request failure, cluster request id: %d", r.ID)
 	}
 
 	return nil
