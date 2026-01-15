@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -10,8 +11,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	sdkterraform "github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/compare"
+	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"github.com/pkg/errors"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
@@ -36,72 +43,146 @@ func protoV5ProviderFactoriesInit(ctx context.Context) map[string]func() (tfprot
 
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:     func() { testAccPreCheck(t) },
+		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: `resource "scylladbcloud_cluster" "basic-aws" {
-  name       = "basic-aws"
+				ProtoV5ProviderFactories: protoV5ProviderFactories,
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
   cloud      = "AWS"
   region     = "us-east-1"
   node_type  = "i3.large"
-  node_count = 3
+  min_nodes  = 3
   cidr_block = "10.0.1.0/24"
   enable_dns = true
-}`,
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.basic-aws", &cluster),
-					resource.TestCheckResourceAttr("scylladbcloud_cluster.basic-aws", "name", "basic-aws"),
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
+			// Test scale-out scenario.
 			{
-				Config: `resource "scylladbcloud_cluster" "basic-aws" {
-  name       = "basic-aws"
+				ProtoV5ProviderFactories: protoV5ProviderFactories,
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
   cloud      = "AWS"
   region     = "us-east-1"
   node_type  = "i3.large"
-  node_count = 6
+  min_nodes  = 6
   cidr_block = "10.0.1.0/24"
   enable_dns = true
-}`,
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterNodeCountUpdate(ctx, "scylladbcloud_cluster.basic-aws", 6, &cluster),
-					resource.TestCheckResourceAttr("scylladbcloud_cluster.basic-aws", "name", "basic-aws"),
-				),
+}`, resourceName),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectNonEmptyPlan(),
+						plancheck.ExpectResourceAction("scylladbcloud_cluster.test", plancheck.ResourceActionUpdate),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.CompareValue(compare.ValuesSame()).AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("cluster_id"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(6),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(6),
+					),
+				},
 			},
 		},
 	})
 }
 
-func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
+func TestAccScyllaDBCloudCluster_basicAWSMigrationV1ToV2(t *testing.T) {
 	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:     func() { testAccPreCheck(t) },
+		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: `resource "scylladbcloud_cluster" "basic-gcp" {
-  name       = "basic-gcp"
-  cloud      = "GCP"
-  region     = "us-central1"
-  node_type  = "n2d-highmem-2"
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"scylladbcloud": {
+						// 1.9 is the last version that uses the v1 schema
+						// that is node_count instead of min_nodes.
+						VersionConstraint: "1.9",
+						Source:            "scylladb/scylladbcloud",
+					},
+				},
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
   node_count = 3
   cidr_block = "10.0.1.0/24"
   enable_dns = true
-}`,
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.basic-gcp", &cluster),
-					resource.TestCheckResourceAttr("scylladbcloud_cluster.basic-gcp", "name", "basic-gcp"),
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
 				),
+			},
+			{
+				ProtoV5ProviderFactories: protoV5ProviderFactories,
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.CompareValue(compare.ValuesSame()).AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+				},
 			},
 		},
 	})
@@ -109,6 +190,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-gcp-byoa")
 
 	var cluster model.Cluster
 
@@ -118,19 +200,30 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: `resource "scylladbcloud_cluster" "basic-gcp-byoa" {
-  name       = "basic-gcp-byoa"
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
   cloud      = "GCP"
   region     = "us-central1"
   node_type  = "n2d-highmem-2"
-  node_count = 3
+  min_nodes  = 3
   cidr_block = "10.0.1.0/24"
   enable_dns = true
-  byoa_id    = "18829"
-}`,
+  byoa_id    = "18829" // TODO: make configurable via env var
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.basic-gcp-byoa", &cluster),
-					resource.TestCheckResourceAttr("scylladbcloud_cluster.basic-gcp-byoa", "name", "basic-gcp-byoa"),
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
