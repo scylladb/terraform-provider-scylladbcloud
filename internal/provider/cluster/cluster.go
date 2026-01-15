@@ -10,17 +10,16 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 const (
-	clusterRetryTimeout    = 40 * time.Minute
-	clusterDeleteTimeout   = 90 * time.Minute
-	clusterRetryDelay      = 5 * time.Second
-	clusterRetryMinTimeout = 15 * time.Second
-	clusterPollInterval    = 10 * time.Second
+	clusterRetryTimeout  = 40 * time.Minute
+	clusterDeleteTimeout = 90 * time.Minute
+	clusterPollInterval  = 10 * time.Second
 )
 
 func ResourceCluster() *schema.Resource {
@@ -40,13 +39,18 @@ func ResourceCluster() *schema.Resource {
 			Delete: schema.DefaultTimeout(clusterDeleteTimeout),
 		},
 
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 
 		StateUpgraders: []schema.StateUpgrader{
 			{
 				Version: 0,
 				Type:    resourceClusterV0().CoreConfigSchema().ImpliedType(),
 				Upgrade: resourceClusterUpgradeV0,
+			},
+			{
+				Version: 1,
+				Type:    resourceClusterV1().CoreConfigSchema().ImpliedType(),
+				Upgrade: resourceClusterUpgradeV1,
 			},
 		},
 
@@ -57,7 +61,7 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"cloud": {
-				Description: "Cluster name",
+				Description: "Cloud provider (AWS, GCP)",
 				Optional:    true,
 				ForceNew:    true,
 				Default:     "AWS",
@@ -76,10 +80,24 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"node_count": {
-				Description: "Node count",
-				Required:    true,
-				ForceNew:    true,
+				Description: "Current node count (computed)",
+				Computed:    true,
 				Type:        schema.TypeInt,
+			},
+			"min_nodes": {
+				Description: "Minimum number of nodes",
+				Required:    true,
+				Type:        schema.TypeInt,
+				ValidateDiagFunc: func(v interface{}, path cty.Path) diag.Diagnostics {
+					value := v.(int)
+					if value < 3 {
+						return diag.Errorf("min_nodes must be at least 3, got %d", value)
+					}
+					if value%3 != 0 {
+						return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+					}
+					return nil
+				},
 			},
 			"byoa_id": {
 				Description: "BYOA credential ID (only for AWS)",
@@ -187,7 +205,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
 			ReplicationFactor:    3,
-			NumberOfNodes:        int64(d.Get("node_count").(int)),
+			NumberOfNodes:        int64(d.Get("min_nodes").(int)),
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 		}
@@ -239,12 +257,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
 	}
 
-	tflog.Debug(ctx, "Listing cloud provider instances", map[string]interface{}{
-		"cloud_provider_id": cloudProvider.CloudProvider.ID,
-		"region_id":         mr.ID,
-		"instances":         instances,
-	})
-
 	var mi *model.CloudProviderInstance
 	if nodeDiskSizeOK {
 		if mi = cloudProvider.InstanceByNameAndDiskSizeFromInstances(nodeType, nodeDiskSize.(int), instances); mi == nil {
@@ -272,26 +284,26 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	cr, err := scyllaClient.CreateCluster(ctx, clusterCreateRequest)
 	if err != nil {
-		return diag.Errorf("error creating cluster: %s", err)
+		return diag.Errorf("failed to create a cluster request: %s", err)
 	}
 
-	if err := WaitForCluster(ctx, scyllaClient, cr.ID); err != nil {
-		return diag.Errorf("error waiting for cluster: %s", err)
+	if err := WaitForClusterRequestID(ctx, scyllaClient, cr.ID); err != nil {
+		return diag.Errorf("failed to wait for request %d creating cluster %d: %s", cr.ID, cr.ClusterID, err)
 	}
 
 	cluster, err := scyllaClient.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
-		return diag.Errorf("error reading cluster: %s", err)
+		return diag.Errorf("failed to read cluster %d: %s", cr.ClusterID, err)
 	}
 
 	i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 	if i == nil {
-		return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
+		return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
 	}
 
 	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, i.ExternalID)
 	if err != nil {
-		return diag.Errorf("error setting cluster values: %s", err)
+		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
@@ -303,26 +315,30 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
 
-	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err != nil {
-		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
 	}
 
-	reqs, err := scyllaClient.ListClusterRequest(ctx, clusterID, "CREATE_CLUSTER")
+	reqs, err := scyllaClient.ListClusterRequest(
+		ctx,
+		clusterID,
+		scylla.ListClusterRequestParams{Type: "CREATE_CLUSTER"},
+	)
 	switch {
 	case scylla.IsDeletedErr(err):
 		_ = d.Set("status", "DELETED")
 		return nil
 	case err != nil:
-		return diag.Errorf("error reading cluster request: %s", err)
+		return diag.Errorf("failed to list cluster requests for cluster %d: %s", clusterID, err)
 	case len(reqs) != 1:
-		return diag.Errorf("unexpected number of cluster requests, expected 1, got: %+v", reqs)
+		return diag.Errorf("unexpected number of cluster requests; expected 1, got %d: %+v", len(reqs), reqs)
 	}
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := WaitForCluster(ctx, scyllaClient, reqs[0].ID); err != nil {
-			return diag.Errorf("error waiting for cluster: %s", err)
+		if err := WaitForClusterRequestID(ctx, scyllaClient, reqs[0].ID); err != nil {
+			return diag.Errorf("failed to wait for cluster request %d: %s", reqs[0].ID, err)
 		}
 	}
 
@@ -332,16 +348,16 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 			d.SetId("")
 			return nil // cluster was deleted
 		}
-		return diag.Errorf("error reading cluster: %s", err)
+		return diag.Errorf("failed to read cluster %d: %s", clusterID, err)
 	}
 
 	p := scyllaClient.Meta.ProviderByID(cluster.CloudProviderID)
 	if p == nil {
-		return diag.Errorf("unexpected cloud provider ID: %d", cluster.CloudProviderID)
+		return diag.Errorf("unexpected cloud provider %d for cluster %d", cluster.CloudProviderID, cluster.ID)
 	}
 
 	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported: %d", n)
+		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	var instanceExternalID string
@@ -353,13 +369,13 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 
 		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
-			return diag.Errorf("unexpected instance ID: %d", cluster.Datacenter.InstanceID)
+			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
 		}
 		instanceExternalID = i.ExternalID
 	}
 	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID)
 	if err != nil {
-		return diag.Errorf("error setting cluster values: %s", err)
+		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
 	return nil
@@ -370,7 +386,26 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
-	_ = d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
+
+	nodeCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
+	_ = d.Set("node_count", nodeCount)
+
+	if minNodes, ok := d.GetOk("min_nodes"); !ok {
+		_ = d.Set("min_nodes", nodeCount)
+	} else if minNodes.(int) > nodeCount {
+		// If the cluster was scaled in outside of the Terraform,
+		// set min_nodes to its new value. It should result in
+		// scale out as it will diverge from what's in the .tf
+		// file, which is a true desired state.
+		//
+		// This covers the following scenario:
+		//  - create a cluster using TF with min_nodes = 6,
+		//  - scale-in using API
+		//  - run "tf apply"
+		// Expectations: min_nodes should be updated and the apply should result in scale-out.
+		_ = d.Set("min_nodes", nodeCount)
+	}
+
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
 	_ = d.Set("node_type", instanceExternalID)
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
@@ -398,22 +433,126 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 }
 
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	// Scylla Cloud API does not support updating a cluster,
-	// thus the update always fails
-	return diag.Errorf(`updating "scylla_cluster" resource is not supported`)
+	scyllaClient := meta.(*scylla.Client)
+
+	// Currently, only min_nodes is updatable.
+	if !d.HasChange("min_nodes") {
+		return nil
+	}
+
+	// There are three scenarios:
+	// - scale-out: newMinNodes > oldMinNodes
+	// - scale-in: newMinNodes < oldMinNodes
+	// - no-op: newMinNodes == oldMinNodes
+	//
+	// The no-op case is already handled above by checking `d.HasChange()`.
+	//
+	// Scale-out is easy: we just request more nodes.
+	//
+	// Scale-in is more complicated. It may happen that it's currently
+	// not possible, because after the scale-in there would be not enough
+	// disk space. Such an update should fail, meaning that the value
+	// of min_nodes should not be changed. A user can try again later.
+	//
+	// Note that it's not possible to update min_nodes and defer
+	// scale-in until later, e.g., when there is enough disk space,
+	// because min_nodes controls the resize API behavior rather
+	// than controlling the desired state. If such a behavior is needed,
+	// please consider X Cloud. More:
+	// https://www.scylladb.com/product/scylladb-xcloud/
+
+	oldMinNodesI, newMinNodesI := d.GetChange("min_nodes")
+	oldMinNodes, newMinNodes := oldMinNodesI.(int), newMinNodesI.(int)
+
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	tflog.Debug(ctx, "Updating cluster min_nodes", map[string]interface{}{
+		"cluster_id": clusterID,
+		"old":        oldMinNodes,
+		"new":        newMinNodes,
+	})
+
+	cluster, err := scyllaClient.GetCluster(ctx, clusterID)
+	if err != nil {
+		if scylla.IsClusterDeletedErr(err) {
+			d.SetId("")
+			return nil // cluster was deleted
+		}
+		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	if n := len(cluster.Datacenters); n > 1 {
+		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters for cluster %d)", n, clusterID)
+	}
+
+	// Resize will fail if there is any ongoing cluster request.
+	if err := WaitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
+		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err)
+	}
+
+	// Re-fetch the cluster to get the current node count after waiting,
+	// as it may have changed during the wait period.
+	cluster, err = scyllaClient.GetCluster(ctx, clusterID)
+	if err != nil {
+		if scylla.IsClusterDeletedErr(err) {
+			d.SetId("")
+			return nil // cluster was deleted
+		}
+		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
+
+	if newMinNodes == curNodesCount {
+		tflog.Debug(ctx, "Current number of nodes equals min_nodes; return", map[string]interface{}{
+			"cluster_id":      clusterID,
+			"cur_nodes_count": curNodesCount,
+			"new_min_nodes":   newMinNodes,
+		})
+		return resourceClusterRead(ctx, d, meta)
+	}
+
+	tflog.Debug(ctx, "min_nodes is different than current number of nodes; proceed with resize", map[string]interface{}{
+		"cluster_id":      clusterID,
+		"cur_nodes_count": curNodesCount,
+		"new_min_nodes":   newMinNodes,
+	})
+
+	resizeRequest, err := scyllaClient.ResizeCluster(
+		ctx,
+		cluster.ID,
+		cluster.Datacenter.ID,
+		cluster.Datacenter.InstanceID,
+		newMinNodes,
+	)
+	if err != nil {
+		return diag.Errorf("error resizing cluster: %s", err)
+	}
+
+	if err := WaitForClusterRequestID(ctx, scyllaClient, resizeRequest.ID); err != nil {
+		return diag.Errorf(
+			"failed waiting for the cluster resize with ID %d for the cluster %d: %s",
+			resizeRequest.ID, cluster.ID, err,
+		)
+	}
+
+	return resourceClusterRead(ctx, d, meta)
 }
 
 func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	c := meta.(*scylla.Client)
 
-	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
-	if err != nil {
-		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
 	}
 
 	name, ok := d.GetOk("name")
 	if !ok {
-		return diag.Errorf("unable to read cluster name from state file")
+		return diag.Errorf("failed to read the cluster name from the resource")
 	}
 
 	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
@@ -421,80 +560,101 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 		if scylla.IsDeletedErr(err) {
 			return nil // cluster was already deleted
 		}
-		return diag.Errorf("error deleting cluster: %s", err)
+		return diag.Errorf("failed to delete the cluster: %s", err)
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {
-		return diag.Errorf("delete request failure, cluster request id: %q", r.ID)
+		return diag.Errorf(
+			"delete cluster returned unknown status %q for the cluster request %d for the cluster %d",
+			r.Status, r.ID, clusterID,
+		)
 	}
 
 	return nil
 }
 
-func WaitForCluster(ctx context.Context, c *scylla.Client, requestID int64) error {
+// WaitForClusterRequestID returns only after the cluster request is completed or failed.
+func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID int64) error {
 	t := time.NewTicker(clusterPollInterval)
 	defer t.Stop()
 
-	for range t.C {
-		r, err := c.GetClusterRequest(ctx, requestID)
-		if err != nil {
-			return fmt.Errorf("error reading cluster request: %w", err)
-		}
+	for {
+		select {
+		case <-t.C:
+			r, err := c.GetClusterRequest(ctx, requestID)
+			if err != nil {
+				return fmt.Errorf("failed to get cluster request with ID %d: %w", requestID, err)
+			}
 
-		if strings.EqualFold(r.Status, "COMPLETED") {
-			break
-		} else if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
-			continue
-		} else if strings.EqualFold(r.Status, "FAILED") {
-			return fmt.Errorf("cluster request failed, cluster request id: %q", r.ID)
-		}
+			if strings.EqualFold(r.Status, "COMPLETED") {
+				return nil
+			}
+			if strings.EqualFold(r.Status, "FAILED") {
+				return fmt.Errorf("cluster request ID %d failed", r.ID)
+			}
+			if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
+				continue
+			}
 
-		return fmt.Errorf("unrecognized cluster request status: %q", r.Status)
+			return fmt.Errorf("unknown cluster request status: %s", r.Status)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-
-	return nil
 }
 
-func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta any) (map[string]any, error) {
-	var (
-		scyllaClient         = meta.(*scylla.Client)
-		cloud, cloudOK       = rawState["cloud"].(string)
-		nodeType, nodeTypeOK = rawState["node_type"].(string)
-		region, regionOK     = rawState["region"].(string)
-	)
+// WaitForNoInProgressRequests waits until there are no requests in progress.
+func WaitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
+	t := time.NewTicker(clusterPollInterval)
+	defer t.Stop()
 
-	if !cloudOK {
-		return nil, fmt.Errorf(`"cloud" is undefined`)
+	checkAllClear := func() (bool, error) {
+		for _, status := range []string{"IN_PROGRESS"} {
+			reqs, err := c.ListClusterRequest(
+				ctx,
+				clusterID,
+				scylla.ListClusterRequestParams{Status: status},
+			)
+			if err != nil {
+				return false, err
+			}
+			if len(reqs) > 0 {
+				return false, nil
+			}
+		}
+		return true, nil
 	}
 
-	if !nodeTypeOK {
-		return nil, fmt.Errorf(`"node_type" is undefined`)
-	}
-
-	if !regionOK {
-		return nil, fmt.Errorf(`"region" is undefined`)
-	}
-
-	p := scyllaClient.Meta.ProviderByName(cloud)
-	if p == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
-	}
-
-	mr := p.RegionByName(region)
-	if mr == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "region"`, region)
-	}
-
-	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, p.CloudProvider.ID, mr.ID)
+	// Check immediately before waiting for the first tick.
+	allClear, err := checkAllClear()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
+		return err
+	}
+	if allClear {
+		return nil
 	}
 
-	mi := p.InstanceByNameFromInstances(nodeType, instances)
-	if mi == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, nodeType)
-	}
+	for {
+		select {
+		case <-t.C:
+			allClear, err := checkAllClear()
+			if err != nil {
+				return err
+			}
+			if allClear {
+				return nil
+			}
 
-	rawState["node_disk_size"] = int(mi.TotalStorage)
-	return rawState, nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
+	clusterID, err := strconv.ParseInt(d.Id(), 10, 64)
+	if err != nil {
+		return 0, diag.Errorf("failed to parse a cluster ID %q: %s", d.Id(), err)
+	}
+	return clusterID, nil
 }
