@@ -128,6 +128,26 @@ func (c *Client) DeleteCluster(ctx context.Context, clusterID int64, clusterName
 	return &result, nil
 }
 
+func (c *Client) ResizeCluster(ctx context.Context, clusterID int64, dcID int64, instanceTypeID int64, wantedNodes int) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/resize", c.AccountID, clusterID)
+	data := map[string]interface{}{
+		"dcNodes": []map[string]interface{}{
+			{
+				"dcId":           dcID,
+				"wantedSize":     wantedNodes,
+				"instanceTypeId": instanceTypeID,
+			},
+		},
+	}
+
+	if err := c.post(ctx, path, data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) ListClusters(ctx context.Context) ([]model.Cluster, error) {
 	var result model.Clusters
 
@@ -140,14 +160,28 @@ func (c *Client) ListClusters(ctx context.Context) ([]model.Cluster, error) {
 	return result.Clusters, nil
 }
 
-func (c *Client) ListClusterRequest(ctx context.Context, clusterID int64, typ string) ([]model.ClusterRequest, error) {
+type ListClusterRequestParams struct {
+	// Type filters requests by type.
+	// Example: ADD_DC, CREATE_CLUSTER, DELETE_CLUSTER.
+	Type string
+
+	// Status filters requests by status.
+	// Allowed values: QUEUED, IN_PROGRESS, FAILED, COMPLETED.
+	Status string
+}
+
+func (c *Client) ListClusterRequest(ctx context.Context, clusterID int64, params ListClusterRequestParams) ([]model.ClusterRequest, error) {
 	var (
 		result []model.ClusterRequest
 		query  []string
 	)
 
-	if typ != "" {
-		query = append(query, "type", typ)
+	if params.Type != "" {
+		query = append(query, "type", params.Type)
+	}
+
+	if params.Status != "" {
+		query = append(query, "status", params.Status)
 	}
 
 	path := fmt.Sprintf("/account/%d/cluster/%d/request", c.AccountID, clusterID)

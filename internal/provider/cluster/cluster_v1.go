@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 )
 
-func resourceClusterV0() *schema.Resource {
+func resourceClusterV1() *schema.Resource {
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
@@ -106,50 +106,41 @@ func resourceClusterV0() *schema.Resource {
 				Computed: true,
 				Type:     schema.TypeString,
 			},
+			"node_disk_size": {
+				ForceNew: true,
+				Optional: true,
+				Computed: true,
+				Type:     schema.TypeInt,
+			},
+			"min_nodes": {
+				Required: true,
+				Type:     schema.TypeInt,
+				ValidateDiagFunc: func(v interface{}, path cty.Path) diag.Diagnostics {
+					value := v.(int)
+					if value < 3 {
+						return diag.Errorf("min_nodes must be at least 3, got %d", value)
+					}
+					if value%3 != 0 {
+						return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+					}
+					return nil
+				},
+			},
 		},
 	}
 }
 
-func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta any) (map[string]any, error) {
-	var (
-		scyllaClient         = meta.(*scylla.Client)
-		cloud, cloudOK       = rawState["cloud"].(string)
-		nodeType, nodeTypeOK = rawState["node_type"].(string)
-		region, regionOK     = rawState["region"].(string)
-	)
-
-	if !cloudOK {
-		return nil, fmt.Errorf(`"cloud" is undefined`)
+func resourceClusterUpgradeV1(_ context.Context, rawState map[string]any, _ any) (map[string]any, error) {
+	nodeCount, ok := rawState["node_count"]
+	if !ok {
+		return nil, fmt.Errorf(`"node_count" is undefined`)
 	}
 
-	if !nodeTypeOK {
-		return nil, fmt.Errorf(`"node_type" is undefined`)
-	}
+	// Migrate node_count to min_nodes.
+	// node_count is now a computed attribute (current node count),
+	// so we delete it from state to let it be recomputed on the next read.
+	rawState["min_nodes"] = nodeCount
+	delete(rawState, "node_count")
 
-	if !regionOK {
-		return nil, fmt.Errorf(`"region" is undefined`)
-	}
-
-	p := scyllaClient.Meta.ProviderByName(cloud)
-	if p == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
-	}
-
-	mr := p.RegionByName(region)
-	if mr == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "region"`, region)
-	}
-
-	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, p.CloudProvider.ID, mr.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
-	}
-
-	mi := p.InstanceByNameFromInstances(nodeType, instances)
-	if mi == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, nodeType)
-	}
-
-	rawState["node_disk_size"] = int(mi.TotalStorage)
 	return rawState, nil
 }
