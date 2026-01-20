@@ -281,44 +281,6 @@ func testAccCheckScyllaDBCloudClusterExists(
 	}
 }
 
-func testAccCheckScyllaDBCloudClusterNodeCountUpdate(
-	ctx context.Context,
-	resourceName string,
-	nodeCount int,
-	cluster *model.Cluster,
-) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		client := getClientFromProvider(provider)
-
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return errors.Errorf("resource %q not found", resourceName)
-		}
-
-		clusterID, err := parseClusterIDFromResourceID(rs.Primary.ID)
-		if err != nil {
-			return err
-		}
-
-		response, err := client.GetCluster(ctx, clusterID)
-		if err != nil {
-			return errors.Wrapf(err, "error retrieving cluster %d", clusterID)
-		}
-
-		if cluster.ID == response.ID {
-			return errors.Errorf("expected cluster ID to change after update, but it did not")
-		}
-
-		*cluster = *response
-
-		if len(cluster.Nodes) != nodeCount {
-			return errors.Errorf("expected node count to be %d, got %d", nodeCount, len(cluster.Nodes))
-		}
-
-		return nil
-	}
-}
-
 func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		client := getClientFromProvider(provider)
