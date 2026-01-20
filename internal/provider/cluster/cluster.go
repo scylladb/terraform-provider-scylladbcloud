@@ -394,10 +394,26 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
-	_ = d.Set("node_count", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
-	if _, ok := d.GetOk("min_nodes"); !ok {
-		_ = d.Set("min_nodes", len(model.NodesByStatus(cluster.Nodes, "ACTIVE")))
+
+	nodeCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
+	_ = d.Set("node_count", nodeCount)
+
+	if minNodes, ok := d.GetOk("min_nodes"); !ok {
+		_ = d.Set("min_nodes", nodeCount)
+	} else if minNodes.(int) > nodeCount {
+		// If the cluster was scaled in outside of the Terraform,
+		// set min_nodes to its new value. It should result in
+		// scale out as it will diverge from what's in the .tf
+		// file.
+		//
+		// This covers the following scenario:
+		//  - create a cluster using TF with min_nodes = 6,
+		//  - scale-in using API
+		//  - run "tf apply"
+		// Expectations: node_count should be updated and the apply should result in scale-out.
+		_ = d.Set("min_nodes", nodeCount)
 	}
+
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
 	_ = d.Set("node_type", instanceExternalID)
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
@@ -454,7 +470,6 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	// https://www.scylladb.com/product/scylladb-xcloud/
 
 	oldMinNodesI, newMinNodesI := d.GetChange("min_nodes")
-
 	oldMinNodes, newMinNodes := oldMinNodesI.(int), newMinNodesI.(int)
 
 	clusterID, diags := parseClusterID(d)
@@ -485,6 +500,23 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	if err := waitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
 		return diag.Errorf("error waiting for no in-progress cluster requests: %s", err)
 	}
+
+	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
+
+	if newMinNodes == curNodesCount {
+		tflog.Debug(ctx, "Current number of nodes equals min_nodes; return", map[string]interface{}{
+			"cluster_id":      clusterID,
+			"cur_nodes_count": curNodesCount,
+			"new_min_nodes":   newMinNodes,
+		})
+		return nil
+	}
+
+	tflog.Debug(ctx, "min_nodes is different than current number of nodes; proceed with resize", map[string]interface{}{
+		"cluster_id":      clusterID,
+		"cur_nodes_count": curNodesCount,
+		"new_min_nodes":   newMinNodes,
+	})
 
 	resizeRequest, err := scyllaClient.ResizeCluster(
 		ctx,
