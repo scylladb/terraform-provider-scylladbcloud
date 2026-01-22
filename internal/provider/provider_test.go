@@ -20,7 +20,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
+	providercluster "github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
@@ -48,11 +50,11 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				ProtoV5ProviderFactories: protoV5ProviderFactories,
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
   name       = %[1]q
   cloud      = "AWS"
@@ -78,9 +80,48 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
-			// Test scale-out scenario.
+		},
+	})
+}
+
+func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
 			{
-				ProtoV5ProviderFactories: protoV5ProviderFactories,
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
   name       = %[1]q
   cloud      = "AWS"
@@ -111,6 +152,67 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 						tfjsonpath.New("node_count"),
 						knownvalue.Int32Exact(6),
 					),
+				},
+			},
+		},
+	})
+}
+
+func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out-outside")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+			{
+				PreConfig: func() {
+					client := getClientFromProvider(provider)
+
+					err := providercluster.WaitForNoInProgressRequests(ctx, client, cluster.ID)
+					require.NoError(t, err)
+
+					req, err := client.ResizeCluster(ctx, cluster.ID, cluster.Datacenter.ID, cluster.InstanceID, 6)
+					require.NoError(t, err)
+
+					err = providercluster.WaitForClusterRequestID(ctx, client, req.ID)
+					require.NoError(t, err)
+				},
+				RefreshState: true,
+				RefreshPlanChecks: resource.RefreshPlanChecks{
+					PostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
 				},
 			},
 		},

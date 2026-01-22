@@ -497,7 +497,7 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
-	if err := waitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
+	if err := WaitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
 		return diag.Errorf("error waiting for no in-progress cluster requests: %s", err)
 	}
 
@@ -588,7 +588,7 @@ func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID in
 	return nil
 }
 
-func waitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
+func WaitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
 	t := time.NewTicker(clusterPollInterval)
 	defer t.Stop()
 
