@@ -87,7 +87,7 @@ func (c *Client) Connect(ctx context.Context, clusterID int64) (*model.ClusterCo
 		return nil, err
 	}
 
-	fix_sf3112(&result) // TODO(rjeczalik): remove when scylladb/siren-frontend#3112 gets fixed
+	fixSF3112(&result) // TODO(rjeczalik): remove when scylladb/siren-frontend#3112 gets fixed
 
 	return &result, nil
 }
@@ -322,7 +322,7 @@ func (c *Client) DeleteClusterConnection(ctx context.Context, clusterID, connect
 	return c.delete(ctx, path)
 }
 
-func fix_sf3112(c *model.ClusterConnectionInformation) {
+func fixSF3112(c *model.ClusterConnectionInformation) {
 	for i := range c.Datacenters {
 		dc := &c.Datacenters[i]
 
@@ -333,9 +333,9 @@ func fix_sf3112(c *model.ClusterConnectionInformation) {
 }
 
 func nonempty(s []string) (f []string) {
-	for _, s := range s {
-		if s != "" {
-			f = append(f, s)
+	for _, str := range s {
+		if str != "" {
+			f = append(f, str)
 		}
 	}
 
