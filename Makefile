@@ -17,16 +17,6 @@ lint: $(GOPATH)/bin/golangci-lint
 test: run?=.*
 test: pkgs?=./...
 test:
-	go test -timeout=1m -race -run="$(run)" $(pkgs)
-
-testacc: run?=.*
-testacc: pkgs?=./...
-testacc:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -timeout=30m -parallel=10 -race -run="$(run)" $(pkgs)
-
-test: run?=.*
-test: pkgs?=./...
-test:
 	go test -timeout=5m -race -run="$(run)" $(pkgs)
 
 testacc: run?=.*
