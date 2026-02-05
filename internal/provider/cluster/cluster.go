@@ -404,13 +404,13 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		// If the cluster was scaled in outside of the Terraform,
 		// set min_nodes to its new value. It should result in
 		// scale out as it will diverge from what's in the .tf
-		// file.
+		// file, which is a true desired state.
 		//
 		// This covers the following scenario:
 		//  - create a cluster using TF with min_nodes = 6,
 		//  - scale-in using API
 		//  - run "tf apply"
-		// Expectations: node_count should be updated and the apply should result in scale-out.
+		// Expectations: min_nodes should be updated and the apply should result in scale-out.
 		_ = d.Set("min_nodes", nodeCount)
 	}
 
@@ -459,7 +459,7 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	//
 	// Scale-in is more complicated. It may happen that it's currently
 	// not possible, because after the scale-in there would be not enough
-	// disk space. Such an update should fail, meaning that the old value
+	// disk space. Such an update should fail, meaning that the value
 	// of min_nodes should not be changed. A user can try again later.
 	//
 	// Note that it's not possible to update min_nodes and defer
