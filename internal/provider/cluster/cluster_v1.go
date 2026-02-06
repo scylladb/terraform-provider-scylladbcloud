@@ -5,11 +5,9 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 )
 
-func resourceClusterV0() *schema.Resource {
+func resourceClusterV1() *schema.Resource {
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
@@ -106,50 +104,24 @@ func resourceClusterV0() *schema.Resource {
 				Computed: true,
 				Type:     schema.TypeString,
 			},
+			"node_disk_size": {
+				ForceNew: true,
+				Optional: true,
+				Computed: true,
+				Type:     schema.TypeInt,
+			},
 		},
 	}
 }
 
-func resourceClusterUpgradeV0(ctx context.Context, rawState map[string]any, meta any) (map[string]any, error) {
-	var (
-		scyllaClient         = meta.(*scylla.Client)
-		cloud, cloudOK       = rawState["cloud"].(string)
-		nodeType, nodeTypeOK = rawState["node_type"].(string)
-		region, regionOK     = rawState["region"].(string)
-	)
-
-	if !cloudOK {
-		return nil, fmt.Errorf(`"cloud" is undefined`)
+func resourceClusterUpgradeV1(_ context.Context, rawState map[string]any, _ any) (map[string]any, error) {
+	nodeCount, ok := rawState["node_count"]
+	if !ok {
+		return nil, fmt.Errorf(`"node_count" is undefined`)
 	}
 
-	if !nodeTypeOK {
-		return nil, fmt.Errorf(`"node_type" is undefined`)
-	}
+	// Migrate node_count to min_nodes
+	rawState["min_nodes"] = nodeCount
 
-	if !regionOK {
-		return nil, fmt.Errorf(`"region" is undefined`)
-	}
-
-	p := scyllaClient.Meta.ProviderByName(cloud)
-	if p == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "cloud"`, cloud)
-	}
-
-	mr := p.RegionByName(region)
-	if mr == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "region"`, region)
-	}
-
-	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, p.CloudProvider.ID, mr.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
-	}
-
-	mi := p.InstanceByNameFromInstances(nodeType, instances)
-	if mi == nil {
-		return nil, fmt.Errorf(`unrecognized value %q for "node_type"`, nodeType)
-	}
-
-	rawState["node_disk_size"] = int(mi.TotalStorage)
 	return rawState, nil
 }
