@@ -213,7 +213,7 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {
-		return diag.Errorf("delete request failure, cluster request id: %q", r.ID)
+		return diag.Errorf("delete request failure, cluster request id: %d", r.ID)
 	}
 
 	return nil

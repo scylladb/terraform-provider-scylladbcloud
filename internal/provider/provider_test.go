@@ -234,6 +234,11 @@ func TestAccScyllaDBCloudCluster_basicAWSMigrationV1ToV2(t *testing.T) {
 					"scylladbcloud": {
 						// 1.9 is the last version that uses the v1 schema
 						// that is node_count instead of min_nodes.
+						//
+						// Note: Be careful about overwritting the provider with
+						// a local build in .terraformrc. If you do that,
+						// it will overwrite the selected version in this
+						// test case.
 						VersionConstraint: "1.9",
 						Source:            "scylladb/scylladbcloud",
 					},

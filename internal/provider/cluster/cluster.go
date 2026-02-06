@@ -558,7 +558,7 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	if !strings.EqualFold(r.Status, "QUEUED") && !strings.EqualFold(r.Status, "IN_PROGRESS") && !strings.EqualFold(r.Status, "COMPLETED") {
-		return diag.Errorf("delete request failure, cluster request id: %q", r.ID)
+		return diag.Errorf("delete request failure, cluster request id: %d", r.ID)
 	}
 
 	return nil
@@ -579,7 +579,7 @@ func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID in
 		} else if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
 			continue
 		} else if strings.EqualFold(r.Status, "FAILED") {
-			return fmt.Errorf("cluster request failed, cluster request id: %q", r.ID)
+			return fmt.Errorf("cluster request failed, cluster request id: %d", r.ID)
 		}
 
 		return fmt.Errorf("unrecognized cluster request status: %q", r.Status)
