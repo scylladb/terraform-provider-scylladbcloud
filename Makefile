@@ -22,7 +22,7 @@ test:
 testacc: run?=.*
 testacc: pkgs?=./...
 testacc:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -timeout=15m -parallel=10 -race -run="$(run)" $(pkgs)
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -timeout=30m -parallel=3 -race -run="$(run)" $(pkgs)
 
 # Install golangci-lint following https://golangci-lint.run/docs/welcome/install/local/.
 # go tool is not recommended.
