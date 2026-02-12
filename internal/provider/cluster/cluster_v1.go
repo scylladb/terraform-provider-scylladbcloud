@@ -124,8 +124,11 @@ func resourceClusterUpgradeV1(_ context.Context, rawState map[string]any, _ any)
 		return nil, fmt.Errorf(`"node_count" is undefined`)
 	}
 
-	// Migrate node_count to min_nodes
+	// Migrate node_count to min_nodes.
+	// node_count is now a computed attribute (current node count),
+	// so we delete it from state to let it be recomputed on the next read.
 	rawState["min_nodes"] = nodeCount
+	delete(rawState, "node_count")
 
 	return rawState, nil
 }
