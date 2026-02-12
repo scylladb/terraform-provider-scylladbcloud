@@ -33,3 +33,45 @@ We welcome contributions to this repository. Here are some guidelines to follow 
     - Try to rebase your PR against main on a regular basis.
     - Try to avoid merging in main your branch instead of rebasing.
 - Merge your PR after getting at least one approval (two are preferable on larger PRs).
+
+# Running Tests
+
+## Unit Tests
+
+Run unit tests with:
+
+```bash
+make test
+```
+
+## Acceptance Tests
+
+Acceptance tests create real resources in ScyllaDB Cloud, so they require valid credentials and may incur costs.
+
+### Required Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SCYLLADB_CLOUD_TOKEN` | API token for authentication | Yes |
+| `SCYLLADB_CLOUD_ENDPOINT` | Custom API endpoint (optional) | No |
+| `SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID for BYOA tests | For GCP BYOA tests only |
+
+### Running Acceptance Tests
+
+Run all acceptance tests:
+
+```bash
+make testacc
+```
+
+Run a specific test:
+
+```bash
+make testacc run=TestAccScyllaDBCloudCluster_basicAWS
+```
+
+List all available acceptance tests:
+
+```bash
+make list-acc-tests
+```

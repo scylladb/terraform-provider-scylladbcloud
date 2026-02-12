@@ -47,12 +47,16 @@ Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environ
 
 - `endpoint` (String) URL of the Scylla Cloud endpoint.
 
-## Limitation
+## Limitations
 
-The provider deletes and recreates the cluster:
+The provider deletes and recreates the cluster if the `node_type` property is changed.
 
-* When scaling up or down.
-* If the ``node_type`` property is changed.
+### Horizontal Scaling
+
+The provider supports horizontal scaling (scale-out and scale-in) via the `min_nodes` attribute:
+
+- **Scale-out:** Increase `min_nodes` to add nodes to your cluster.
+- **Scale-in:** Decrease `min_nodes` to remove nodes from your cluster. Note that scale-in may fail if there is not enough disk space on the remaining nodes to hold the data. In this case, retry later after reducing data volume or waiting for compaction to complete.
 
 ## Useful Links
 
