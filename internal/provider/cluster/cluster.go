@@ -165,14 +165,9 @@ func ResourceCluster() *schema.Resource {
 			"enable_dns": {
 				Description: "Whether to enable CNAME for seed nodes",
 				Optional:    true,
+				ForceNew:    true,
 				Type:        schema.TypeBool,
-				// NOTE(rjeczalik): ForceNew is commented out here, otherwise
-				// internal provider validate fails due to all the attrs
-				// being ForceNew; Scylla Cloud API does not allow for
-				// updating existing clusters, thus update the implementation
-				// always returns a non-nil error.
-				// ForceNew: true,
-				Default: true,
+				Default:     true,
 			},
 			"request_id": {
 				Description: "Cluster creation request ID",
