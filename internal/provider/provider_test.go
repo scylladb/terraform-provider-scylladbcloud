@@ -307,6 +307,47 @@ func TestAccScyllaDBCloudCluster_basicAWSMigrationV1ToV2(t *testing.T) {
 	})
 }
 
+func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-gcp")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "GCP"
+  region     = "us-central1"
+  node_type  = "n2d-highmem-2"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-gcp-byoa")
