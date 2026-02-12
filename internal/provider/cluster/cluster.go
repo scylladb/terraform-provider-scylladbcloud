@@ -63,7 +63,7 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"cloud": {
-				Description: "Cluster name",
+				Description: "Cloud provider (AWS, GCP)",
 				Optional:    true,
 				ForceNew:    true,
 				Default:     "AWS",
