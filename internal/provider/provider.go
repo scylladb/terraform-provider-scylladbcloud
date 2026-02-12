@@ -29,6 +29,10 @@ func envEndpoint() string {
 	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
 }
 
+func envGCPBYOAID() string {
+	return os.Getenv("SCYLLADB_CLOUD_GCP_BYOA_ID")
+}
+
 func New(context.Context) *schema.Provider {
 	p := &schema.Provider{
 		Schema: map[string]*schema.Schema{

@@ -352,6 +352,11 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-gcp-byoa")
 
+	byoaID := envGCPBYOAID()
+	if byoaID == "" {
+		t.Skip("SCYLLADB_CLOUD_GCP_BYOA_ID must be set for this test")
+	}
+
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -368,8 +373,8 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
   min_nodes  = 3
   cidr_block = "10.0.1.0/24"
   enable_dns = true
-  byoa_id    = 18829 // TODO: make configurable via env var
-}`, resourceName),
+  byoa_id    = %[2]s
+}`, resourceName, byoaID),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
