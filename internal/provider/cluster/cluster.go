@@ -360,7 +360,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	}
 
 	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported: %d", n)
+		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	var instanceExternalID string
@@ -488,7 +488,7 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported: %d", n)
+		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	// Resize will fail if there is any ongoing cluster request.

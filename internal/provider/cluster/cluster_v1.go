@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
@@ -113,6 +115,16 @@ func resourceClusterV1() *schema.Resource {
 			"min_nodes": {
 				Required: true,
 				Type:     schema.TypeInt,
+				ValidateDiagFunc: func(v interface{}, path cty.Path) diag.Diagnostics {
+					value := v.(int)
+					if value < 3 {
+						return diag.Errorf("min_nodes must be at least 3, got %d", value)
+					}
+					if value%3 != 0 {
+						return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+					}
+					return nil
+				},
 			},
 		},
 	}
