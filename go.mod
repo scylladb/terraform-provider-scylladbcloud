@@ -10,8 +10,8 @@ require (
 	github.com/hashicorp/terraform-plugin-mux v0.21.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.38.2
 	github.com/pkg/errors v0.9.1
-	golang.org/x/net v0.50.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/net v0.50.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -36,7 +36,7 @@ require (
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
