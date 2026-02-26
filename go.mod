@@ -10,8 +10,8 @@ require (
 	github.com/hashicorp/terraform-plugin-mux v0.21.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.38.2
 	github.com/pkg/errors v0.9.1
-	golang.org/x/net v0.50.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/net v0.51.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
