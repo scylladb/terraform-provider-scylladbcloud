@@ -64,6 +64,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
   min_nodes  = 3
   cidr_block = "10.0.1.0/24"
   enable_dns = true
+  availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
 }`, resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
@@ -75,6 +76,15 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 						"scylladbcloud_cluster.test",
 						tfjsonpath.New("node_count"),
 						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("availability_zone_ids"),
+						knownvalue.ListExact([]knownvalue.Check{
+							knownvalue.StringExact("use1-az2"),
+							knownvalue.StringExact("use1-az4"),
+							knownvalue.StringExact("use1-az6"),
+						}),
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
@@ -226,88 +236,6 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 	})
 }
 
-func TestAccScyllaDBCloudCluster_basicAWSMigrationV1ToV2(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
-
-	var cluster model.Cluster
-
-	nodeCountCompare := statecheck.CompareValue(compare.ValuesSame())
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
-		Steps: []resource.TestStep{
-			{
-				ExternalProviders: map[string]resource.ExternalProvider{
-					"scylladbcloud": {
-						// 1.9 is the last version that uses the v1 schema
-						// that is node_count instead of min_nodes.
-						//
-						// Note: Be careful about overwritting the provider with
-						// a local build in .terraformrc. If you do that,
-						// it will overwrite the selected version in this
-						// test case.
-						VersionConstraint: "1.9",
-						Source:            "scylladb/scylladbcloud",
-					},
-				},
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name       = %[1]q
-  cloud      = "AWS"
-  region     = "us-east-1"
-  node_type  = "i3.large"
-  node_count = 3
-  cidr_block = "10.0.1.0/24"
-  enable_dns = true
-}`, resourceName),
-				ConfigStateChecks: []statecheck.StateCheck{
-					nodeCountCompare.AddStateValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("node_count"),
-					),
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("node_count"),
-						knownvalue.Int32Exact(3),
-					),
-				},
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
-				),
-			},
-			{
-				ProtoV5ProviderFactories: protoV5ProviderFactories,
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name       = %[1]q
-  cloud      = "AWS"
-  region     = "us-east-1"
-  node_type  = "i3.large"
-  min_nodes  = 3
-  cidr_block = "10.0.1.0/24"
-  enable_dns = true
-}`, resourceName),
-				ConfigPlanChecks: resource.ConfigPlanChecks{
-					PreApply: []plancheck.PlanCheck{
-						plancheck.ExpectEmptyPlan(),
-					},
-				},
-				ConfigStateChecks: []statecheck.StateCheck{
-					nodeCountCompare.AddStateValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("node_count"),
-					),
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("min_nodes"),
-						knownvalue.Int32Exact(3),
-					),
-				},
-			},
-		},
-	})
-}
-
 func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-gcp")
@@ -396,6 +324,88 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	})
 }
 
+func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
+
+	var cluster model.Cluster
+
+	nodeCountCompare := statecheck.CompareValue(compare.ValuesSame())
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"scylladbcloud": {
+						// 1.9 is the last version that uses the v1 schema
+						// that is node_count instead of min_nodes.
+						//
+						// Note: Be careful about overwritting the provider with
+						// a local build in .terraformrc. If you do that,
+						// it will overwrite the selected version in this
+						// test case.
+						VersionConstraint: "1.9",
+						Source:            "scylladb/scylladbcloud",
+					},
+				},
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  node_count = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					nodeCountCompare.AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+			{
+				ProtoV5ProviderFactories: protoV5ProviderFactories,
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+}`, resourceName),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					nodeCountCompare.AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+				},
+			},
+		},
+	})
+}
+
 var configureProviderOnce sync.Once
 
 func testAccPreCheck(t *testing.T) {
@@ -436,12 +446,18 @@ func testAccCheckScyllaDBCloudClusterExists(
 			return err
 		}
 
-		response, err := client.GetCluster(ctx, clusterID)
+		clusterResponse, err := client.GetCluster(ctx, clusterID)
 		if err != nil {
 			return errors.Wrapf(err, "error retrieving cluster %d", clusterID)
 		}
 
-		*cluster = *response
+		datacenterResponse, err := client.GetDataCenter(ctx, clusterID, clusterResponse.Datacenter.ID)
+		if err != nil {
+			return errors.Wrapf(err, "error retrieving datacenter %d", clusterResponse.Datacenter.ID)
+		}
+
+		*cluster = *clusterResponse
+		cluster.Datacenter.Topology = datacenterResponse.Topology
 
 		return nil
 	}

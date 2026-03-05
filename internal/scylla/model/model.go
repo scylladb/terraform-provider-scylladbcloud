@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 )
@@ -91,6 +92,7 @@ type ClusterRequest struct {
 type ClusterCreateRequest struct {
 	AccountCredentialID      int64    `json:"accountCredentialId,omitempty"`
 	AlternatorWriteIsolation string   `json:"alternatorWriteIsolation,omitempty"`
+	AvailabilityZoneIDs      []string `json:"availabilityZoneIdsOverride,omitempty"`
 	BroadcastType            string   `json:"broadcastType,omitempty"`
 	CidrBlock                string   `json:"cidrBlock,omitempty"`
 	CloudProviderID          int64    `json:"cloudProviderId,omitempty"`
@@ -174,6 +176,29 @@ type Datacenter struct {
 	AccountCloudProviderCredentialID int64                `json:"accountCloudProviderCredentialsId"`
 	CloudProvider                    *CloudProvider       `json:"cloudProvider,omitempty"`
 	Region                           *CloudProviderRegion `json:"region,omitempty"`
+	Topology                         *Topology            `json:"Topology,omitempty"`
+}
+
+func (d Datacenter) AvailabilityZoneIDs() []string {
+	if d.Topology == nil {
+		return nil
+	}
+	var azIDs []string
+	for _, rack := range d.Topology.Racks {
+		azIDs = append(azIDs, rack.ZoneID)
+	}
+	slices.Sort(azIDs)
+	return azIDs
+}
+
+type Topology struct {
+	Racks []Rack `json:"Racks"`
+}
+
+type Rack struct {
+	Name     string `json:"Name"`
+	ZoneID   string `json:"ZoneID"`
+	ZoneName string `json:"ZoneName"`
 }
 
 type AllowedIP struct {
