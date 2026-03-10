@@ -303,8 +303,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			}
 		}
 
+		azIDsSet := azIDs.(*schema.Set)
+
 		var azIDList []string
-		for _, v := range azIDs.([]interface{}) {
+		for _, v := range azIDsSet.List() {
 			azIDList = append(azIDList, v.(string))
 		}
 		slices.Sort(azIDList)
