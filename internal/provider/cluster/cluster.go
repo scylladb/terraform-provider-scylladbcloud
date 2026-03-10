@@ -344,16 +344,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	// Only GetDataCenter returns the Topology field which contains AZ IDs.
-	// We set it to the existing cluster variable which is then used to
-	// set the KVs.
-	datacenter, err := scyllaClient.GetDataCenter(ctx, cr.ClusterID, cluster.Datacenter.ID)
-	if err != nil {
-		return diag.Errorf("failed to read datacenter %d: %s", cluster.Datacenter.ID, err)
-	}
-	cluster.Datacenter.Topology = datacenter.Topology
-	cluster.Datacenters[0].Topology = datacenter.Topology
-
 	i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 	if i == nil {
 		return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
@@ -417,16 +407,6 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	if n := len(cluster.Datacenters); n != 1 {
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
-
-	// Only GetDataCenter returns the Topology field which contains AZ IDs.
-	// We set it to the existing cluster variable which is then used to
-	// set the KVs.
-	datacenter, err := scyllaClient.GetDataCenter(ctx, clusterID, cluster.Datacenter.ID)
-	if err != nil {
-		return diag.Errorf("failed to read datacenter %d: %s", cluster.Datacenter.ID, err)
-	}
-	cluster.Datacenter.Topology = datacenter.Topology
-	cluster.Datacenters[0].Topology = datacenter.Topology
 
 	var instanceExternalID string
 	if cluster.Datacenter.InstanceID != 0 {

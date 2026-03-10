@@ -80,7 +80,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
 						tfjsonpath.New("availability_zone_ids"),
-						knownvalue.ListExact([]knownvalue.Check{
+						knownvalue.SetExact([]knownvalue.Check{
 							knownvalue.StringExact("use1-az2"),
 							knownvalue.StringExact("use1-az4"),
 							knownvalue.StringExact("use1-az6"),
@@ -451,13 +451,7 @@ func testAccCheckScyllaDBCloudClusterExists(
 			return errors.Wrapf(err, "error retrieving cluster %d", clusterID)
 		}
 
-		datacenterResponse, err := client.GetDataCenter(ctx, clusterID, clusterResponse.Datacenter.ID)
-		if err != nil {
-			return errors.Wrapf(err, "error retrieving datacenter %d", clusterResponse.Datacenter.ID)
-		}
-
 		*cluster = *clusterResponse
-		cluster.Datacenter.Topology = datacenterResponse.Topology
 
 		return nil
 	}

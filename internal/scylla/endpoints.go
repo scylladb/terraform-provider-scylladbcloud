@@ -62,9 +62,27 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 	}
 
 	path := fmt.Sprintf("/account/%d/cluster/%d", c.AccountID, clusterID)
-	err := c.get(ctx, path, &result, "enriched", "true")
+	if err := c.get(ctx, path, &result, "enriched", "true"); err != nil {
+		return nil, err
+	}
 
-	return &result.Cluster, err
+	cluster := &result.Cluster
+
+	// Fetch datacenter topology if we have exactly one datacenter.
+	// The GetCluster API doesn't return the Topology field which contains
+	// availability zone IDs - we need to fetch it separately via GetDataCenter.
+	if len(cluster.Datacenters) != 1 {
+		return nil, fmt.Errorf("only single datacenter clusters are supported; got %d datacenters", len(cluster.Datacenters))
+	}
+
+	datacenter, err := c.GetDataCenter(ctx, clusterID, cluster.Datacenter.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read datacenter %d: %w", cluster.Datacenter.ID, err)
+	}
+	cluster.Datacenter.Topology = datacenter.Topology
+	cluster.Datacenters[0].Topology = datacenter.Topology
+
+	return cluster, nil
 }
 
 func (c *Client) Bundle(ctx context.Context, clusterID int64) ([]byte, error) {
