@@ -206,7 +206,7 @@ func ResourceCluster() *schema.Resource {
 				Optional: true,
 				Computed: true,
 				ForceNew: true,
-				Type:     schema.TypeList,
+				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 		},
@@ -338,6 +338,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to read cluster %d: %s", cr.ClusterID, err)
 	}
 
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+	}
+
 	// Only GetDataCenter returns the Topology field which contains AZ IDs.
 	// We set it to the existing cluster variable which is then used to
 	// set the KVs.
@@ -408,8 +412,8 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("unexpected cloud provider %d for cluster %d", cluster.CloudProviderID, cluster.ID)
 	}
 
-	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	// Only GetDataCenter returns the Topology field which contains AZ IDs.
@@ -492,9 +496,12 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
 	}
 
-	if azIDs := cluster.Datacenter.AvailabilityZoneIDs(); len(azIDs) > 0 {
-		_ = d.Set("availability_zone_ids", azIDs)
+	azIDs := cluster.Datacenter.AvailabilityZoneIDs()
+	if azIDs == nil {
+		// Prevent stale data in case the new value is empty or missing.
+		azIDs = []string{}
 	}
+	_ = d.Set("availability_zone_ids", azIDs)
 
 	return nil
 }
@@ -551,8 +558,8 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
 	}
 
-	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters for cluster %d)", n, clusterID)
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
@@ -730,8 +737,8 @@ func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
 // TODO: When placement groups are supported through the API, revisit the minimum AZ requirement
 // as single-AZ deployments may become valid with placement group configuration.
 func validateAvailabilityZoneIDs(ctx context.Context, c *scylla.Client, cloudAccountID, regionID int64, azIDs []string) error {
-	if len(azIDs) < 2 {
-		return fmt.Errorf("at least 2 availability zone IDs are required, got %d", len(azIDs))
+	if l := len(azIDs); l < 2 || l > 3 {
+		return fmt.Errorf("at least 2 and at most 3 availability zone IDs are required, got %d", l)
 	}
 
 	// Check for duplicate AZ IDs.
