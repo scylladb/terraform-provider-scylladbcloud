@@ -3,6 +3,7 @@ package scylla
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
@@ -61,9 +62,27 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 	}
 
 	path := fmt.Sprintf("/account/%d/cluster/%d", c.AccountID, clusterID)
-	err := c.get(ctx, path, &result, "enriched", "true")
+	if err := c.get(ctx, path, &result, "enriched", "true"); err != nil {
+		return nil, err
+	}
 
-	return &result.Cluster, err
+	cluster := &result.Cluster
+
+	// Fetch datacenter topology if we have exactly one datacenter.
+	// The GetCluster API doesn't return the Topology field which contains
+	// availability zone IDs - we need to fetch it separately via GetDataCenter.
+	if len(cluster.Datacenters) != 1 {
+		return nil, fmt.Errorf("only single datacenter clusters are supported; got %d datacenters", len(cluster.Datacenters))
+	}
+
+	datacenter, err := c.GetDataCenter(ctx, clusterID, cluster.Datacenter.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read datacenter %d: %w", cluster.Datacenter.ID, err)
+	}
+	cluster.Datacenter.Topology = datacenter.Topology
+	cluster.Datacenters[0].Topology = datacenter.Topology
+
+	return cluster, nil
 }
 
 func (c *Client) Bundle(ctx context.Context, clusterID int64) ([]byte, error) {
@@ -200,6 +219,26 @@ func (c *Client) GetClusterRequest(ctx context.Context, requestID int64) (model.
 	return result, err
 }
 
+func (c *Client) ListAvailabilityZoneIDs(ctx context.Context, cloudAccountID int64, regionID int64) ([]string, error) {
+	var result []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+
+	path := fmt.Sprintf("/account/%d/cloud-account/%d/region/%d/zones", c.AccountID, cloudAccountID, regionID)
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+
+	azIDs := make([]string, 0, len(result))
+	for _, item := range result {
+		azIDs = append(azIDs, item.ID)
+	}
+	slices.Sort(azIDs)
+
+	return azIDs, nil
+}
+
 func (c *Client) ListAllowlistRules(ctx context.Context, clusterID int64) ([]model.AllowedIP, error) {
 	var result []model.AllowedIP
 
@@ -243,6 +282,12 @@ func (c *Client) ListDataCenters(ctx context.Context, clusterID int64) ([]model.
 	}
 
 	return result.Datacenters, nil
+}
+
+func (c *Client) GetDataCenter(ctx context.Context, clusterID, dcID int64) (result model.Datacenter, _ error) {
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d", c.AccountID, clusterID, dcID)
+	err := c.get(ctx, path, &result)
+	return result, err
 }
 
 func (c *Client) ListClusterNodes(ctx context.Context, clusterID int64) ([]model.Node, error) {

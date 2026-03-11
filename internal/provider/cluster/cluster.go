@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,7 @@ func ResourceCluster() *schema.Resource {
 			Delete: schema.DefaultTimeout(clusterDeleteTimeout),
 		},
 
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 
 		StateUpgraders: []schema.StateUpgrader{
 			{
@@ -51,6 +52,11 @@ func ResourceCluster() *schema.Resource {
 				Version: 1,
 				Type:    resourceClusterV1().CoreConfigSchema().ImpliedType(),
 				Upgrade: resourceClusterUpgradeV1,
+			},
+			{
+				Version: 2,
+				Type:    resourceClusterV2().CoreConfigSchema().ImpliedType(),
+				Upgrade: resourceClusterUpgradeV2,
 			},
 		},
 
@@ -189,6 +195,20 @@ func ResourceCluster() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
+			"availability_zone_ids": {
+				Description: "List of Availability Zone IDs for the cluster nodes (e.g., " +
+					"'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', " +
+					"'us-central1-c' for GCP). It is recommended to specify exactly 3 AZ IDs to " +
+					"ensure optimal distribution of nodes across availability zones. AZ IDs are " +
+					"consistent identifiers that map to the same physical availability zone across " +
+					"all accounts, unlike AZ names which may differ between accounts. If not " +
+					"specified, the server will automatically select availability zones.",
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+				Type:     schema.TypeSet,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
 		},
 	}
 }
@@ -269,6 +289,37 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	clusterCreateRequest.InstanceID = mi.ID
 
+	// Handle availability zone IDs
+	if azIDs, ok := d.GetOk("availability_zone_ids"); ok {
+		// Figure out the cloud account ID; it's either BYOA or Scylla Account.
+		// There is a clear mapping from cloudProviderID to cloudAccountID.
+		cloudAccountID := clusterCreateRequest.AccountCredentialID
+		if cloudAccountID == 0 {
+			switch cloudProvider.CloudProvider.ID {
+			case 1: // AWS
+				cloudAccountID = 1
+			case 2: // GCP
+				cloudAccountID = 200
+			default:
+				return diag.Errorf("unknown cloud provider ID %d", cloudProvider.CloudProvider.ID)
+			}
+		}
+
+		azIDsSet := azIDs.(*schema.Set)
+
+		var azIDList []string
+		for _, v := range azIDsSet.List() {
+			azIDList = append(azIDList, v.(string))
+		}
+		slices.Sort(azIDList)
+
+		if err := validateAvailabilityZoneIDs(ctx, scyllaClient, cloudAccountID, mr.ID, azIDList); err != nil {
+			return diag.FromErr(err)
+		}
+
+		clusterCreateRequest.AvailabilityZoneIDs = azIDList
+	}
+
 	if !versionOK {
 		clusterCreateRequest.ScyllaVersionID = scyllaClient.Meta.ScyllaVersions.DefaultScyllaVersionID
 	} else if mv := scyllaClient.Meta.VersionByName(version.(string)); mv != nil {
@@ -289,6 +340,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	cluster, err := scyllaClient.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
 		return diag.Errorf("failed to read cluster %d: %s", cr.ClusterID, err)
+	}
+
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
@@ -351,8 +406,8 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("unexpected cloud provider %d for cluster %d", cluster.CloudProviderID, cluster.ID)
 	}
 
-	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	var instanceExternalID string
@@ -368,6 +423,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		}
 		instanceExternalID = i.ExternalID
 	}
+
 	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
@@ -424,6 +480,13 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
 	}
 
+	azIDs := cluster.Datacenter.AvailabilityZoneIDs()
+	if azIDs == nil {
+		// Prevent stale data in case the new value is empty or missing.
+		azIDs = []string{}
+	}
+	_ = d.Set("availability_zone_ids", azIDs)
+
 	return nil
 }
 
@@ -479,8 +542,8 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
 	}
 
-	if n := len(cluster.Datacenters); n > 1 {
-		return diag.Errorf("multi-datacenter clusters are not currently supported (found %d datacenters for cluster %d)", n, clusterID)
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
@@ -652,4 +715,55 @@ func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
 		return 0, diag.Errorf("failed to parse a cluster ID %q: %s", d.Id(), err)
 	}
 	return clusterID, nil
+}
+
+// validateAvailabilityZoneIDs validates that the provided AZ IDs are valid for the given region.
+// TODO: When placement groups are supported through the API, revisit the minimum AZ requirement
+// as single-AZ deployments may become valid with placement group configuration.
+func validateAvailabilityZoneIDs(ctx context.Context, c *scylla.Client, cloudAccountID, regionID int64, azIDs []string) error {
+	if l := len(azIDs); l < 2 || l > 3 {
+		return fmt.Errorf("at least 2 and at most 3 availability zone IDs are required, got %d", l)
+	}
+
+	// Check for duplicate AZ IDs.
+	seen := make(map[string]struct{}, len(azIDs))
+	var duplicates []string
+	for _, azID := range azIDs {
+		if _, ok := seen[azID]; ok {
+			duplicates = append(duplicates, azID)
+		} else {
+			seen[azID] = struct{}{}
+		}
+	}
+	if len(duplicates) > 0 {
+		return fmt.Errorf("duplicate availability zone IDs are not allowed: %v", duplicates)
+	}
+
+	// Validate available AZ IDs.
+	availableAZs, err := c.ListAvailabilityZoneIDs(ctx, cloudAccountID, regionID)
+	if err != nil {
+		return fmt.Errorf("failed to list availability zones for region: %w", err)
+	}
+
+	availableSet := make(map[string]struct{}, len(availableAZs))
+	for _, az := range availableAZs {
+		availableSet[az] = struct{}{}
+	}
+
+	var invalidAZs []string
+	for _, azID := range azIDs {
+		if _, ok := availableSet[azID]; !ok {
+			invalidAZs = append(invalidAZs, azID)
+		}
+	}
+
+	if len(invalidAZs) > 0 {
+		return fmt.Errorf(
+			"invalid availability zone IDs %v; available AZ IDs for this region are: %v",
+			invalidAZs,
+			availableAZs,
+		)
+	}
+
+	return nil
 }
