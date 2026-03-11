@@ -300,6 +300,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 				cloudAccountID = 1
 			case 2: // GCP
 				cloudAccountID = 200
+			default:
+				return diag.Errorf("unknown cloud provider ID %d", cloudProvider.CloudProvider.ID)
 			}
 		}
 
