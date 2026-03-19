@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/eapache/go-resiliency v1.7.0
 	github.com/hashicorp/go-cty v1.5.0
-	github.com/hashicorp/terraform-plugin-go v0.29.0
+	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-log v0.10.0
 	github.com/hashicorp/terraform-plugin-mux v0.21.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.38.2
