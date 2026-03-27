@@ -39,17 +39,18 @@ output "scylladbcloud_cluster_datacenter" {
 
 ### Required
 
+- `min_nodes` (Number) Minimum number of nodes
 - `name` (String) Cluster name
-- `node_count` (Number) Node count
 - `node_type` (String) Instance type of a node
 - `region` (String) Region to use
 
 ### Optional
 
 - `alternator_write_isolation` (String) Default write isolation policy
-- `byoa_id` (Number) BYOA credential ID
+- `availability_zone_ids` (List of String) List of Availability Zone IDs for the cluster nodes (e.g., 'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', 'us-central1-c' for GCP). It is recommended to specify exactly 3 AZ IDs to ensure optimal distribution of nodes across availability zones. AZ IDs are consistent identifiers that map to the same physical availability zone across all accounts, unlike AZ names which may differ between accounts. If not specified, the server will automatically select availability zones.
+- `byoa_id` (Number) BYOA credential ID (only for AWS)
 - `cidr_block` (String) IPv4 CIDR of the cluster
-- `cloud` (String) Cloud name
+- `cloud` (String) Cloud provider (AWS, GCP)
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
 - `node_disk_size` (Number) The disk size in gigabytes of the node
@@ -62,6 +63,7 @@ output "scylladbcloud_cluster_datacenter" {
 - `cluster_id` (Number) Cluster id
 - `datacenter` (String) Cluster datacenter name
 - `id` (String) The ID of this resource.
+- `node_count` (Number) Current node count (computed)
 - `node_dns_names` (Set of String) Cluster nodes DNS names
 - `node_private_ips` (Set of String) Cluster nodes private IP addresses
 - `request_id` (Number) Cluster creation request ID
