@@ -219,6 +219,17 @@ func (c *Client) GetClusterRequest(ctx context.Context, requestID int64) (model.
 	return result, err
 }
 
+func (c *Client) ListCloudAccounts(ctx context.Context) ([]model.CloudAccount, error) {
+	var result []model.CloudAccount
+
+	path := fmt.Sprintf("/account/%d/cloud-account", c.AccountID)
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (c *Client) ListAvailabilityZoneIDs(ctx context.Context, cloudAccountID int64, regionID int64) ([]string, error) {
 	var result []struct {
 		ID   string `json:"id"`
