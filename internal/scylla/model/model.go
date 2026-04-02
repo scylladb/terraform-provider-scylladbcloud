@@ -13,6 +13,24 @@ type CloudProvider struct {
 	RootAccountID string `json:"rootAccountID"`
 }
 
+type CloudAccount struct {
+	ID              int64  `json:"id"`
+	CloudProviderID int64  `json:"cloudProviderId"`
+	Owner           string `json:"owner"`
+	State           string `json:"state"`
+}
+
+// FindScyllaCloudAccount returns the active Scylla-owned cloud account
+// for the given cloud provider ID, or nil if none is found.
+func FindScyllaCloudAccount(accounts []CloudAccount, cloudProviderID int64) *CloudAccount {
+	for _, ca := range accounts {
+		if ca.CloudProviderID == cloudProviderID && ca.Owner == "Scylla" && ca.State == "ACTIVE" {
+			return &ca
+		}
+	}
+	return nil
+}
+
 type CloudProviders struct {
 	CloudProviders []CloudProvider `json:"cloudProviders"`
 }

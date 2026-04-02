@@ -292,17 +292,22 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	// Handle availability zone IDs
 	if azIDs, ok := d.GetOk("availability_zone_ids"); ok {
 		// Figure out the cloud account ID; it's either BYOA or Scylla Account.
-		// There is a clear mapping from cloudProviderID to cloudAccountID.
+		// If cloudAccountID is 0, we look up the active cloud account owned by Scylla.
 		cloudAccountID := clusterCreateRequest.AccountCredentialID
 		if cloudAccountID == 0 {
-			switch cloudProvider.CloudProvider.ID {
-			case 1: // AWS
-				cloudAccountID = 1
-			case 2: // GCP
-				cloudAccountID = 200
-			default:
-				return diag.Errorf("unknown cloud provider ID %d", cloudProvider.CloudProvider.ID)
+			cloudAccounts, err := scyllaClient.ListCloudAccounts(ctx)
+			if err != nil {
+				return diag.Errorf("failed to list cloud accounts: %s", err)
 			}
+
+			ca := model.FindScyllaCloudAccount(cloudAccounts, cloudProvider.CloudProvider.ID)
+			if ca == nil {
+				return diag.Errorf(
+					"no active Scylla-owned cloud account found for cloud provider %q (ID %d)",
+					cloud, cloudProvider.CloudProvider.ID,
+				)
+			}
+			cloudAccountID = ca.ID
 		}
 
 		azIDsSet := azIDs.(*schema.Set)
