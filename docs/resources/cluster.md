@@ -47,7 +47,7 @@ output "scylladbcloud_cluster_datacenter" {
 ### Optional
 
 - `alternator_write_isolation` (String) Default write isolation policy
-- `availability_zone_ids` (List of String) List of Availability Zone IDs for the cluster nodes (e.g., 'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', 'us-central1-c' for GCP). It is recommended to specify exactly 3 AZ IDs to ensure optimal distribution of nodes across availability zones. AZ IDs are consistent identifiers that map to the same physical availability zone across all accounts, unlike AZ names which may differ between accounts. If not specified, the server will automatically select availability zones.
+- `availability_zone_ids` (Set of String) List of Availability Zone IDs for the cluster nodes (e.g., 'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', 'us-central1-c' for GCP). Between 1 and 3 AZ IDs can be specified. It is recommended to specify exactly 3 AZ IDs to ensure optimal distribution of nodes across availability zones. AZ IDs are consistent identifiers that map to the same physical availability zone across all accounts, unlike AZ names which may differ between accounts. If not specified, the server will automatically select availability zones.
 - `byoa_id` (Number) BYOA credential ID (only for AWS)
 - `cidr_block` (String) IPv4 CIDR of the cluster
 - `cloud` (String) Cloud provider (AWS, GCP)
