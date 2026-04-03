@@ -129,6 +129,7 @@ type ClusterCreateRequest struct {
 	Provisioning             string   `json:"provisioning,omitempty"`
 	ProcessingUnits          int      `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
 	Expiration               string   `json:"expiration,omitempty" example:"12"`
+	Placement                string   `json:"placement,omitempty"`
 }
 
 type Cluster struct {

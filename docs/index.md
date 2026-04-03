@@ -30,6 +30,19 @@ provider "scylladbcloud" {
 }
 ```
 
+### Creating a Cluster
+
+```terraform
+resource "scylladbcloud_cluster" "example" {
+  name       = "my-cluster"
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+}
+```
+
 ### Environment Variables
 
 Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environment variable.

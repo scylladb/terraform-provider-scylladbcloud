@@ -95,6 +95,55 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	})
 }
 
+func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("basic-aws-single-az")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  node_type  = "i3.large"
+  min_nodes  = 3
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+  availability_zone_ids = ["use1-az2"]
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("min_nodes"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("availability_zone_ids"),
+						knownvalue.SetExact([]knownvalue.Check{
+							knownvalue.StringExact("use1-az2"),
+						}),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out")

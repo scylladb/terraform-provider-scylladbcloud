@@ -198,11 +198,12 @@ func ResourceCluster() *schema.Resource {
 			"availability_zone_ids": {
 				Description: "List of Availability Zone IDs for the cluster nodes (e.g., " +
 					"'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', " +
-					"'us-central1-c' for GCP). It is recommended to specify exactly 3 AZ IDs to " +
-					"ensure optimal distribution of nodes across availability zones. AZ IDs are " +
-					"consistent identifiers that map to the same physical availability zone across " +
-					"all accounts, unlike AZ names which may differ between accounts. If not " +
-					"specified, the server will automatically select availability zones.",
+					"'us-central1-c' for GCP). Between 1 and 3 AZ IDs can be specified. It is " +
+					"recommended to specify exactly 3 AZ IDs to ensure optimal distribution of " +
+					"nodes across availability zones. AZ IDs are consistent identifiers that map " +
+					"to the same physical availability zone across all accounts, unlike AZ names " +
+					"which may differ between accounts. If not specified, the server will " +
+					"automatically select availability zones.",
 				Optional: true,
 				Computed: true,
 				ForceNew: true,
@@ -223,6 +224,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			NumberOfNodes:        int64(d.Get("min_nodes").(int)),
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
+			Placement:            "true",
 		}
 		cloud                        = d.Get("cloud").(string)
 		cidr, cidrOK                 = d.GetOk("cidr_block")
@@ -723,11 +725,9 @@ func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
 }
 
 // validateAvailabilityZoneIDs validates that the provided AZ IDs are valid for the given region.
-// TODO: When placement groups are supported through the API, revisit the minimum AZ requirement
-// as single-AZ deployments may become valid with placement group configuration.
 func validateAvailabilityZoneIDs(ctx context.Context, c *scylla.Client, cloudAccountID, regionID int64, azIDs []string) error {
-	if l := len(azIDs); l < 2 || l > 3 {
-		return fmt.Errorf("at least 2 and at most 3 availability zone IDs are required, got %d", l)
+	if l := len(azIDs); l < 1 || l > 3 {
+		return fmt.Errorf("at least 1 and at most 3 availability zone IDs are required, got %d", l)
 	}
 
 	// Check for duplicate AZ IDs.
