@@ -141,7 +141,6 @@ type Cluster struct {
 	InstanceID          int64                  `json:"instanceId"`
 	CloudProviderID     int64                  `json:"cloudProviderId"`
 	ScyllaVersionID     int64                  `json:"scyllaVersionId"`
-	ScalingMode         *ClusterScalingMode    `json:"scalingMode,omitempty"`
 	UserAPIInterface    string                 `json:"userApiInterface"`
 	PricingModel        int64                  `json:"pricingModel"`
 	MaxAllowedCIDRRange int64                  `json:"maxAllowedCidrRange"`
@@ -183,11 +182,6 @@ type ExpirationTime struct {
 	ExpirationSeconds int64  `json:"expirationSeconds"`
 	CreationTime      string `json:"creationTime"`
 }
-
-type ClusterScalingMode struct {
-	Mode string `json:"mode,omitempty"`
-}
-
 type ScalingMode string
 
 const (

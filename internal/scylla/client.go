@@ -58,7 +58,7 @@ type Client struct {
 }
 
 func NewClient(endpoint, token, useragent string, metadata bool) (*Client, error) {
-	tflog.Info(context.Background(), "dumped request: "+"NewClient+")
+	s
 	errCodes, err := parse(codes, codesDelim, codesFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse error codes: %w", err)
@@ -107,7 +107,6 @@ func NewClient(endpoint, token, useragent string, metadata bool) (*Client, error
 }
 
 func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
-	tflog.Info(ctx, "dumped request: "+method+" "+path, map[string]interface{}{})
 	var body []byte
 	var err error
 

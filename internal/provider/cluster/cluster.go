@@ -28,9 +28,6 @@ func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	if value < 3 {
 		return diag.Errorf("min_nodes must be at least 3, got %d", value)
 	}
-	if value%3 != 0 {
-		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
-	}
 	return nil
 }
 
@@ -57,20 +54,6 @@ func nonEmptyList(raw interface{}) bool {
 	return ok && len(items) > 0
 }
 
-func int64List(raw interface{}) []int64 {
-	items, ok := raw.([]interface{})
-	if !ok || len(items) == 0 {
-		return nil
-	}
-
-	out := make([]int64, 0, len(items))
-	for _, item := range items {
-		out = append(out, int64(item.(int)))
-	}
-
-	return out
-}
-
 func stringList(raw interface{}) []string {
 	items, ok := raw.([]interface{})
 	if !ok || len(items) == 0 {
@@ -79,7 +62,11 @@ func stringList(raw interface{}) []string {
 
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		out = append(out, item.(string))
+		s, ok := item.(string)
+		if !ok {
+			continue
+		}
+		out = append(out, s)
 	}
 
 	return out
@@ -142,11 +129,16 @@ func clusterUsesScaling(cluster *model.Cluster) bool {
 		return true
 	}
 
-	if len(cluster.Datacenters) == 1 && cluster.Datacenters[0].Scaling != nil && cluster.Datacenters[0].Scaling.Enabled() {
+	if len(cluster.Datacenters) == 1 {
+		for _, dc := range cluster.Datacenters {
+			if dc.Scaling != nil && dc.Scaling.Enabled() {
+				return true
+			}
+		}
 		return true
 	}
 
-	return cluster.ScalingMode != nil && strings.EqualFold(cluster.ScalingMode.Mode, "xcloud")
+	return false
 }
 
 func applyCreateSizing(clusterCreateRequest *model.ClusterCreateRequest, scaling *model.Scaling, minNodes int) {
@@ -614,7 +606,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 }
 
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	tflog.Info(ctx, "Read resourceClusterRead")
 	scyllaClient := meta.(*scylla.Client)
 
 	clusterID, diags := parseClusterID(d)
@@ -748,7 +739,6 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 }
 
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	tflog.Info(context.Background(), "Read resourceClusterUpdate")
 	scyllaClient := meta.(*scylla.Client)
 
 	// Currently, only min_nodes is updatable.
@@ -859,7 +849,6 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 }
 
 func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	tflog.Info(context.Background(), "Read resourceClusterDelete")
 	c := meta.(*scylla.Client)
 
 	clusterID, diags := parseClusterID(d)
