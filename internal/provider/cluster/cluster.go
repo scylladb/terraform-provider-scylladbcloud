@@ -85,13 +85,13 @@ func stringList(raw interface{}) []string {
 	return out
 }
 
-func expandScaling(raw interface{}, region string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) (*model.DatacenterScaling, error) {
+func expandScaling(raw interface{}, region string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) (*model.Scaling, error) {
 	block, ok := nestedBlock(raw)
 	if !ok {
 		return nil, nil
 	}
 
-	scaling := &model.DatacenterScaling{
+	scaling := &model.Scaling{
 		InstanceFamilies: stringList(block["instance_families"]),
 	}
 
@@ -108,9 +108,9 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 
 	if storagePolicy, ok := nestedBlock(block["storage_policy"]); ok {
 		if scaling.Policies == nil {
-			scaling.Policies = &model.DatacenterScalingPolicies{}
+			scaling.Policies = &model.ScalingPolicies{}
 		}
-		scaling.Policies.Storage = &model.DatacenterScalingStoragePolicy{
+		scaling.Policies.Storage = &model.ScalingStoragePolicy{
 			Min:               int64(storagePolicy["min"].(int)),
 			TargetUtilization: storagePolicy["target_utilization"].(float64),
 		}
@@ -118,9 +118,9 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 
 	if vcpuPolicy, ok := nestedBlock(block["vcpu_policy"]); ok {
 		if scaling.Policies == nil {
-			scaling.Policies = &model.DatacenterScalingPolicies{}
+			scaling.Policies = &model.ScalingPolicies{}
 		}
-		scaling.Policies.VCPU = &model.DatacenterScalingVCPUPolicy{
+		scaling.Policies.VCPU = &model.ScalingVCPUPolicy{
 			Min: int64(vcpuPolicy["min"].(int)),
 		}
 	}
@@ -128,6 +128,7 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 	if !scaling.Enabled() {
 		return nil, nil
 	}
+	scaling.Mode = model.ScalingXCloud
 
 	return scaling, nil
 }
@@ -146,6 +147,17 @@ func clusterUsesScaling(cluster *model.Cluster) bool {
 	}
 
 	return cluster.ScalingMode != nil && strings.EqualFold(cluster.ScalingMode.Mode, "xcloud")
+}
+
+func applyCreateSizing(clusterCreateRequest *model.ClusterCreateRequest, scaling *model.Scaling, minNodes int) {
+	if scaling != nil {
+		clusterCreateRequest.Scaling = scaling
+		clusterCreateRequest.NumberOfNodes = 0
+		return
+	}
+
+	clusterCreateRequest.Scaling = nil
+	clusterCreateRequest.NumberOfNodes = int64(minNodes)
 }
 
 func validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
@@ -447,7 +459,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		byoa, byoaOK                 = d.GetOk("byoa_id")
 		region                       = d.Get("region").(string)
 		nodeType, nodeTypeOK         = d.GetOk("node_type")
-		scaling                      *model.DatacenterScaling
+		scaling                      *model.Scaling
 		version, versionOK           = d.GetOk("scylla_version")
 		enableVpcPeering             = d.Get("enable_vpc_peering").(bool)
 		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
@@ -463,12 +475,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if byoaOK {
 		clusterCreateRequest.AccountCredentialID = int64(byoa.(int))
-	}
-
-	if scaling != nil {
-		clusterCreateRequest.Scaling = scaling
-	} else {
-		clusterCreateRequest.NumberOfNodes = int64(d.Get("min_nodes").(int))
 	}
 
 	if !cidrOK {
@@ -501,6 +507,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if err != nil {
 		return diag.FromErr(err)
 	}
+	applyCreateSizing(clusterCreateRequest, scaling, d.Get("min_nodes").(int))
 
 	var mi *model.CloudProviderInstance
 	if scaling == nil {
