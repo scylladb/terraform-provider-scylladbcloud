@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	stdpath "path"
 	"time"
@@ -57,6 +58,7 @@ type Client struct {
 }
 
 func NewClient(endpoint, token, useragent string, metadata bool) (*Client, error) {
+	tflog.Info(context.Background(), "dumped request: "+"NewClient+")
 	errCodes, err := parse(codes, codesDelim, codesFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse error codes: %w", err)
@@ -105,6 +107,7 @@ func NewClient(endpoint, token, useragent string, metadata bool) (*Client, error
 }
 
 func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBody interface{}, query ...string) (*http.Request, error) {
+	tflog.Info(ctx, "dumped request: "+method+" "+path, map[string]interface{}{})
 	var body []byte
 	var err error
 
@@ -163,12 +166,31 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 		return err
 	}
 	req = req.WithContext(ctx)
+	tflog.Info(ctx, "__________________________")
+	out, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		tflog.Info(ctx, "failed to dump request: "+err.Error(), map[string]interface{}{
+			"error": err.Error(),
+		})
+	} else {
+		tflog.Info(ctx, "dumped request: "+string(out), nil)
+	}
+	tflog.Info(ctx, "__________________________")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	tflog.Info(ctx, "__________________________")
+	rn, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		tflog.Info(ctx, "failed to dump response: "+err.Error(), map[string]interface{}{})
+	} else {
+		tflog.Info(ctx, "dumped response: "+string(rn), nil)
+	}
+	tflog.Info(ctx, "__________________________")
 
 	var (
 		buf  bytes.Buffer

@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
@@ -30,6 +31,7 @@ func envEndpoint() string {
 }
 
 func New(context.Context) *schema.Provider {
+	tflog.Info(context.Background(), "Creating new Provider")
 	p := &schema.Provider{
 		Schema: map[string]*schema.Schema{
 			"endpoint": {
