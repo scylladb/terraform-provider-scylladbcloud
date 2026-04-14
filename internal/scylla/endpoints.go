@@ -79,7 +79,9 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 	if err != nil {
 		return nil, fmt.Errorf("failed to read datacenter %d: %w", cluster.Datacenter.ID, err)
 	}
+	cluster.Datacenter.Scaling = datacenter.Scaling
 	cluster.Datacenter.Topology = datacenter.Topology
+	cluster.Datacenters[0].Scaling = datacenter.Scaling
 	cluster.Datacenters[0].Topology = datacenter.Topology
 
 	return cluster, nil
@@ -164,6 +166,17 @@ func (c *Client) ResizeCluster(ctx context.Context, clusterID int64, dcID int64,
 	if err := c.post(ctx, path, data, &result); err != nil {
 		return nil, err
 	}
+	return &result, nil
+}
+
+func (c *Client) UpdateDcScalingPolicy(ctx context.Context, clusterID, dcID int64, scaling *model.Scaling) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d/scaling", c.AccountID, clusterID, dcID)
+	if err := c.put(ctx, path, scaling, &result); err != nil {
+		return nil, err
+	}
+
 	return &result, nil
 }
 
