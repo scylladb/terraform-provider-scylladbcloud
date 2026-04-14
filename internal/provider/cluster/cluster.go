@@ -85,15 +85,25 @@ func stringList(raw interface{}) []string {
 	return out
 }
 
-func expandScaling(raw interface{}) *model.DatacenterScaling {
+func expandScaling(raw interface{}, region string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) (*model.DatacenterScaling, error) {
 	block, ok := nestedBlock(raw)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	scaling := &model.DatacenterScaling{
 		InstanceFamilies: stringList(block["instance_families"]),
-		InstanceTypeIDs:  int64List(block["instance_type_ids"]),
+	}
+
+	if instanceTypes := stringList(block["instance_types"]); len(instanceTypes) > 0 {
+		scaling.InstanceTypeIDs = make([]int64, 0, len(instanceTypes))
+		for _, instanceType := range instanceTypes {
+			instance := cloudProvider.InstanceByNameFromInstances(instanceType, instances)
+			if instance == nil {
+				return nil, fmt.Errorf("unsupported scaling instance_type %q in region %s", instanceType, region)
+			}
+			scaling.InstanceTypeIDs = append(scaling.InstanceTypeIDs, instance.ID)
+		}
 	}
 
 	if storagePolicy, ok := nestedBlock(block["storage_policy"]); ok {
@@ -116,10 +126,10 @@ func expandScaling(raw interface{}) *model.DatacenterScaling {
 	}
 
 	if !scaling.Enabled() {
-		return nil
+		return nil, nil
 	}
 
-	return scaling
+	return scaling, nil
 }
 
 func clusterUsesScaling(cluster *model.Cluster) bool {
@@ -148,10 +158,10 @@ func validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType bool, scalin
 		}
 
 		hasInstanceFamilies := nonEmptyList(scaling["instance_families"])
-		hasInstanceTypeIDs := nonEmptyList(scaling["instance_type_ids"])
+		hasInstanceTypes := nonEmptyList(scaling["instance_types"])
 
-		if hasInstanceFamilies == hasInstanceTypeIDs {
-			return fmt.Errorf(`exactly one of "instance_families" or "instance_type_ids" must be configured in the "scaling" block`)
+		if hasInstanceFamilies == hasInstanceTypes {
+			return fmt.Errorf(`exactly one of "instance_families" or "instance_types" must be configured in the "scaling" block`)
 		}
 
 		return nil
@@ -296,12 +306,12 @@ func ResourceCluster() *schema.Resource {
 						MinItems:    1,
 						Elem:        &schema.Schema{Type: schema.TypeString},
 					},
-					"instance_type_ids": {
-						Description: "Allowed instance type IDs for X Cloud scaling",
+					"instance_types": {
+						Description: "Allowed instance types for X Cloud scaling",
 						Optional:    true,
 						Type:        schema.TypeList,
 						MinItems:    1,
-						Elem:        &schema.Schema{Type: schema.TypeInt},
+						Elem:        &schema.Schema{Type: schema.TypeString},
 					},
 					"storage_policy": {
 						Description: "Storage scaling policy",
@@ -437,7 +447,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		byoa, byoaOK                 = d.GetOk("byoa_id")
 		region                       = d.Get("region").(string)
 		nodeType, nodeTypeOK         = d.GetOk("node_type")
-		scaling                      = expandScaling(d.Get("scaling"))
+		scaling                      *model.DatacenterScaling
 		version, versionOK           = d.GetOk("scylla_version")
 		enableVpcPeering             = d.Get("enable_vpc_peering").(bool)
 		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
@@ -485,6 +495,11 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cloudProvider.CloudProvider.ID, mr.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
+	}
+
+	scaling, err = expandScaling(d.Get("scaling"), region, instances, cloudProvider)
+	if err != nil {
+		return diag.FromErr(err)
 	}
 
 	var mi *model.CloudProviderInstance
