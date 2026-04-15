@@ -191,7 +191,7 @@ const (
 )
 
 type Scaling struct {
-	Mode             ScalingMode      `json:"mode,omitzero"`
+	Mode             ScalingMode      `json:"mode,omitempty"`
 	InstanceFamilies []string         `json:"instanceFamilies,omitempty"`
 	InstanceTypeIDs  []int64          `json:"instanceTypeIDs,omitempty"`
 	Policies         *ScalingPolicies `json:"policies,omitempty"`

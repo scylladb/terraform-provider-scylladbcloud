@@ -28,6 +28,9 @@ func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	if value < 3 {
 		return diag.Errorf("min_nodes must be at least 3, got %d", value)
 	}
+	if value%3 != 0 {
+		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+	}
 	return nil
 }
 
@@ -256,7 +259,7 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description:      "Minimum number of nodes for regular clusters",
+				Description:      "Minimum number of nodes for regular clusters, required when scaling isn’t configured",
 				Optional:         true,
 				Type:             schema.TypeInt,
 				ConflictsWith:    []string{"scaling"},
@@ -592,7 +595,9 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		}
 		instanceExternalID = i.ExternalID
 	}
-
+	if hasScaling(cluster) && instanceExternalID == "" {
+		return diag.Errorf("instance external ID is expected to be set for cluster %d with scaling configuration", cluster.ID)
+	}
 	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
