@@ -39,9 +39,7 @@ output "scylladbcloud_cluster_datacenter" {
 
 ### Required
 
-- `min_nodes` (Number) Minimum number of nodes
 - `name` (String) Cluster name
-- `node_type` (String) Instance type of a node
 - `region` (String) Region to use
 
 ### Optional
@@ -53,7 +51,10 @@ output "scylladbcloud_cluster_datacenter" {
 - `cloud` (String) Cloud provider (AWS, GCP)
 - `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering
+- `min_nodes` (Number) Minimum number of nodes for regular clusters
 - `node_disk_size` (Number) The disk size in gigabytes of the node
+- `node_type` (String) Instance type of a node for regular clusters
+- `scaling` (Block List, Max: 1) X Cloud scaling configuration for the single supported datacenter (see [below for nested schema](#nestedblock--scaling))
 - `scylla_version` (String) Scylla version
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `user_api_interface` (String) Type of API interface, either CQL or ALTERNATOR
@@ -68,6 +69,34 @@ output "scylladbcloud_cluster_datacenter" {
 - `node_private_ips` (Set of String) Cluster nodes private IP addresses
 - `request_id` (Number) Cluster creation request ID
 - `status` (String) Cluster status
+
+<a id="nestedblock--scaling"></a>
+### Nested Schema for `scaling`
+
+Optional:
+
+- `instance_families` (List of String) Allowed instance families for X Cloud scaling
+- `instance_types` (List of String) Allowed instance types for X Cloud scaling
+- `storage_policy` (Block List, Max: 1) Storage scaling policy (see [below for nested schema](#nestedblock--scaling--storage_policy))
+- `vcpu_policy` (Block List, Max: 1) vCPU scaling policy (see [below for nested schema](#nestedblock--scaling--vcpu_policy))
+
+<a id="nestedblock--scaling--storage_policy"></a>
+### Nested Schema for `scaling.storage_policy`
+
+Required:
+
+- `min_gb` (Number) Minimum storage in GB
+- `target_utilization` (Number) Target storage utilization ratio
+
+
+<a id="nestedblock--scaling--vcpu_policy"></a>
+### Nested Schema for `scaling.vcpu_policy`
+
+Required:
+
+- `min` (Number) Minimum vCPUs
+
+
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`
