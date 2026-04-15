@@ -80,6 +80,7 @@ type CloudProviderInstance struct {
 	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
 	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
 	FreeTierHours               int64       `json:"freeTierHours"`
+	Family                      string      `json:"instanceFamily"`
 }
 
 type CloudProviderRegions struct {
@@ -186,13 +187,8 @@ type ExpirationTime struct {
 type ScalingMode string
 
 const (
-	ScalingStandard ScalingMode = "standard"
-	ScalingXCloud   ScalingMode = "xcloud"
+	ScalingXCloud ScalingMode = "xcloud"
 )
-
-func (s ScalingMode) String() string {
-	return string(s)
-}
 
 type Scaling struct {
 	Mode             ScalingMode      `json:"mode,omitzero"`

@@ -82,6 +82,12 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 		InstanceFamilies: stringList(block["instance_families"]),
 	}
 
+	for _, family := range scaling.InstanceFamilies {
+		if i := cloudProvider.InstanceByFamilyNameFromInstances(family, instances); i == nil {
+			return nil, fmt.Errorf("unsupported scaling instance_family %q in region %s", family, region)
+		}
+	}
+
 	if instanceTypes := stringList(block["instance_types"]); len(instanceTypes) > 0 {
 		scaling.InstanceTypeIDs = make([]int64, 0, len(instanceTypes))
 		for _, instanceType := range instanceTypes {
@@ -120,7 +126,7 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 	return scaling, nil
 }
 
-func clusterUsesScaling(cluster *model.Cluster) bool {
+func hasScaling(cluster *model.Cluster) bool {
 	if cluster == nil {
 		return false
 	}
@@ -135,18 +141,13 @@ func clusterUsesScaling(cluster *model.Cluster) bool {
 				return true
 			}
 		}
-		return true
 	}
 
 	return false
 }
 
-func applyCreateSizing(clusterCreateRequest *model.ClusterCreateRequest, scaling *model.Scaling, minNodes int) {
-
-}
-
-func validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
-	if hasScaling {
+func validateScaling(hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
+	if scaling != nil {
 		if hasMinNodes {
 			return fmt.Errorf(`"scaling" cannot be used together with "min_nodes"`)
 		}
@@ -178,15 +179,14 @@ func validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType bool, scalin
 }
 
 func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ interface{}) error {
-	scaling, hasScaling := nestedBlock(d.Get("scaling"))
+	scaling, _ := nestedBlock(d.Get("scaling"))
 	_, hasMinNodes := d.GetOk("min_nodes")
 	_, hasNodeType := d.GetOk("node_type")
 
-	return validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType, scaling)
+	return validateScaling(hasMinNodes, hasNodeType, scaling)
 }
 
 func ResourceCluster() *schema.Resource {
-	tflog.Info(context.Background(), "Read ResourceCluster")
 	return &schema.Resource{
 		CreateContext: resourceClusterCreate,
 		ReadContext:   resourceClusterRead,
@@ -428,7 +428,6 @@ func ResourceCluster() *schema.Resource {
 }
 
 func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	tflog.Info(ctx, "Read resourceClusterCreate")
 	var (
 		scyllaClient         = meta.(*scylla.Client)
 		clusterCreateRequest = &model.ClusterCreateRequest{
@@ -684,7 +683,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	nodeCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
 	_ = d.Set("node_count", nodeCount)
 
-	if clusterUsesScaling(cluster) {
+	if hasScaling(cluster) {
 		_ = d.Set("min_nodes", nil)
 		_ = d.Set("node_type", nil)
 	} else if minNodes, ok := d.GetOk("min_nodes"); !ok {
@@ -704,7 +703,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	}
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
-	if !clusterUsesScaling(cluster) {
+	if !hasScaling(cluster) {
 		_ = d.Set("node_type", instanceExternalID)
 	}
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))

@@ -57,6 +57,17 @@ func (p *CloudProvider) InstanceByNameFromInstances(name string, instances []mod
 	return nil
 }
 
+func (p *CloudProvider) InstanceByFamilyNameFromInstances(name string, instances []model.CloudProviderInstance) *model.CloudProviderInstance {
+	for i := range instances {
+		t := &instances[i]
+
+		if strings.EqualFold(t.Family, name) {
+			return t
+		}
+	}
+	return nil
+}
+
 func (p *CloudProvider) InstanceByNameAndDiskSizeFromInstances(name string, diskSize int, instances []model.CloudProviderInstance) *model.CloudProviderInstance {
 	for i := range instances {
 		t := &instances[i]
