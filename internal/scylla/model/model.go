@@ -108,29 +108,30 @@ type ClusterRequest struct {
 }
 
 type ClusterCreateRequest struct {
-	AccountCredentialID      int64    `json:"accountCredentialId,omitempty"`
-	AlternatorWriteIsolation string   `json:"alternatorWriteIsolation,omitempty"`
-	AvailabilityZoneIDs      []string `json:"availabilityZoneIdsOverride,omitempty"`
-	BroadcastType            string   `json:"broadcastType,omitempty"`
-	CidrBlock                string   `json:"cidrBlock,omitempty"`
-	CloudProviderID          int64    `json:"cloudProviderId,omitempty"`
-	InstanceID               int64    `json:"instanceId,omitempty"`
-	RegionID                 int64    `json:"regionId,omitempty"`
-	Scaling                  *Scaling `json:"scaling,omitempty"`
-	EnableDNSAssociation     bool     `json:"enableDnsAssociation"`
-	AllowedIPs               []string `json:"allowedIPs,omitempty"`
-	FreeTier                 bool     `json:"freeTier"`
-	JumpStart                bool     `json:"jumpStart"`
-	ClusterName              string   `json:"clusterName"`
-	NumberOfNodes            int64    `json:"numberOfNodes"`
-	PromProxy                bool     `json:"promProxy"`
-	ReplicationFactor        int64    `json:"replicationFactor"`
-	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
-	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
-	Provisioning             string   `json:"provisioning,omitempty"`
-	ProcessingUnits          int      `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
-	Expiration               string   `json:"expiration,omitempty" example:"12"`
-	Placement                string   `json:"placement,omitempty"`
+	AccountCredentialID      int64       `json:"accountCredentialId,omitempty"`
+	AlternatorWriteIsolation string      `json:"alternatorWriteIsolation,omitempty"`
+	AvailabilityZoneIDs      []string    `json:"availabilityZoneIdsOverride,omitempty"`
+	BroadcastType            string      `json:"broadcastType,omitempty"`
+	CidrBlock                string      `json:"cidrBlock,omitempty"`
+	CloudProviderID          int64       `json:"cloudProviderId,omitempty"`
+	InstanceID               int64       `json:"instanceId,omitempty"`
+	RegionID                 int64       `json:"regionId,omitempty"`
+	Scaling                  *Scaling    `json:"scaling,omitempty"`
+	Tablets                  tabletsMode `json:"tablets,omitempty"`
+	EnableDNSAssociation     bool        `json:"enableDnsAssociation"`
+	AllowedIPs               []string    `json:"allowedIPs,omitempty"`
+	FreeTier                 bool        `json:"freeTier"`
+	JumpStart                bool        `json:"jumpStart"`
+	ClusterName              string      `json:"clusterName"`
+	NumberOfNodes            int64       `json:"numberOfNodes"`
+	PromProxy                bool        `json:"promProxy"`
+	ReplicationFactor        int64       `json:"replicationFactor"`
+	ScyllaVersionID          int64       `json:"scyllaVersionId,omitempty"`
+	UserAPIInterface         string      `json:"userApiInterface,omitempty"`
+	Provisioning             string      `json:"provisioning,omitempty"`
+	ProcessingUnits          int         `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
+	Expiration               string      `json:"expiration,omitempty" example:"12"`
+	Placement                string      `json:"placement,omitempty"`
 }
 
 type Cluster struct {
@@ -425,3 +426,9 @@ type Stack struct {
 	RequestID          string         `json:"RequestId"`
 	ResourceProperties map[string]any `json:"ResourceProperties"`
 }
+
+type tabletsMode string
+
+const (
+	TabletsEnforced tabletsMode = "enforced"
+)

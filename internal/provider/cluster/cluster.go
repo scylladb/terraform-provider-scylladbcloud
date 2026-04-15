@@ -98,7 +98,7 @@ func expandScaling(raw interface{}, region string, instances []model.CloudProvid
 			scaling.Policies = &model.ScalingPolicies{}
 		}
 		scaling.Policies.Storage = &model.ScalingStoragePolicy{
-			Min:               int64(storagePolicy["min"].(int)),
+			Min:               int64(storagePolicy["min_gb"].(int)),
 			TargetUtilization: storagePolicy["target_utilization"].(float64),
 		}
 	}
@@ -142,14 +142,7 @@ func clusterUsesScaling(cluster *model.Cluster) bool {
 }
 
 func applyCreateSizing(clusterCreateRequest *model.ClusterCreateRequest, scaling *model.Scaling, minNodes int) {
-	if scaling != nil {
-		clusterCreateRequest.Scaling = scaling
-		clusterCreateRequest.NumberOfNodes = 0
-		return
-	}
 
-	clusterCreateRequest.Scaling = nil
-	clusterCreateRequest.NumberOfNodes = int64(minNodes)
 }
 
 func validateClusterSizingMode(hasScaling, hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
@@ -323,7 +316,7 @@ func ResourceCluster() *schema.Resource {
 						Type:        schema.TypeList,
 						MaxItems:    1,
 						Elem: &schema.Resource{Schema: map[string]*schema.Schema{
-							"min": {
+							"min_gb": {
 								Description: "Minimum storage in GB",
 								Required:    true,
 								Type:        schema.TypeInt,
@@ -499,7 +492,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	applyCreateSizing(clusterCreateRequest, scaling, d.Get("min_nodes").(int))
+
+	if scaling != nil {
+		clusterCreateRequest.Scaling = scaling
+		clusterCreateRequest.Tablets = model.TabletsEnforced
+	} else {
+		minNodes := d.Get("min_nodes").(int)
+		clusterCreateRequest.NumberOfNodes = int64(minNodes)
+	}
 
 	var mi *model.CloudProviderInstance
 	if scaling == nil {
