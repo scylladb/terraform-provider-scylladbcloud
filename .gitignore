@@ -35,3 +35,6 @@ go.work.sum
 # editor config
 .vscode
 .idea
+
+# Certain docs files should not be created
+docs/resources/stack.md
