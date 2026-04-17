@@ -280,3 +280,111 @@ func TestHasScaling(t *testing.T) {
 		})
 	}
 }
+
+func TestFlattenScaling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns empty for nil scaling", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := flattenScaling(nil, nil, &scylla.CloudProvider{})
+		require.NoError(t, err)
+		require.Equal(t, []map[string]interface{}{}, got)
+	})
+
+	t.Run("maps instance type ids back to instance types", func(t *testing.T) {
+		t.Parallel()
+
+		instances := []model.CloudProviderInstance{
+			{ID: 1, ExternalID: "i3.large"},
+			{ID: 2, ExternalID: "i3.xlarge"},
+		}
+
+		got, err := flattenScaling(&model.Scaling{
+			Mode:            model.ScalingXCloud,
+			InstanceTypeIDs: []int64{2},
+			Policies: &model.ScalingPolicies{
+				Storage: &model.ScalingStoragePolicy{Min: 500, TargetUtilization: 0.75},
+				VCPU:    &model.ScalingVCPUPolicy{Min: 8},
+			},
+		}, instances, &scylla.CloudProvider{})
+		require.NoError(t, err)
+		require.Equal(t, []map[string]interface{}{{
+			"instance_types": []string{"i3.xlarge"},
+			"storage_policy": []map[string]interface{}{{
+				"min_gb":             500,
+				"target_utilization": 0.75,
+			}},
+			"vcpu_policy": []map[string]interface{}{{
+				"min": 8,
+			}},
+		}}, got)
+	})
+
+	t.Run("returns error for unknown instance id", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := flattenScaling(&model.Scaling{
+			Mode:            model.ScalingXCloud,
+			InstanceTypeIDs: []int64{99},
+		}, []model.CloudProviderInstance{{ID: 2, ExternalID: "i3.xlarge"}}, &scylla.CloudProvider{})
+		require.Nil(t, got)
+		require.EqualError(t, err, "unexpected scaling instance type ID 99")
+	})
+}
+
+func TestSetClusterKVsSetsScaling(t *testing.T) {
+	t.Parallel()
+
+	resource := ResourceCluster()
+	data := resource.TestResourceData()
+	cluster := &model.Cluster{
+		ID:               123,
+		ClusterName:      "xcloud",
+		UserAPIInterface: "CQL",
+		BroadcastType:    "PRIVATE",
+		DNS:              true,
+		Status:           "ACTIVE",
+		Region:           &model.CloudProviderRegion{ExternalID: "us-east-1"},
+		ScyllaVersion:    &model.ScyllaVersion{Version: "2025.1"},
+		Datacenter: &model.Datacenter{
+			Name:      "AWS_US_EAST_1",
+			CIDRBlock: "172.31.0.0/16",
+			Scaling: &model.Scaling{
+				Mode:            model.ScalingXCloud,
+				InstanceTypeIDs: []int64{2},
+				Policies: &model.ScalingPolicies{
+					Storage: &model.ScalingStoragePolicy{Min: 500, TargetUtilization: 0.75},
+					VCPU:    &model.ScalingVCPUPolicy{Min: 8},
+				},
+			},
+		},
+		Datacenters: []model.Datacenter{{
+			Scaling: &model.Scaling{
+				Mode:            model.ScalingXCloud,
+				InstanceTypeIDs: []int64{2},
+				Policies: &model.ScalingPolicies{
+					Storage: &model.ScalingStoragePolicy{Min: 500, TargetUtilization: 0.75},
+					VCPU:    &model.ScalingVCPUPolicy{Min: 8},
+				},
+			},
+		}},
+	}
+	instances := []model.CloudProviderInstance{{ID: 2, ExternalID: "i3.xlarge"}}
+
+	err := setClusterKVs(data, cluster, "AWS", "", instances, &scylla.CloudProvider{})
+	require.NoError(t, err)
+	require.Equal(t, []interface{}{map[string]interface{}{
+		"instance_families": []interface{}{},
+		"instance_types":    []interface{}{"i3.xlarge"},
+		"storage_policy": []interface{}{map[string]interface{}{
+			"min_gb":             500,
+			"target_utilization": 0.75,
+		}},
+		"vcpu_policy": []interface{}{map[string]interface{}{
+			"min": 8,
+		}},
+	}}, data.Get("scaling"))
+	require.Zero(t, data.Get("min_nodes"))
+	require.Empty(t, data.Get("node_type"))
+}

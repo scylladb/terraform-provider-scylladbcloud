@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type tabletsMode string
+
+const (
+	TabletsEnforced tabletsMode = "enforced"
+)
+
 type CloudProvider struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -422,9 +428,3 @@ type Stack struct {
 	RequestID          string         `json:"RequestId"`
 	ResourceProperties map[string]any `json:"ResourceProperties"`
 }
-
-type tabletsMode string
-
-const (
-	TabletsEnforced tabletsMode = "enforced"
-)
