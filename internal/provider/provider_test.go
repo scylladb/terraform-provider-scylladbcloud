@@ -95,6 +95,73 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	})
 }
 
+func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("xcloud-aws")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name       = %[1]q
+  cloud      = "AWS"
+  region     = "us-east-1"
+  cidr_block = "10.0.1.0/24"
+  enable_dns = true
+  availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
+  scaling {
+    instance_families = ["i4i"]
+    storage_policy {
+      min_gb             = 500
+      target_utilization = 0.75
+    }
+    vcpu_policy {
+      min = 8
+    }
+  }
+}`, resourceName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("scaling"),
+						knownvalue.ListExact([]knownvalue.Check{
+							knownvalue.ObjectPartial(
+								map[string]knownvalue.Check{
+									"instance_families": knownvalue.ListExact(
+										[]knownvalue.Check{knownvalue.StringExact("i4i")},
+									),
+								},
+							),
+						}),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int32Exact(3),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("availability_zone_ids"),
+						knownvalue.SetExact([]knownvalue.Check{
+							knownvalue.StringExact("use1-az2"),
+							knownvalue.StringExact("use1-az4"),
+							knownvalue.StringExact("use1-az6"),
+						}),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-aws-single-az")
