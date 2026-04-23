@@ -70,12 +70,12 @@ func TestValidateScaling(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		hasScaling  bool
-		hasMinNodes bool
-		hasNodeType bool
-		scaling     map[string]interface{}
-		valid       bool
+		name          string
+		hasMinNodes   bool
+		hasNodeType   bool
+		scaling       map[string]interface{}
+		valid         bool
+		expectedError string
 	}{
 		{
 			name:        "regular cluster valid",
@@ -84,53 +84,53 @@ func TestValidateScaling(t *testing.T) {
 			valid:       true,
 		},
 		{
-			name:        "regular cluster missing min nodes",
-			hasNodeType: true,
+			name:          "regular cluster missing min nodes",
+			hasNodeType:   true,
+			expectedError: `"min_nodes" is required when the "scaling" block is not configured`,
 		},
 		{
-			name:        "regular cluster missing node type",
-			hasMinNodes: true,
+			name:          "regular cluster missing node type",
+			hasMinNodes:   true,
+			expectedError: `"node_type" is required when the "scaling" block is not configured`,
 		},
 		{
 			name:        "scaling conflicts with min nodes",
-			hasScaling:  true,
 			hasMinNodes: true,
 			scaling: map[string]interface{}{
 				"instance_families": []interface{}{"i4i"},
 			},
+			expectedError: `"scaling" cannot be used together with "min_nodes"`,
 		},
 		{
 			name:        "scaling conflicts with node type",
-			hasScaling:  true,
 			hasNodeType: true,
 			scaling: map[string]interface{}{
 				"instance_families": []interface{}{"i4i"},
 			},
+			expectedError: `"scaling" cannot be used together with "node_type"`,
 		},
 		{
-			name:       "scaling missing selector",
-			hasScaling: true,
-			scaling:    map[string]interface{}{},
+			name:          "scaling missing selector",
+			scaling:       map[string]interface{}{},
+			expectedError: `exactly one of "instance_families" or "instance_types" must be configured in the "scaling" block`,
 		},
 		{
-			name:       "scaling both selectors",
-			hasScaling: true,
+			name: "scaling both selectors",
 			scaling: map[string]interface{}{
 				"instance_families": []interface{}{"i4i"},
 				"instance_types":    []interface{}{"i3.xlarge"},
 			},
+			expectedError: `exactly one of "instance_families" or "instance_types" must be configured in the "scaling" block`,
 		},
 		{
-			name:       "scaling with families valid",
-			hasScaling: true,
+			name: "scaling with families valid",
 			scaling: map[string]interface{}{
 				"instance_families": []interface{}{"i4i"},
 			},
 			valid: true,
 		},
 		{
-			name:       "scaling with instance types valid",
-			hasScaling: true,
+			name: "scaling with instance types valid",
 			scaling: map[string]interface{}{
 				"instance_types": []interface{}{"i3.large", "i3.xlarge"},
 			},
@@ -149,6 +149,9 @@ func TestValidateScaling(t *testing.T) {
 			}
 
 			require.Error(t, err)
+			if tt.expectedError != "" {
+				require.EqualError(t, err, tt.expectedError)
+			}
 		})
 	}
 }

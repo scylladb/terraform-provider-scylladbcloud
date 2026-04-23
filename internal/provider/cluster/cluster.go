@@ -445,11 +445,12 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"node_disk_size": {
-				Description: "The disk size in gigabytes of the node",
-				ForceNew:    true,
-				Optional:    true,
-				Computed:    true,
-				Type:        schema.TypeInt,
+				Description:   "The disk size in gigabytes of the node",
+				ForceNew:      true,
+				Optional:      true,
+				Computed:      true,
+				Type:          schema.TypeInt,
+				ConflictsWith: []string{"scaling"},
 			},
 			"availability_zone_ids": {
 				Description: "List of Availability Zone IDs for the cluster nodes (e.g., " +
