@@ -94,22 +94,6 @@ func TestValidateScaling(t *testing.T) {
 			expectedError: `"node_type" is required when the "scaling" block is not configured`,
 		},
 		{
-			name:        "scaling conflicts with min nodes",
-			hasMinNodes: true,
-			scaling: map[string]interface{}{
-				"instance_families": []interface{}{"i4i"},
-			},
-			expectedError: `"scaling" cannot be used together with "min_nodes"`,
-		},
-		{
-			name:        "scaling conflicts with node type",
-			hasNodeType: true,
-			scaling: map[string]interface{}{
-				"instance_families": []interface{}{"i4i"},
-			},
-			expectedError: `"scaling" cannot be used together with "node_type"`,
-		},
-		{
 			name:          "scaling missing selector",
 			scaling:       map[string]interface{}{},
 			expectedError: `exactly one of "instance_families" or "instance_types" must be configured in the "scaling" block`,

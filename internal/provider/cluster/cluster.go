@@ -191,13 +191,6 @@ func hasScaling(cluster *model.Cluster) bool {
 
 func validateScaling(hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
 	if scaling != nil {
-		if hasMinNodes {
-			return fmt.Errorf(`"scaling" cannot be used together with "min_nodes"`)
-		}
-		if hasNodeType {
-			return fmt.Errorf(`"scaling" cannot be used together with "node_type"`)
-		}
-
 		hasInstanceFamilies := isNonEmptyList(scaling["instance_families"])
 		hasInstanceTypes := isNonEmptyList(scaling["instance_types"])
 
