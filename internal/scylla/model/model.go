@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type tabletsMode string
+
+const (
+	TabletsEnforced tabletsMode = "enforced"
+)
+
 type CloudProvider struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -80,6 +86,7 @@ type CloudProviderInstance struct {
 	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
 	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
 	FreeTierHours               int64       `json:"freeTierHours"`
+	Family                      string      `json:"instanceFamily"`
 }
 
 type CloudProviderRegions struct {
@@ -108,28 +115,30 @@ type ClusterRequest struct {
 }
 
 type ClusterCreateRequest struct {
-	AccountCredentialID      int64    `json:"accountCredentialId,omitempty"`
-	AlternatorWriteIsolation string   `json:"alternatorWriteIsolation,omitempty"`
-	AvailabilityZoneIDs      []string `json:"availabilityZoneIdsOverride,omitempty"`
-	BroadcastType            string   `json:"broadcastType,omitempty"`
-	CidrBlock                string   `json:"cidrBlock,omitempty"`
-	CloudProviderID          int64    `json:"cloudProviderId,omitempty"`
-	InstanceID               int64    `json:"instanceId,omitempty"`
-	RegionID                 int64    `json:"regionId,omitempty"`
-	EnableDNSAssociation     bool     `json:"enableDnsAssociation"`
-	AllowedIPs               []string `json:"allowedIPs,omitempty"`
-	FreeTier                 bool     `json:"freeTier"`
-	JumpStart                bool     `json:"jumpStart"`
-	ClusterName              string   `json:"clusterName"`
-	NumberOfNodes            int64    `json:"numberOfNodes"`
-	PromProxy                bool     `json:"promProxy"`
-	ReplicationFactor        int64    `json:"replicationFactor"`
-	ScyllaVersionID          int64    `json:"scyllaVersionId,omitempty"`
-	UserAPIInterface         string   `json:"userApiInterface,omitempty"`
-	Provisioning             string   `json:"provisioning,omitempty"`
-	ProcessingUnits          int      `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
-	Expiration               string   `json:"expiration,omitempty" example:"12"`
-	Placement                string   `json:"placement,omitempty"`
+	AccountCredentialID      int64       `json:"accountCredentialId,omitempty"`
+	AlternatorWriteIsolation string      `json:"alternatorWriteIsolation,omitempty"`
+	AvailabilityZoneIDs      []string    `json:"availabilityZoneIdsOverride,omitempty"`
+	BroadcastType            string      `json:"broadcastType,omitempty"`
+	CidrBlock                string      `json:"cidrBlock,omitempty"`
+	CloudProviderID          int64       `json:"cloudProviderId,omitempty"`
+	InstanceID               int64       `json:"instanceId,omitempty"`
+	RegionID                 int64       `json:"regionId,omitempty"`
+	Scaling                  *Scaling    `json:"scaling,omitempty"`
+	Tablets                  tabletsMode `json:"tablets,omitempty"`
+	EnableDNSAssociation     bool        `json:"enableDnsAssociation"`
+	AllowedIPs               []string    `json:"allowedIPs,omitempty"`
+	FreeTier                 bool        `json:"freeTier"`
+	JumpStart                bool        `json:"jumpStart"`
+	ClusterName              string      `json:"clusterName"`
+	NumberOfNodes            int64       `json:"numberOfNodes"`
+	PromProxy                bool        `json:"promProxy"`
+	ReplicationFactor        int64       `json:"replicationFactor"`
+	ScyllaVersionID          int64       `json:"scyllaVersionId,omitempty"`
+	UserAPIInterface         string      `json:"userApiInterface,omitempty"`
+	Provisioning             string      `json:"provisioning,omitempty"`
+	ProcessingUnits          int         `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
+	Expiration               string      `json:"expiration,omitempty" example:"12"`
+	Placement                string      `json:"placement,omitempty"`
 }
 
 type Cluster struct {
@@ -181,6 +190,44 @@ type ExpirationTime struct {
 	ExpirationSeconds int64  `json:"expirationSeconds"`
 	CreationTime      string `json:"creationTime"`
 }
+type ScalingMode string
+
+const (
+	ScalingXCloud ScalingMode = "xcloud"
+)
+
+type Scaling struct {
+	Mode             ScalingMode      `json:"mode,omitempty"`
+	InstanceFamilies []string         `json:"instanceFamilies,omitempty"`
+	InstanceTypeIDs  []int64          `json:"instanceTypeIDs,omitempty"`
+	Policies         *ScalingPolicies `json:"policies,omitempty"`
+}
+
+func (s *Scaling) Enabled() bool {
+	if s == nil {
+		return false
+	}
+
+	if len(s.InstanceFamilies) > 0 || len(s.InstanceTypeIDs) > 0 {
+		return true
+	}
+
+	return s.Policies != nil && (s.Policies.Storage != nil || s.Policies.VCPU != nil)
+}
+
+type ScalingPolicies struct {
+	Storage *ScalingStoragePolicy `json:"storage,omitempty"`
+	VCPU    *ScalingVCPUPolicy    `json:"vcpu,omitempty"`
+}
+
+type ScalingStoragePolicy struct {
+	Min               int64   `json:"min,omitempty"`
+	TargetUtilization float64 `json:"targetUtilization,omitempty"`
+}
+
+type ScalingVCPUPolicy struct {
+	Min int64 `json:"min,omitempty"`
+}
 
 type Datacenter struct {
 	ID                               int64                `json:"id"`
@@ -193,6 +240,7 @@ type Datacenter struct {
 	ReplicationFactor                int64                `json:"ReplicationFactor"`
 	CIDRBlock                        string               `json:"cidrBlock"`
 	AccountCloudProviderCredentialID int64                `json:"accountCloudProviderCredentialsId"`
+	Scaling                          *Scaling             `json:"scaling,omitempty"`
 	CloudProvider                    *CloudProvider       `json:"cloudProvider,omitempty"`
 	Region                           *CloudProviderRegion `json:"region,omitempty"`
 	Topology                         *Topology            `json:"Topology,omitempty"`

@@ -23,6 +23,205 @@ const (
 	clusterPollInterval  = 10 * time.Second
 )
 
+func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
+	value := v.(int)
+	if value < 3 {
+		return diag.Errorf("min_nodes must be at least 3, got %d", value)
+	}
+	if value%3 != 0 {
+		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+	}
+	return nil
+}
+
+func validateScalingTargetUtilizationDiag(v interface{}, _ cty.Path) diag.Diagnostics {
+	value := v.(float64)
+	if value <= 0.0 || value > 1.0 {
+		return diag.Errorf("target_utilization must be greater than 0.0 and less than or equal to 1.0, got %v", value)
+	}
+	return nil
+}
+
+func castToNestedBlock(raw interface{}) (map[string]interface{}, bool) {
+	items, ok := raw.([]interface{})
+	if !ok || len(items) == 0 || items[0] == nil {
+		return nil, false
+	}
+
+	block, ok := items[0].(map[string]interface{})
+	return block, ok
+}
+
+func isNonEmptyList(raw interface{}) bool {
+	items, ok := raw.([]interface{})
+	return ok && len(items) > 0
+}
+
+func castToStringList(raw interface{}) []string {
+	items, ok := raw.([]interface{})
+	if !ok || len(items) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			continue
+		}
+		out = append(out, s)
+	}
+
+	return out
+}
+
+func expandScaling(raw interface{}, region string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) (*model.Scaling, error) {
+	block, ok := castToNestedBlock(raw)
+	if !ok {
+		return nil, nil
+	}
+
+	scaling := &model.Scaling{
+		InstanceFamilies: castToStringList(block["instance_families"]),
+	}
+
+	for _, family := range scaling.InstanceFamilies {
+		if i := cloudProvider.InstanceByFamilyNameFromInstances(family, instances); i == nil {
+			return nil, fmt.Errorf("unsupported scaling instance_family %q in region %s", family, region)
+		}
+	}
+
+	if instanceTypes := castToStringList(block["instance_types"]); len(instanceTypes) > 0 {
+		scaling.InstanceTypeIDs = make([]int64, 0, len(instanceTypes))
+		for _, instanceType := range instanceTypes {
+			instance := cloudProvider.InstanceByNameFromInstances(instanceType, instances)
+			if instance == nil {
+				return nil, fmt.Errorf("unsupported scaling instance_type %q in region %s", instanceType, region)
+			}
+			scaling.InstanceTypeIDs = append(scaling.InstanceTypeIDs, instance.ID)
+		}
+	}
+
+	if storagePolicy, ok := castToNestedBlock(block["storage_policy"]); ok {
+		if scaling.Policies == nil {
+			scaling.Policies = &model.ScalingPolicies{}
+		}
+		scaling.Policies.Storage = &model.ScalingStoragePolicy{
+			Min:               int64(storagePolicy["min_gb"].(int)),
+			TargetUtilization: storagePolicy["target_utilization"].(float64),
+		}
+	}
+
+	if vcpuPolicy, ok := castToNestedBlock(block["vcpu_policy"]); ok {
+		if scaling.Policies == nil {
+			scaling.Policies = &model.ScalingPolicies{}
+		}
+		scaling.Policies.VCPU = &model.ScalingVCPUPolicy{
+			Min: int64(vcpuPolicy["min"].(int)),
+		}
+	}
+
+	if !scaling.Enabled() {
+		return nil, nil
+	}
+	scaling.Mode = model.ScalingXCloud
+
+	return scaling, nil
+}
+
+func flattenScaling(raw *model.Scaling, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) ([]map[string]interface{}, error) {
+	if raw == nil || !raw.Enabled() {
+		return []map[string]interface{}{}, nil
+	}
+
+	block := map[string]interface{}{}
+
+	if len(raw.InstanceFamilies) > 0 {
+		block["instance_families"] = raw.InstanceFamilies
+	}
+
+	if len(raw.InstanceTypeIDs) > 0 {
+		instanceTypes := make([]string, 0, len(raw.InstanceTypeIDs))
+		for _, id := range raw.InstanceTypeIDs {
+			instance := cloudProvider.InstanceByIDFromInstances(id, instances)
+			if instance == nil {
+				return nil, fmt.Errorf("unexpected scaling instance type ID %d", id)
+			}
+			instanceTypes = append(instanceTypes, instance.ExternalID)
+		}
+		block["instance_types"] = instanceTypes
+	}
+
+	if raw.Policies != nil {
+		if raw.Policies.Storage != nil {
+			block["storage_policy"] = []map[string]interface{}{{
+				"min_gb":             int(raw.Policies.Storage.Min),
+				"target_utilization": raw.Policies.Storage.TargetUtilization,
+			}}
+		}
+		if raw.Policies.VCPU != nil {
+			block["vcpu_policy"] = []map[string]interface{}{{
+				"min": int(raw.Policies.VCPU.Min),
+			}}
+		}
+	}
+
+	return []map[string]interface{}{block}, nil
+}
+
+func hasScaling(cluster *model.Cluster) bool {
+	if cluster == nil {
+		return false
+	}
+
+	if cluster.Datacenter != nil && cluster.Datacenter.Scaling != nil && cluster.Datacenter.Scaling.Enabled() {
+		return true
+	}
+
+	if len(cluster.Datacenters) == 1 {
+		for _, dc := range cluster.Datacenters {
+			if dc.Scaling != nil && dc.Scaling.Enabled() {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func validateScaling(hasMinNodes, hasNodeType bool, scaling map[string]interface{}) error {
+	if scaling != nil {
+		hasInstanceFamilies := isNonEmptyList(scaling["instance_families"])
+		hasInstanceTypes := isNonEmptyList(scaling["instance_types"])
+
+		if hasInstanceFamilies == hasInstanceTypes {
+			return fmt.Errorf(`exactly one of "instance_families" or "instance_types" must be configured in the "scaling" block`)
+		}
+
+		return nil
+	}
+
+	if !hasMinNodes && !hasNodeType {
+		return fmt.Errorf(`either configure the "scaling" block or set both "min_nodes" and "node_type"`)
+	}
+	if !hasMinNodes {
+		return fmt.Errorf(`"min_nodes" is required when the "scaling" block is not configured`)
+	}
+	if !hasNodeType {
+		return fmt.Errorf(`"node_type" is required when the "scaling" block is not configured`)
+	}
+
+	return nil
+}
+
+func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ interface{}) error {
+	scaling, _ := castToNestedBlock(d.Get("scaling"))
+	_, hasMinNodes := d.GetOk("min_nodes")
+	_, hasNodeType := d.GetOk("node_type")
+
+	return validateScaling(hasMinNodes, hasNodeType, scaling)
+}
+
 func ResourceCluster() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceClusterCreate,
@@ -39,6 +238,8 @@ func ResourceCluster() *schema.Resource {
 			Update: schema.DefaultTimeout(clusterRetryTimeout),
 			Delete: schema.DefaultTimeout(clusterDeleteTimeout),
 		},
+
+		CustomizeDiff: resourceClusterCustomizeDiff,
 
 		SchemaVersion: 3,
 
@@ -91,19 +292,11 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description: "Minimum number of nodes",
-				Required:    true,
-				Type:        schema.TypeInt,
-				ValidateDiagFunc: func(v interface{}, path cty.Path) diag.Diagnostics {
-					value := v.(int)
-					if value < 3 {
-						return diag.Errorf("min_nodes must be at least 3, got %d", value)
-					}
-					if value%3 != 0 {
-						return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
-					}
-					return nil
-				},
+				Description:      "Minimum number of nodes for regular clusters, required when scaling isn’t configured",
+				Optional:         true,
+				Type:             schema.TypeInt,
+				ConflictsWith:    []string{"scaling"},
+				ValidateDiagFunc: validateMinNodesDiag,
 			},
 			"byoa_id": {
 				Description: "BYOA credential ID (only for AWS)",
@@ -126,10 +319,66 @@ func ResourceCluster() *schema.Resource {
 				Default:     "only_rmw_uses_lwt",
 			},
 			"node_type": {
-				Description: "Instance type of a node",
-				Required:    true,
-				ForceNew:    true,
-				Type:        schema.TypeString,
+				Description:   "Instance type of a node for regular clusters",
+				Optional:      true,
+				ForceNew:      true,
+				Type:          schema.TypeString,
+				ConflictsWith: []string{"scaling"},
+			},
+			"scaling": {
+				Description:   "X Cloud scaling configuration for the single supported datacenter",
+				Optional:      true,
+				Type:          schema.TypeList,
+				MaxItems:      1,
+				ConflictsWith: []string{"min_nodes", "node_type"},
+				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+					"instance_families": {
+						Description: "Allowed instance families for X Cloud scaling",
+						Optional:    true,
+						Type:        schema.TypeList,
+						MinItems:    1,
+						Elem:        &schema.Schema{Type: schema.TypeString},
+					},
+					"instance_types": {
+						Description: "Allowed instance types for X Cloud scaling",
+						Optional:    true,
+						Type:        schema.TypeList,
+						MinItems:    1,
+						Elem:        &schema.Schema{Type: schema.TypeString},
+					},
+					"storage_policy": {
+						Description: "Storage scaling policy",
+						Optional:    true,
+						Type:        schema.TypeList,
+						MaxItems:    1,
+						Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+							"min_gb": {
+								Description: "Minimum storage in GB",
+								Required:    true,
+								Type:        schema.TypeInt,
+							},
+							"target_utilization": {
+								Description:      "Target storage utilization ratio",
+								Required:         true,
+								Type:             schema.TypeFloat,
+								ValidateDiagFunc: validateScalingTargetUtilizationDiag,
+							},
+						}},
+					},
+					"vcpu_policy": {
+						Description: "vCPU scaling policy",
+						Optional:    true,
+						Type:        schema.TypeList,
+						MaxItems:    1,
+						Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+							"min": {
+								Description: "Minimum vCPUs",
+								Required:    true,
+								Type:        schema.TypeInt,
+							},
+						}},
+					},
+				}},
 			},
 			"node_dns_names": {
 				Description: "Cluster nodes DNS names",
@@ -189,11 +438,12 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"node_disk_size": {
-				Description: "The disk size in gigabytes of the node",
-				ForceNew:    true,
-				Optional:    true,
-				Computed:    true,
-				Type:        schema.TypeInt,
+				Description:   "The disk size in gigabytes of the node",
+				ForceNew:      true,
+				Optional:      true,
+				Computed:      true,
+				Type:          schema.TypeInt,
+				ConflictsWith: []string{"scaling"},
 			},
 			"availability_zone_ids": {
 				Description: "List of Availability Zone IDs for the cluster nodes (e.g., " +
@@ -221,7 +471,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
 			ReplicationFactor:    3,
-			NumberOfNodes:        int64(d.Get("min_nodes").(int)),
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Placement:            "true",
@@ -230,7 +479,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		cidr, cidrOK                 = d.GetOk("cidr_block")
 		byoa, byoaOK                 = d.GetOk("byoa_id")
 		region                       = d.Get("region").(string)
-		nodeType                     = d.Get("node_type").(string)
+		nodeType, nodeTypeOK         = d.GetOk("node_type")
+		scaling                      *model.Scaling
 		version, versionOK           = d.GetOk("scylla_version")
 		enableVpcPeering             = d.Get("enable_vpc_peering").(bool)
 		nodeDiskSize, nodeDiskSizeOK = d.GetOk("node_disk_size")
@@ -274,22 +524,40 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
 	}
 
-	var mi *model.CloudProviderInstance
-	if nodeDiskSizeOK {
-		if mi = cloudProvider.InstanceByNameAndDiskSizeFromInstances(nodeType, nodeDiskSize.(int), instances); mi == nil {
-			return diag.Errorf(
-				`unrecognized value combination: %q for "node_type" and %d for "node_disk_size" attributes`,
-				nodeType,
-				nodeDiskSize,
-			)
-		}
-	} else {
-		if mi = cloudProvider.InstanceByNameFromInstances(nodeType, instances); mi == nil {
-			return diag.Errorf(`unsupported node_type %q in region %s`, nodeType, mr.ExternalID)
-		}
+	scaling, err = expandScaling(d.Get("scaling"), region, instances, cloudProvider)
+	if err != nil {
+		return diag.FromErr(err)
 	}
 
-	clusterCreateRequest.InstanceID = mi.ID
+	if scaling != nil {
+		clusterCreateRequest.Scaling = scaling
+		clusterCreateRequest.Tablets = model.TabletsEnforced
+	} else {
+		minNodes := d.Get("min_nodes").(int)
+		clusterCreateRequest.NumberOfNodes = int64(minNodes)
+	}
+
+	var mi *model.CloudProviderInstance
+	if scaling == nil {
+		nodeTypeStr := nodeType.(string)
+		if nodeDiskSizeOK {
+			if mi = cloudProvider.InstanceByNameAndDiskSizeFromInstances(nodeTypeStr, nodeDiskSize.(int), instances); mi == nil {
+				return diag.Errorf(
+					`unrecognized value combination: %q for "node_type" and %d for "node_disk_size" attributes`,
+					nodeTypeStr,
+					nodeDiskSize,
+				)
+			}
+		} else {
+			if mi = cloudProvider.InstanceByNameFromInstances(nodeTypeStr, instances); mi == nil {
+				return diag.Errorf(`unsupported node_type %q in region %s`, nodeTypeStr, mr.ExternalID)
+			}
+		}
+
+		clusterCreateRequest.InstanceID = mi.ID
+	} else if nodeDiskSizeOK || nodeTypeOK {
+		return diag.Errorf(`"node_type" and "node_disk_size" are not supported when the "scaling" block is configured`)
+	}
 
 	// Handle availability zone IDs
 	if azIDs, ok := d.GetOk("availability_zone_ids"); ok {
@@ -353,12 +621,18 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
-	if i == nil {
-		return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
+	instanceExternalID := ""
+	if cluster.Datacenter.InstanceID != 0 {
+		i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
+		if i == nil {
+			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
+		}
+		instanceExternalID = i.ExternalID
 	}
-
-	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, i.ExternalID)
+	if hasScaling(cluster) && instanceExternalID == "" {
+		return diag.Errorf("instance external ID is expected to be set for cluster %d with scaling configuration", cluster.ID)
+	}
+	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, instances, cloudProvider)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -418,20 +692,18 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	}
 
 	var instanceExternalID string
+	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
+	if err != nil {
+		return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
+	}
 	if cluster.Datacenter.InstanceID != 0 {
-		instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
-		if err != nil {
-			return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
-		}
-
 		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
 			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
 		}
 		instanceExternalID = i.ExternalID
 	}
-
-	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID)
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, instances, p)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -439,7 +711,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID string) error {
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
@@ -448,9 +720,19 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	nodeCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
 	_ = d.Set("node_count", nodeCount)
 
-	if minNodes, ok := d.GetOk("min_nodes"); !ok {
+	if hasScaling(cluster) {
+		_ = d.Set("min_nodes", nil)
+		_ = d.Set("node_type", nil)
+		scaling, err := flattenScaling(cluster.Datacenters[0].Scaling, instances, cloudProvider)
+		if err != nil {
+			return err
+		}
+		_ = d.Set("scaling", scaling)
+	} else if minNodes, ok := d.GetOk("min_nodes"); !ok {
+		_ = d.Set("scaling", []map[string]interface{}{})
 		_ = d.Set("min_nodes", nodeCount)
 	} else if minNodes.(int) > nodeCount {
+		_ = d.Set("scaling", []map[string]interface{}{})
 		// If the cluster was scaled in outside of the Terraform,
 		// set min_nodes to its new value. It should result in
 		// scale out as it will diverge from what's in the .tf
@@ -462,10 +744,14 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		//  - run "tf apply"
 		// Expectations: min_nodes should be updated and the apply should result in scale-out.
 		_ = d.Set("min_nodes", nodeCount)
+	} else {
+		_ = d.Set("scaling", []map[string]interface{}{})
 	}
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
-	_ = d.Set("node_type", instanceExternalID)
+	if !hasScaling(cluster) {
+		_ = d.Set("node_type", instanceExternalID)
+	}
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	_ = d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
 	_ = d.Set("cidr_block", cluster.Datacenter.CIDRBlock)
