@@ -375,3 +375,54 @@ func TestSetClusterKVsSetsScaling(t *testing.T) {
 	require.Zero(t, data.Get("min_nodes"))
 	require.Empty(t, data.Get("node_type"))
 }
+
+func TestIsScalingEqual(t *testing.T) {
+	t.Parallel()
+
+	base := &model.Scaling{
+		Mode:            model.ScalingXCloud,
+		InstanceTypeIDs: []int64{2},
+		Policies: &model.ScalingPolicies{
+			Storage: &model.ScalingStoragePolicy{Min: 500, TargetUtilization: 0.75},
+			VCPU:    &model.ScalingVCPUPolicy{Min: 8},
+		},
+	}
+
+	tests := []struct {
+		name string
+		lhs  *model.Scaling
+		rhs  *model.Scaling
+		want bool
+	}{
+		{name: "both nil", want: true},
+		{name: "same scaling", lhs: base, rhs: base, want: true},
+		{
+			name: "different instance type ids",
+			lhs:  base,
+			rhs: &model.Scaling{
+				Mode:            model.ScalingXCloud,
+				InstanceTypeIDs: []int64{3},
+				Policies:        base.Policies,
+			},
+		},
+		{
+			name: "different storage min",
+			lhs:  base,
+			rhs: &model.Scaling{
+				Mode:            model.ScalingXCloud,
+				InstanceTypeIDs: []int64{2},
+				Policies: &model.ScalingPolicies{
+					Storage: &model.ScalingStoragePolicy{Min: 750, TargetUtilization: 0.75},
+					VCPU:    &model.ScalingVCPUPolicy{Min: 8},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, isScalingEqual(tt.lhs, tt.rhs))
+		})
+	}
+}
