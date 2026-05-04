@@ -222,13 +222,6 @@ func isScalingVCPUPolicyEqual(lhs, rhs *model.ScalingVCPUPolicy) bool {
 	return lhs.Min == rhs.Min
 }
 
-func clusterInstancesForRegion(ctx context.Context, c *scylla.Client, cluster *model.Cluster) ([]model.CloudProviderInstance, error) {
-	if cluster == nil || cluster.Region == nil {
-		return nil, errors.New("cluster region is required")
-	}
-	return c.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
-}
-
 func hasScaling(cluster *model.Cluster) bool {
 	if cluster == nil {
 		return false
@@ -855,6 +848,10 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		return nil
 	}
 
+	return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+}
+
+func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, meta interface{}, scyllaClient *scylla.Client) diag.Diagnostics {
 	// There are three scenarios:
 	// - scale-out: newMinNodes > oldMinNodes
 	// - scale-in: newMinNodes < oldMinNodes
@@ -976,7 +973,7 @@ func resourceClusterUpdateScaling(ctx context.Context, d *schema.ResourceData, s
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	instances, err := clusterInstancesForRegion(ctx, scyllaClient, cluster)
+	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances: %s", err)
 	}
