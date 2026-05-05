@@ -843,7 +843,6 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
 	}
 
-	// Currently, only min_nodes is updatable.
 	if !d.HasChange("min_nodes") {
 		return nil
 	}
