@@ -843,11 +843,11 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
 	}
 
-	if !d.HasChange("min_nodes") {
-		return nil
+	if d.HasChange("min_nodes") {
+		return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
 	}
 
-	return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+	return nil
 }
 
 func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, meta interface{}, scyllaClient *scylla.Client) diag.Diagnostics {
