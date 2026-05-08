@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -167,6 +168,58 @@ func flattenScaling(raw *model.Scaling, instances []model.CloudProviderInstance,
 	}
 
 	return []map[string]interface{}{block}, nil
+}
+
+func isScalingEqual(lhs, rhs *model.Scaling) bool {
+	if lhs == nil || !lhs.Enabled() {
+		lhs = nil
+	}
+	if rhs == nil || !rhs.Enabled() {
+		rhs = nil
+	}
+
+	if lhs == nil || rhs == nil {
+		return lhs == rhs
+	}
+
+	if lhs.Mode != rhs.Mode {
+		return false
+	}
+	if !slices.Equal(lhs.InstanceFamilies, rhs.InstanceFamilies) {
+		return false
+	}
+	if !slices.Equal(lhs.InstanceTypeIDs, rhs.InstanceTypeIDs) {
+		return false
+	}
+
+	return isScalingPoliciesEqual(lhs.Policies, rhs.Policies)
+}
+
+func isScalingPoliciesEqual(lhs, rhs *model.ScalingPolicies) bool {
+	if lhs == nil || rhs == nil {
+		return lhs == rhs
+	}
+	if !isScalingStoragePolicyEqual(lhs.Storage, rhs.Storage) {
+		return false
+	}
+	if !isScalingVCPUPolicyEqual(lhs.VCPU, rhs.VCPU) {
+		return false
+	}
+	return true
+}
+
+func isScalingStoragePolicyEqual(lhs, rhs *model.ScalingStoragePolicy) bool {
+	if lhs == nil || rhs == nil {
+		return lhs == rhs
+	}
+	return lhs.Min == rhs.Min && lhs.TargetUtilization == rhs.TargetUtilization
+}
+
+func isScalingVCPUPolicyEqual(lhs, rhs *model.ScalingVCPUPolicy) bool {
+	if lhs == nil || rhs == nil {
+		return lhs == rhs
+	}
+	return lhs.Min == rhs.Min
 }
 
 func hasScaling(cluster *model.Cluster) bool {
@@ -749,6 +802,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	}
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
+
 	if !hasScaling(cluster) {
 		_ = d.Set("node_type", instanceExternalID)
 	}
@@ -785,12 +839,18 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
-
-	// Currently, only min_nodes is updatable.
-	if !d.HasChange("min_nodes") {
-		return nil
+	if d.HasChange("scaling") {
+		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
 	}
 
+	if d.HasChange("min_nodes") {
+		return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+	}
+
+	return nil
+}
+
+func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, meta interface{}, scyllaClient *scylla.Client) diag.Diagnostics {
 	// There are three scenarios:
 	// - scale-out: newMinNodes > oldMinNodes
 	// - scale-in: newMinNodes < oldMinNodes
@@ -891,6 +951,72 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	return resourceClusterRead(ctx, d, meta)
+}
+
+func resourceClusterUpdateScaling(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client) diag.Diagnostics {
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	cluster, err := scyllaClient.GetCluster(ctx, clusterID)
+	if err != nil {
+		if scylla.IsClusterDeletedErr(err) {
+			d.SetId("")
+			return nil
+		}
+		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	if n := len(cluster.Datacenters); n != 1 {
+		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+	}
+
+	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
+	if err != nil {
+		return diag.Errorf("failed to list cloud provider instances: %s", err)
+	}
+
+	cloudProvider := scyllaClient.Meta.ProviderByID(cluster.CloudProviderID)
+	if cloudProvider == nil {
+		return diag.Errorf("unexpected cloud provider %d for cluster %d", cluster.CloudProviderID, cluster.ID)
+	}
+
+	desiredScaling, err := expandScaling(d.Get("scaling"), cluster.Region.ExternalID, instances, cloudProvider)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	if desiredScaling == nil {
+		return diag.Errorf("scaling block must be configured for scaling updates")
+	}
+	remoteScaling := cluster.Datacenters[0].Scaling
+
+	if !hasScaling(cluster) {
+		return diag.Errorf("scaling updates are supported only for X Cloud clusters")
+	}
+
+	if isScalingEqual(desiredScaling, remoteScaling) {
+		return resourceClusterRead(ctx, d, scyllaClient)
+	}
+
+	request, err := scyllaClient.UpdateDcScalingPolicy(ctx, cluster.ID, cluster.Datacenter.ID, desiredScaling)
+	if err != nil {
+		var apiErr *scylla.APIError
+		if errors.As(err, &apiErr) && apiErr.Code == "041008" {
+			return diag.Errorf("X-Cloud clusters do not support manual resizing. Use the scaling block to adjust capacity policies.")
+		}
+		return diag.Errorf("failed to update cluster scaling: %s", err)
+	}
+
+	if request == nil || request.ID == 0 {
+		return diag.Errorf("failed to update cluster scaling: missing cluster request ID in response")
+	}
+
+	if err := WaitForClusterRequestID(ctx, scyllaClient, request.ID); err != nil {
+		return diag.Errorf("failed waiting for scaling update request %d for cluster %d: %s", request.ID, cluster.ID, err)
+	}
+
+	return resourceClusterRead(ctx, d, scyllaClient)
 }
 
 func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
