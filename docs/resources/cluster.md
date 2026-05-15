@@ -39,54 +39,54 @@ output "scylladbcloud_cluster_datacenter" {
 
 ### Required
 
-- `name` (String) Cluster name
-- `region` (String) Region to use
+- `name` (String) The name of the cluster.
+- `region` (String) The cloud region to deploy the cluster in (e.g. us-east-1).
 
 ### Optional
 
-- `alternator_write_isolation` (String) Default write isolation policy
-- `availability_zone_ids` (Set of String) List of Availability Zone IDs for the cluster nodes (e.g., 'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', 'us-central1-c' for GCP). Between 1 and 3 AZ IDs can be specified. It is recommended to specify exactly 3 AZ IDs to ensure optimal distribution of nodes across availability zones. AZ IDs are consistent identifiers that map to the same physical availability zone across all accounts, unlike AZ names which may differ between accounts. If not specified, the server will automatically select availability zones.
-- `byoa_id` (Number) BYOA credential ID (only for AWS)
-- `cidr_block` (String) IPv4 CIDR of the cluster
-- `cloud` (String) Cloud provider (AWS, GCP)
-- `enable_dns` (Boolean) Whether to enable CNAME for seed nodes
-- `enable_vpc_peering` (Boolean) Whether to enable VPC peering
-- `min_nodes` (Number) Minimum number of nodes for regular clusters
-- `node_disk_size` (Number) The disk size in gigabytes of the node
-- `node_type` (String) Instance type of a node for regular clusters
-- `scaling` (Block List, Max: 1) X Cloud scaling configuration for the single supported datacenter (see [below for nested schema](#nestedblock--scaling))
-- `scylla_version` (String) Scylla version
+- `alternator_write_isolation` (String) The write isolation policy. Used only for the ALTERNATOR API interface.
+- `availability_zone_ids` (Set of String) Availability zone IDs where cluster nodes are provisioned. Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). If omitted, zones are selected automatically. After refreshing state with terraform refresh, you can read back the IDs that were assigned.
+- `byoa_id` (Number) The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).
+- `cidr_block` (String) The CIDR block for the cluster network.
+- `cloud` (String) The cloud provider. Accepted values: AWS, GCP.
+- `enable_dns` (Boolean) Whether to enable DNS for the cluster.
+- `enable_vpc_peering` (Boolean) Whether to enable VPC peering for the cluster.
+- `min_nodes` (Number) Minimum number of nodes in the cluster. Defaults to 3. Applies to Standard clusters only. Must not be set when the scaling block is present. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.
+- `node_disk_size` (Number) The disk size in gigabytes of the node.
+- `node_type` (String) The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. Must not be set when the scaling block is present.
+- `scaling` (Block List, Max: 1) Defines the autoscaling policy for an X Cloud cluster. Mutually exclusive with `node_type` and `min_nodes`. When present, the control plane manages scaling automatically based on the policy defined below. (see [below for nested schema](#nestedblock--scaling))
+- `scylla_version` (String) Scylla version. The latest version will be used by default.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
-- `user_api_interface` (String) Type of API interface, either CQL or ALTERNATOR
+- `user_api_interface` (String) The type of user API interface. Valid values are CQL or ALTERNATOR.
 
 ### Read-Only
 
-- `cluster_id` (Number) Cluster id
-- `datacenter` (String) Cluster datacenter name
+- `cluster_id` (Number) The computed cluster ID.
+- `datacenter` (String) The computed cluster datacenter name.
 - `id` (String) The ID of this resource.
-- `node_count` (Number) Current node count (computed)
-- `node_dns_names` (Set of String) Cluster nodes DNS names
-- `node_private_ips` (Set of String) Cluster nodes private IP addresses
-- `request_id` (Number) Cluster creation request ID
-- `status` (String) Cluster status
+- `node_count` (Number) The last retrieved number of nodes.
+- `node_dns_names` (Set of String) The cluster nodes DNS names.
+- `node_private_ips` (Set of String) The cluster nodes private IP addresses.
+- `request_id` (Number) The cluster creation request ID.
+- `status` (String) The cluster status.
 
 <a id="nestedblock--scaling"></a>
 ### Nested Schema for `scaling`
 
 Optional:
 
-- `instance_families` (List of String) Allowed instance families for X Cloud scaling
-- `instance_types` (List of String) Allowed instance types for X Cloud scaling
-- `storage_policy` (Block List, Max: 1) Storage scaling policy (see [below for nested schema](#nestedblock--scaling--storage_policy))
-- `vcpu_policy` (Block List, Max: 1) vCPU scaling policy (see [below for nested schema](#nestedblock--scaling--vcpu_policy))
+- `instance_families` (List of String) Instance families to use for autoscaling (e.g. ["i8g"]). X Cloud scales within one predefined instance family. Manually restricting the cluster to a narrow set of instance types can limit the effectiveness of the autoscaling engine. Either instance_families or instance_types should be used.
+- `instance_types` (List of String) Instance types to use for autoscaling (e.g. ["i8g.large", "i8g.xlarge"]). Consider using instance_families instead. Either instance_families or instance_types should be used.
+- `storage_policy` (Block List, Max: 1) Controls storage-based autoscaling. (see [below for nested schema](#nestedblock--scaling--storage_policy))
+- `vcpu_policy` (Block List, Max: 1) Controls compute-based autoscaling. (see [below for nested schema](#nestedblock--scaling--vcpu_policy))
 
 <a id="nestedblock--scaling--storage_policy"></a>
 ### Nested Schema for `scaling.storage_policy`
 
 Required:
 
-- `min_gb` (Number) Minimum storage in GB
-- `target_utilization` (Number) Target storage utilization ratio
+- `min_gb` (Number) Minimum physical storage, in gigabytes, to keep provisioned across the cluster. The cluster will not scale below this threshold. If omitted, ScyllaDB Cloud manages baseline storage dynamically.
+- `target_utilization` (Number) Target storage utilization as a fraction between 0 and 1 (e.g. 0.75 = 75%). The autoscaler adds or removes capacity to maintain this level. Defaults to 0.8. Maximum is 0.9. For write-intensive workloads, values below 0.85 are recommended to provide headroom before the autoscaler triggers.
 
 
 <a id="nestedblock--scaling--vcpu_policy"></a>
@@ -94,7 +94,7 @@ Required:
 
 Required:
 
-- `min` (Number) Minimum vCPUs
+- `min` (Number) Minimum vCPU count to maintain across the cluster. The cluster will not scale below this compute baseline. If omitted, ScyllaDB Cloud manages compute capacity dynamically.
 
 
 

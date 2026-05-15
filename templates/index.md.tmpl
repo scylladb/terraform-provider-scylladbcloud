@@ -12,16 +12,21 @@ You must configure the provider with proper credentials before you can use it. S
 
 Use the navigation menu on the left to read about the available data sources and resources.
 
-
 ## Example Usage
 
 {{ tffile "examples/provider/provider.tf" }}
 
-### Creating a Cluster
+### Environment Variables
+
+Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environment variable.
+
+{{ .SchemaMarkdown | trimspace }}
+
+### Creating a Standard Cluster
 
 ```terraform
-resource "scylladbcloud_cluster" "example" {
-  name       = "my-cluster"
+resource "scylladbcloud_cluster" "standard" {
+  name       = "my-standard-cluster"
   cloud      = "AWS"
   region     = "us-east-1"
   node_type  = "i3.large"
@@ -30,24 +35,45 @@ resource "scylladbcloud_cluster" "example" {
 }
 ```
 
-### Environment Variables
+### Creating an X Cloud Cluster
 
-Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environment variable.
+```terraform
+resource "scylladbcloud_cluster" "xcloud" {
+  name       = "my-xcloud-cluster"
+  cloud      = "AWS"
+  region     = "us-east-1"
+  cidr_block = "10.0.1.0/24"
 
-{{ .SchemaMarkdown | trimspace }}
+  scaling {
+    instance_families = ["i8g"]
+
+    storage_policy {
+      min_gb             = 500
+      target_utilization = 0.75
+    }
+
+    vcpu_policy {
+      min = 6
+    }
+  }
+}
+```
 
 ## Limitations
 
-The provider deletes and recreates the cluster if the `node_type` property is changed.
+- **X Cloud Multi-DC:** Multi-DC is not supported. X Cloud clusters are single-datacenter only. Support for multi-DC deployments is planned for a future release.
+- **Upgrading from Standard to X Cloud forces re-creation:** Changing a cluster from `node_type`/`min_nodes` configuration to a `scaling` block will trigger a full destroy-and-recreate of the cluster. Back up your data before applying such a change.
+- **Replication factor:** Replication factor is fixed at 3 for X Cloud. X Cloud always uses RF=3 across three availability zones. This is required for Materialized Views, Secondary Indexes, Alternator, and CDC.
+- **Node Type changes:** The provider deletes and recreates the cluster if the `node_type` property is changed on a Standard cluster.
 
-### Horizontal Scaling
+## Horizontal Scaling
 
 The provider supports horizontal scaling (scale-out and scale-in) via the `min_nodes` attribute:
 
 - **Scale-out:** Increase `min_nodes` to add nodes to your cluster.
 - **Scale-in:** Decrease `min_nodes` to remove nodes from your cluster. Note that scale-in may fail if there is not enough disk space on the remaining nodes to hold the data. In this case, retry later after reducing data volume or waiting for compaction to complete.
 
-### Availability Zones
+## Availability Zones
 
 The provider supports specifying exact availability zone placement for cluster nodes using the `availability_zone_ids` field on the `scylladbcloud_cluster` resource. This field is optional and computed — after applying or refreshing state, you can see which availability zones your nodes are placed in.
 
