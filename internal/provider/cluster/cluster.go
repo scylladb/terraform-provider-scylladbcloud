@@ -316,102 +316,110 @@ func ResourceCluster() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
-				Description: "Cluster id",
+				Description: "The computed cluster ID.",
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
 			"cloud": {
-				Description: "Cloud provider (AWS, GCP)",
+				Description: "The cloud provider. Accepted values: AWS, GCP.",
 				Optional:    true,
 				ForceNew:    true,
 				Default:     "AWS",
 				Type:        schema.TypeString,
 			},
 			"name": {
-				Description: "Cluster name",
+				Description: "The name of the cluster.",
 				Required:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
 			"region": {
-				Description: "Region to use",
+				Description: "The cloud region to deploy the cluster in (e.g. us-east-1).",
 				Required:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
 			"node_count": {
-				Description: "Current node count (computed)",
+				Description: "The last retrieved number of nodes.",
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description:      "Minimum number of nodes for regular clusters, required when scaling isn’t configured",
+				Description:      "Minimum number of nodes in the cluster. Defaults to 3. Applies to Standard clusters only. Must not be set when the scaling block is present. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.",
 				Optional:         true,
 				Type:             schema.TypeInt,
 				ConflictsWith:    []string{"scaling"},
 				ValidateDiagFunc: validateMinNodesDiag,
 			},
 			"byoa_id": {
-				Description: "BYOA credential ID (only for AWS)",
+				Description: "The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeInt,
 			},
 			"user_api_interface": {
-				Description: "Type of API interface, either CQL or ALTERNATOR",
+				Description: "The type of user API interface. Valid values are CQL or ALTERNATOR.",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Default:     "CQL",
 			},
 			"alternator_write_isolation": {
-				Description: "Default write isolation policy",
+				Description: "The write isolation policy. Used only for the ALTERNATOR API interface.",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Default:     "only_rmw_uses_lwt",
 			},
 			"node_type": {
-				Description:   "Instance type of a node for regular clusters",
+				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
+					"Must not be set when the scaling block is present.",
 				Optional:      true,
 				ForceNew:      true,
 				Type:          schema.TypeString,
 				ConflictsWith: []string{"scaling"},
 			},
 			"scaling": {
-				Description:   "X Cloud scaling configuration for the single supported datacenter",
+				Description: "Defines the autoscaling policy for an X Cloud cluster. Mutually exclusive with `node_type` and `min_nodes`. " +
+					"When present, the control plane manages scaling automatically based on the policy defined below.",
 				Optional:      true,
 				Type:          schema.TypeList,
 				MaxItems:      1,
 				ConflictsWith: []string{"min_nodes", "node_type"},
 				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
 					"instance_families": {
-						Description: "Allowed instance families for X Cloud scaling",
-						Optional:    true,
-						Type:        schema.TypeList,
-						MinItems:    1,
-						Elem:        &schema.Schema{Type: schema.TypeString},
+						Description: `Instance families to use for autoscaling (e.g. ["i8g"]). X Cloud scales within one predefined instance family. ` +
+							`Manually restricting the cluster to a narrow set of instance types can limit the effectiveness of the autoscaling engine. ` +
+							`Either instance_families or instance_types should be used.`,
+						Optional: true,
+						Type:     schema.TypeList,
+						MinItems: 1,
+						Elem:     &schema.Schema{Type: schema.TypeString},
 					},
 					"instance_types": {
-						Description: "Allowed instance types for X Cloud scaling",
-						Optional:    true,
-						Type:        schema.TypeList,
-						MinItems:    1,
-						Elem:        &schema.Schema{Type: schema.TypeString},
+						Description: `Instance types to use for autoscaling (e.g. ["i8g.large", "i8g.xlarge"]). ` +
+							`Consider using instance_families instead. Either instance_families or instance_types should be used.`,
+						Optional: true,
+						Type:     schema.TypeList,
+						MinItems: 1,
+						Elem:     &schema.Schema{Type: schema.TypeString},
 					},
 					"storage_policy": {
-						Description: "Storage scaling policy",
+						Description: "Controls storage-based autoscaling.",
 						Optional:    true,
 						Type:        schema.TypeList,
 						MaxItems:    1,
 						Elem: &schema.Resource{Schema: map[string]*schema.Schema{
 							"min_gb": {
-								Description: "Minimum storage in GB",
-								Required:    true,
-								Type:        schema.TypeInt,
+								Description: "Minimum physical storage, in gigabytes, to keep provisioned across the cluster. " +
+									"The cluster will not scale below this threshold. If omitted, ScyllaDB Cloud manages baseline storage dynamically.",
+								Required: true,
+								Type:     schema.TypeInt,
 							},
 							"target_utilization": {
-								Description:      "Target storage utilization ratio",
+								Description: "Target storage utilization as a fraction between 0 and 1 (e.g. 0.75 = 75%). " +
+									"The autoscaler adds or removes capacity to maintain this level. Defaults to 0.8. Maximum is 0.9. " +
+									"For write-intensive workloads, values below 0.85 are recommended to provide headroom before the autoscaler triggers.",
 								Required:         true,
 								Type:             schema.TypeFloat,
 								ValidateDiagFunc: validateScalingTargetUtilizationDiag,
@@ -419,79 +427,80 @@ func ResourceCluster() *schema.Resource {
 						}},
 					},
 					"vcpu_policy": {
-						Description: "vCPU scaling policy",
+						Description: "Controls compute-based autoscaling.",
 						Optional:    true,
 						Type:        schema.TypeList,
 						MaxItems:    1,
 						Elem: &schema.Resource{Schema: map[string]*schema.Schema{
 							"min": {
-								Description: "Minimum vCPUs",
-								Required:    true,
-								Type:        schema.TypeInt,
+								Description: "Minimum vCPU count to maintain across the cluster. The cluster will not scale below this compute baseline. " +
+									"If omitted, ScyllaDB Cloud manages compute capacity dynamically.",
+								Required: true,
+								Type:     schema.TypeInt,
 							},
 						}},
 					},
 				}},
 			},
 			"node_dns_names": {
-				Description: "Cluster nodes DNS names",
+				Description: "The cluster nodes DNS names.",
 				Computed:    true,
 				Type:        schema.TypeSet,
 				Elem:        schema.TypeString,
 				Set:         schema.HashString,
 			},
 			"node_private_ips": {
-				Description: "Cluster nodes private IP addresses",
+				Description: "The cluster nodes private IP addresses.",
 				Computed:    true,
 				Type:        schema.TypeSet,
 				Elem:        schema.TypeString,
 				Set:         schema.HashString,
 			},
 			"cidr_block": {
-				Description: "IPv4 CIDR of the cluster",
+				Description: "The CIDR block for the cluster network.",
 				Optional:    true,
 				Computed:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
 			"scylla_version": {
-				Description: "Scylla version",
+				Description: "Scylla version. The latest version will be used by default.",
 				Optional:    true,
 				Computed:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
 			"enable_vpc_peering": {
-				Description: "Whether to enable VPC peering",
+				Description: "Whether to enable VPC peering for the cluster.",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeBool,
 				Default:     true,
 			},
 			"enable_dns": {
-				Description: "Whether to enable CNAME for seed nodes",
+				Description: "Whether to enable DNS for the cluster.",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeBool,
 				Default:     true,
 			},
 			"request_id": {
-				Description: "Cluster creation request ID",
+				Description: "The cluster creation request ID.",
 				Computed:    true,
 				Type:        schema.TypeInt,
 			},
 			"datacenter": {
-				Description: "Cluster datacenter name",
+				Description: "The computed cluster datacenter name.",
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
 			"status": {
-				Description: "Cluster status",
+				Description: "The cluster status.",
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
 			"node_disk_size": {
-				Description:   "The disk size in gigabytes of the node",
+				Description:   "The disk size in gigabytes of the node.",
 				ForceNew:      true,
 				Optional:      true,
 				Computed:      true,
@@ -499,14 +508,10 @@ func ResourceCluster() *schema.Resource {
 				ConflictsWith: []string{"scaling"},
 			},
 			"availability_zone_ids": {
-				Description: "List of Availability Zone IDs for the cluster nodes (e.g., " +
-					"'use1-az1', 'use1-az2', 'use1-az4' for AWS or 'us-central1-a', 'us-central1-b', " +
-					"'us-central1-c' for GCP). Between 1 and 3 AZ IDs can be specified. It is " +
-					"recommended to specify exactly 3 AZ IDs to ensure optimal distribution of " +
-					"nodes across availability zones. AZ IDs are consistent identifiers that map " +
-					"to the same physical availability zone across all accounts, unlike AZ names " +
-					"which may differ between accounts. If not specified, the server will " +
-					"automatically select availability zones.",
+				Description: `Availability zone IDs where cluster nodes are provisioned. ` +
+					`Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). ` +
+					`If omitted, zones are selected automatically. After refreshing state with terraform refresh, ` +
+					`you can read back the IDs that were assigned.`,
 				Optional: true,
 				Computed: true,
 				ForceNew: true,
