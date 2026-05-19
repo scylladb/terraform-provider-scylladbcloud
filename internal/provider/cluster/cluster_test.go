@@ -47,8 +47,9 @@ func TestValidateScalingTargetUtilizationDiag(t *testing.T) {
 		{name: "zero", value: 0},
 		{name: "negative", value: -0.1},
 		{name: "above one", value: 1.1},
+		{name: "above max", value: 1.0},
 		{name: "valid fractional", value: 0.75, valid: true},
-		{name: "valid one", value: 1.0, valid: true},
+		{name: "valid max", value: 0.9, valid: true},
 	}
 
 	for _, tt := range tests {
