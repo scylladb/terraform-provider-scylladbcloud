@@ -37,8 +37,8 @@ func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 
 func validateScalingTargetUtilizationDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	value := v.(float64)
-	if value <= 0.0 || value > 1.0 {
-		return diag.Errorf("target_utilization must be greater than 0.0 and less than or equal to 1.0, got %v", value)
+	if value <= 0.0 || value > 0.9 {
+		return diag.Errorf("target_utilization must be greater than 0.0 and less than or equal to 0.9, got %v", value)
 	}
 	return nil
 }
