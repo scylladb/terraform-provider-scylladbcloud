@@ -654,9 +654,9 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	if !versionOK {
-		clusterCreateRequest.ScyllaVersionID = scyllaClient.Meta.ScyllaVersions.DefaultScyllaVersionID
+		clusterCreateRequest.ScyllaVersionID = scyllaClient.Meta.DefaultVersion().ID
 	} else if mv := scyllaClient.Meta.VersionByName(version.(string)); mv != nil {
-		clusterCreateRequest.ScyllaVersionID = mv.VersionID
+		clusterCreateRequest.ScyllaVersionID = mv.ID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
 	}

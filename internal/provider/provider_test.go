@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
 
+	"github.com/hashicorp/go-version"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -595,6 +597,107 @@ func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestC
 
 		return nil
 	}
+}
+
+func TestAccScyllaDBCloudCluster_scyllaVersion(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("scylla-version")
+
+	// Ensure provider is configured before accessing client
+	testAccPreCheck(t)
+
+	// Dynamically select the latest non-default version
+	scyllaVersion := selectLatestNonDefaultVersion(t)
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name           = %[1]q
+  cloud          = "AWS"
+  region         = "us-east-1"
+  node_type      = "i3.large"
+  min_nodes      = 3
+  cidr_block     = "10.0.1.0/24"
+  enable_dns     = true
+  scylla_version = %[2]q
+}`, resourceName, scyllaVersion),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("scylla_version"),
+						knownvalue.StringExact(scyllaVersion),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					testAccCheckScyllaDBCloudClusterVersion(&cluster, scyllaVersion),
+				),
+			},
+		},
+	})
+}
+
+func testAccCheckScyllaDBCloudClusterVersion(cluster *model.Cluster, expectedVersion string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		if cluster.ScyllaVersion == nil {
+			return errors.Errorf("cluster ScyllaVersion is nil")
+		}
+		if cluster.ScyllaVersion.Version != expectedVersion {
+			return errors.Errorf("cluster version mismatch: expected %q, got %q", expectedVersion, cluster.ScyllaVersion.Version)
+		}
+		return nil
+	}
+}
+
+// selectLatestNonDefaultVersion returns the latest Scylla version that is not
+// the default version. Versions are sorted semantically to ensure we pick the
+// actual latest. The test fails if no non-default version is available.
+func selectLatestNonDefaultVersion(t *testing.T) string {
+	t.Helper()
+
+	client := getClientFromProvider(provider)
+	versions := client.Meta.ScyllaVersions
+	defaultID := versions.DefaultScyllaVersionID
+
+	// Collect non-default versions
+	var nonDefaultVersions []model.ScyllaVersion
+	for _, v := range versions.ScyllaVersions {
+		if v.ID != defaultID {
+			nonDefaultVersions = append(nonDefaultVersions, v)
+		}
+	}
+
+	if len(nonDefaultVersions) == 0 {
+		t.Fatal("no non-default Scylla version available")
+	}
+
+	// Sort by semantic version (descending) to get the latest first
+	slices.SortFunc(nonDefaultVersions, func(a, b model.ScyllaVersion) int {
+		va, errA := version.NewVersion(a.Version)
+		vb, errB := version.NewVersion(b.Version)
+
+		// If parsing fails, fall back to string comparison
+		if errA != nil || errB != nil {
+			if a.Version > b.Version {
+				return -1
+			}
+			if a.Version < b.Version {
+				return 1
+			}
+			return 0
+		}
+
+		// Descending order: higher version first
+		return vb.Compare(va)
+	})
+
+	return nonDefaultVersions[0].Version
 }
 
 func envGCPBYOAID() string {
