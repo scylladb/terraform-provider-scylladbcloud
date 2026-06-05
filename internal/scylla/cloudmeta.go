@@ -153,7 +153,7 @@ func (m *Cloudmeta) DefaultVersion() *model.ScyllaVersion {
 func (m *Cloudmeta) VersionByID(id int64) *model.ScyllaVersion {
 	for i := range m.ScyllaVersions.ScyllaVersions {
 		v := &m.ScyllaVersions.ScyllaVersions[i]
-		if v.VersionID == id {
+		if v.ID == id {
 			return v
 		}
 	}

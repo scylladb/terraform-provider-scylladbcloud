@@ -42,7 +42,7 @@ type CloudProviders struct {
 }
 
 type ScyllaVersion struct {
-	VersionID   int64  `json:"versionId"`
+	ID          int64  `json:"id"`
 	Version     string `json:"version"`
 	Description string `json:"description"`
 	NewCluster  string `json:"newCluster"`
