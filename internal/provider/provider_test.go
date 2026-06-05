@@ -57,13 +57,14 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name       = %[1]q
-  cloud      = "AWS"
-  region     = "us-east-1"
-  node_type  = "i3.large"
-  min_nodes  = 3
-  cidr_block = "10.0.1.0/24"
-  enable_dns = true
+  name           = %[1]q
+  cloud          = "AWS"
+  region         = "us-east-1"
+  node_type      = "i3.large"
+  min_nodes      = 3
+  scylla_version = "2026.1.1"
+  cidr_block     = "10.0.1.0/24"
+  enable_dns     = true
   availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
 }`, resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -86,9 +87,24 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 							knownvalue.StringExact("use1-az6"),
 						}),
 					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("scylla_version"),
+						knownvalue.StringExact("2026.1.1"),
+					),
 				},
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					func(s *terraform.State) error {
+						if cluster.ScyllaVersion == nil {
+							return fmt.Errorf("cluster ScyllaVersion is nil")
+						}
+						if cluster.ScyllaVersion.Version != "2026.1.1" {
+							return fmt.Errorf("expected scylla_version %q, got %q",
+								"2026.1.1", cluster.ScyllaVersion.Version)
+						}
+						return nil
+					},
 				),
 			},
 		},
