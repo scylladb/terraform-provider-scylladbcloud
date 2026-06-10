@@ -46,6 +46,7 @@ output "scylladbcloud_cluster_datacenter" {
 
 - `alternator_write_isolation` (String) The write isolation policy. Used only for the ALTERNATOR API interface.
 - `availability_zone_ids` (Set of String) Availability zone IDs where cluster nodes are provisioned. Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). If omitted, zones are selected automatically. After refreshing state with terraform refresh, you can read back the IDs that were assigned.
+- `backup_retention_days` (Number) Number of days to retain backups after cluster deletion (0-60). If set to 0, backups are deleted immediately. Defaults to 1 to prevent accidental data loss.
 - `byoa_id` (Number) The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).
 - `cidr_block` (String) The CIDR block for the cluster network.
 - `cloud` (String) The cloud provider. Accepted values: AWS, GCP.

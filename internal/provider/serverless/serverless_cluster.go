@@ -207,7 +207,7 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("unable to read serverless cluster name from state file")
 	}
 
-	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
+	r, err := c.DeleteCluster(ctx, clusterID, name.(string), 0)
 	if err != nil {
 		return diag.Errorf("error deleting serverlessCluster: %s", err)
 	}
