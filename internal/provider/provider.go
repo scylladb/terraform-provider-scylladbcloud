@@ -13,8 +13,10 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
+	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 
 	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -27,6 +29,10 @@ func envToken() string {
 
 func envEndpoint() string {
 	return os.Getenv("SCYLLADB_CLOUD_ENDPOINT")
+}
+
+func envTrace() string {
+	return os.Getenv("SCYLLADB_CLOUD_TRACE")
 }
 
 func New(context.Context) *schema.Provider {
@@ -61,6 +67,14 @@ func New(context.Context) *schema.Provider {
 				Default:     true,
 				Description: "Whether to preload deployment metadata for the provider.",
 			},
+			"trace": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  envTrace(),
+				Description: "Internal correlation id attached to every ScyllaDB Cloud API " +
+					"call. Set by ScyllaDB Cloud tooling in generated configurations; " +
+					"users do not normally set this. A random id is generated when unset.",
+			},
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
@@ -92,12 +106,32 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		metadata = d.Get("metadata").(bool)
 	)
 
-	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), metadata)
+	// A trace supplied in the configuration or via SCYLLADB_CLOUD_TRACE matches
+	// the trace already recorded for the stack, so it is preferred over a
+	// generated one.
+	trace, err := traceOrNew(d.Get("trace").(string))
+	if err != nil {
+		return nil, diag.Errorf("could not generate trace id: %s", err)
+	}
+
+	tflog.Info(ctx, "using external trace id for ScyllaDB Cloud API calls", map[string]any{
+		"trace": trace,
+	})
+
+	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), trace, metadata)
 	if err != nil {
 		return nil, diag.Errorf("could not create new Scylla client: %s", err)
 	}
 
 	return c, nil
+}
+
+// traceOrNew returns the configured trace or a freshly generated one.
+func traceOrNew(configured string) (string, error) {
+	if configured != "" {
+		return configured, nil
+	}
+	return v2scylla.NewTrace()
 }
 
 func userAgent(tfVersion string) string {

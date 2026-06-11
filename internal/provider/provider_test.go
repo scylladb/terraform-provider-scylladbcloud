@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	providercluster "github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
+	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 )
 
 var provider *schema.Provider = New(context.Background())
@@ -581,6 +583,29 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestTraceOrNew(t *testing.T) {
+	t.Run("configured trace is preserved", func(t *testing.T) {
+		trace, err := traceOrNew("explicit")
+		require.NoError(t, err)
+		require.Equal(t, "explicit", trace)
+	})
+
+	t.Run("missing trace is generated", func(t *testing.T) {
+		trace, err := traceOrNew("")
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(trace, v2scylla.TracePrefix),
+			"trace %q missing prefix %q", trace, v2scylla.TracePrefix)
+	})
+}
+
+func TestProviderTraceEnvDefault(t *testing.T) {
+	t.Setenv("SCYLLADB_CLOUD_TRACE", "from-env")
+
+	p := New(context.Background())
+
+	require.Equal(t, "from-env", p.Schema["trace"].Default)
 }
 
 var configureProviderOnce sync.Once

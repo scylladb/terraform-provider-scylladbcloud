@@ -41,6 +41,7 @@ Authentication token can be provided by using the `SCYLLADB_CLOUD_TOKEN` environ
 - `endpoint` (String) URL of the Scylla Cloud endpoint.
 - `metadata` (Boolean) Whether to preload deployment metadata for the provider.
 - `token` (String, Sensitive) Bearer token used to authenticate with the API.
+- `trace` (String) Internal correlation id attached to every ScyllaDB Cloud API call. Set by ScyllaDB Cloud tooling in generated configurations; users do not normally set this. A random id is generated when unset.
 
 ### Creating a Standard Cluster
 
