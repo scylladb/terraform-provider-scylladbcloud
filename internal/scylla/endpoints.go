@@ -444,3 +444,53 @@ func nonempty(s []string) (f []string) {
 
 	return f
 }
+
+// ListVectorSearchInstances returns instance types available for vector search in a region.
+func (c *Client) ListVectorSearchInstances(ctx context.Context, providerID, regionID int64) ([]model.CloudProviderInstance, error) {
+	var result model.CloudProviderInstances
+	path := fmt.Sprintf("/deployment/cloud-provider/%d/region/%d", providerID, regionID)
+	if err := c.get(ctx, path, &result, "target", "VECTOR_SEARCH"); err != nil {
+		return nil, err
+	}
+	return result.Instances, nil
+}
+
+// InstallVectorSearch schedules installation of vector search nodes on a datacenter.
+func (c *Client) InstallVectorSearch(ctx context.Context, clusterID, dcID int64, req *model.VectorSearchRequest) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d/vector-search", c.AccountID, clusterID, dcID)
+	if err := c.post(ctx, path, req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// GetVectorSearchInfo retrieves information about vector search in a datacenter.
+func (c *Client) GetVectorSearchInfo(ctx context.Context, clusterID, dcID int64) (*model.VectorSearchInfo, error) {
+	var result model.VectorSearchInfo
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d/vector-search", c.AccountID, clusterID, dcID)
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ResizeVectorSearch schedules resizing of vector search nodes in a datacenter.
+func (c *Client) ResizeVectorSearch(ctx context.Context, clusterID, dcID int64, req *model.VectorSearchRequest) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d/vector-search", c.AccountID, clusterID, dcID)
+	if err := c.patch(ctx, path, req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// DeleteVectorSearch schedules deletion of vector search nodes from a datacenter.
+func (c *Client) DeleteVectorSearch(ctx context.Context, clusterID, dcID int64) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	path := fmt.Sprintf("/account/%d/cluster/%d/dc/%d/vector-search", c.AccountID, clusterID, dcID)
+	if err := c.deleteWithResponse(ctx, path, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

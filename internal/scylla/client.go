@@ -263,6 +263,10 @@ func (c *Client) delete(ctx context.Context, path string) error {
 	return c.retryCall(ctx, http.MethodDelete, path, nil, nil)
 }
 
+func (c *Client) deleteWithResponse(ctx context.Context, path string, resultType interface{}) error {
+	return c.retryCall(ctx, http.MethodDelete, path, nil, resultType)
+}
+
 func (c *Client) put(ctx context.Context, path string, requestBody, resultType interface{}) error {
 	return c.retryCall(ctx, http.MethodPut, path, requestBody, resultType)
 }
