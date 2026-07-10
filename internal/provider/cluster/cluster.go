@@ -527,7 +527,7 @@ func ResourceCluster() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"backup_retention_days": {
-				Description: "Number of days to retain backups after cluster deletion (0-60). " +
+				Description: "The number of days to retain backups after deleting the cluster between 0 and 60. " +
 					"If set to 0, backups are deleted immediately. " +
 					"Defaults to 1 to prevent accidental data loss.",
 				Optional:         true,
