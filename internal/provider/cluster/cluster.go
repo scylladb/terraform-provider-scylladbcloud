@@ -43,6 +43,14 @@ func validateScalingTargetUtilizationDiag(v interface{}, _ cty.Path) diag.Diagno
 	return nil
 }
 
+func validateBackupRetentionDaysDiag(v interface{}, _ cty.Path) diag.Diagnostics {
+	value := v.(int)
+	if value < 0 || value > 60 {
+		return diag.Errorf("backup_retention_days must be between 0 and 60, got %d", value)
+	}
+	return nil
+}
+
 func castToNestedBlock(raw interface{}) (map[string]interface{}, bool) {
 	items, ok := raw.([]interface{})
 	if !ok || len(items) == 0 || items[0] == nil {
@@ -517,6 +525,15 @@ func ResourceCluster() *schema.Resource {
 				ForceNew: true,
 				Type:     schema.TypeSet,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"backup_retention_days": {
+				Description: "The number of days to retain backups after deleting the cluster between 0 and 60. " +
+					"If set to 0, backups are deleted immediately. " +
+					"Defaults to 1 to prevent accidental data loss.",
+				Optional:         true,
+				Type:             schema.TypeInt,
+				Default:          1,
+				ValidateDiagFunc: validateBackupRetentionDaysDiag,
 			},
 		},
 	}
@@ -1037,7 +1054,9 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to read the cluster name from the resource")
 	}
 
-	r, err := c.DeleteCluster(ctx, clusterID, name.(string))
+	backupRetentionDays := d.Get("backup_retention_days").(int)
+
+	r, err := c.DeleteCluster(ctx, clusterID, name.(string), backupRetentionDays)
 	if err != nil {
 		if scylla.IsDeletedErr(err) {
 			return nil // cluster was already deleted

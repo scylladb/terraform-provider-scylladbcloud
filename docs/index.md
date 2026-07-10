@@ -52,6 +52,10 @@ resource "scylladbcloud_cluster" "standard" {
   node_type  = "i3.large"
   min_nodes  = 3
   cidr_block = "10.0.1.0/24"
+
+  # Set to 0 to delete backups immediately after cluster deletion.
+  # Defaults to 1 to prevent accidental data loss.
+  backup_retention_days = 1
 }
 ```
 
@@ -63,6 +67,10 @@ resource "scylladbcloud_cluster" "xcloud" {
   cloud      = "AWS"
   region     = "us-east-1"
   cidr_block = "10.0.1.0/24"
+
+  # Set to 0 to delete backups immediately after cluster deletion.
+  # Defaults to 1 to prevent accidental data loss.
+  backup_retention_days = 1
 
   scaling {
     instance_families = ["i8g"]

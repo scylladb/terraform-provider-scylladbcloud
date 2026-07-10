@@ -427,3 +427,45 @@ func TestIsScalingEqual(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBackupRetentionDaysDiag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value int
+		valid bool
+	}{
+		{name: "negative", value: -1},
+		{name: "above max", value: 61},
+		{name: "way above max", value: 100},
+		{name: "zero", value: 0, valid: true},
+		{name: "one (default)", value: 1, valid: true},
+		{name: "max", value: 60, valid: true},
+		{name: "mid range", value: 30, valid: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := validateBackupRetentionDaysDiag(tt.value, cty.Path{})
+			if tt.valid {
+				require.Nil(t, diags)
+				return
+			}
+
+			require.NotNil(t, diags)
+		})
+	}
+}
+
+func TestBackupRetentionDaysSchemaDefault(t *testing.T) {
+	t.Parallel()
+
+	resource := ResourceCluster()
+	s, ok := resource.Schema["backup_retention_days"]
+	require.True(t, ok, "backup_retention_days schema field must exist")
+	require.Equal(t, 1, s.Default, "default must be 1 to prevent accidental data loss")
+	require.True(t, s.Optional, "field must be optional")
+}

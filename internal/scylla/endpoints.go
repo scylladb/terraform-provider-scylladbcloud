@@ -135,12 +135,13 @@ func (c *Client) CreateCluster(ctx context.Context, req *model.ClusterCreateRequ
 	return &clusterReq, nil
 }
 
-func (c *Client) DeleteCluster(ctx context.Context, clusterID int64, clusterName string) (*model.ClusterRequest, error) {
+func (c *Client) DeleteCluster(ctx context.Context, clusterID int64, clusterName string, backupRetentionDays int) (*model.ClusterRequest, error) {
 	var result model.ClusterRequest
 
 	path := fmt.Sprintf("/account/%d/cluster/%d/delete", c.AccountID, clusterID)
 	data := map[string]interface{}{
-		"clusterName": clusterName,
+		"clusterName":         clusterName,
+		"backupRetentionDays": backupRetentionDays,
 	}
 
 	if err := c.post(ctx, path, data, &result); err != nil {
