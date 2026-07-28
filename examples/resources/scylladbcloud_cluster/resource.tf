@@ -18,3 +18,7 @@ output "scylladbcloud_cluster_id" {
 output "scylladbcloud_cluster_datacenter" {
 	value = scylladbcloud_cluster.example.datacenter
 }
+
+output "scylladbcloud_cluster_ca_certificate" {
+	value = scylladbcloud_cluster.example.ca_certificate
+}
