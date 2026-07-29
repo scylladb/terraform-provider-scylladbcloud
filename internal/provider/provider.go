@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"golang.org/x/net/http/httpguts"
 )
 
 var defaultEndpoint = "https://api.cloud.scylladb.com"
@@ -71,9 +72,24 @@ func New(context.Context) *schema.Provider {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  envTrace(),
+				ValidateDiagFunc: func(v any, _ cty.Path) diag.Diagnostics {
+					trace, ok := v.(string)
+					if !ok || trace == "" {
+						return nil
+					}
+					if !httpguts.ValidHeaderFieldValue(trace) {
+						return diag.Diagnostics{{
+							Severity: diag.Error,
+							Summary:  "invalid trace value",
+							Detail: "The trace value must be a valid HTTP header value " +
+								"(no control characters such as CR/LF).",
+						}}
+					}
+					return nil
+				},
 				Description: "Internal correlation ID attached to every ScyllaDB Cloud API " +
 					"call. It can be set with SCYLLADB_CLOUD_TRACE and is normally supplied " +
-					"by ScyllaDB Cloud tooling. A random ID is generated when unset."
+					"by ScyllaDB Cloud tooling. A random ID is generated when unset.",
 			},
 		},
 

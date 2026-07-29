@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -606,6 +607,18 @@ func TestProviderTraceEnvDefault(t *testing.T) {
 	p := New(context.Background())
 
 	require.Equal(t, "from-env", p.Schema["trace"].Default)
+}
+
+func TestProviderTraceValidation(t *testing.T) {
+	p := New(context.Background())
+	validate := p.Schema["trace"].ValidateDiagFunc
+
+	require.Nil(t, validate("valid-trace", cty.Path{}))
+
+	diags := validate("bad\r\ntrace", cty.Path{})
+	require.Len(t, diags, 1)
+	require.Equal(t, diag.Error, diags[0].Severity)
+	require.Equal(t, "invalid trace value", diags[0].Summary)
 }
 
 var configureProviderOnce sync.Once
