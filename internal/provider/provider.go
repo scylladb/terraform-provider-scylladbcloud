@@ -71,9 +71,9 @@ func New(context.Context) *schema.Provider {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  envTrace(),
-				Description: "Internal correlation id attached to every ScyllaDB Cloud API " +
-					"call. Set by ScyllaDB Cloud tooling in generated configurations; " +
-					"users do not normally set this. A random id is generated when unset.",
+				Description: "Internal correlation ID attached to every ScyllaDB Cloud API " +
+					"call. It can be set with SCYLLADB_CLOUD_TRACE and is normally supplied " +
+					"by ScyllaDB Cloud tooling. A random ID is generated when unset."
 			},
 		},
 
