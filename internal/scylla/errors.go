@@ -28,6 +28,15 @@ func IsDeletedErr(err error) bool {
 	return false
 }
 
+// IsEncryptionDisabledErr reports whether err is API error 041201:
+// "Encryption must be enabled to retrieve cluster public certificate".
+func IsEncryptionDisabledErr(err error) bool {
+	if e := new(APIError); errors.As(err, &e) && e.Code == "041201" {
+		return true
+	}
+	return false
+}
+
 func IsNotFound(err error) bool {
 	if e := new(APIError); errors.As(err, &e) && e.StatusCode == http.StatusNotFound {
 		return true

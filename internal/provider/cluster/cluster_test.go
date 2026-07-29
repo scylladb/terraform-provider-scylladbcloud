@@ -1,9 +1,17 @@
 package cluster
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/eapache/go-resiliency/retrier"
 	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 	"github.com/stretchr/testify/require"
@@ -360,7 +368,7 @@ func TestSetClusterKVsSetsScaling(t *testing.T) {
 	}
 	instances := []model.CloudProviderInstance{{ID: 2, ExternalID: "i3.xlarge"}}
 
-	err := setClusterKVs(data, cluster, "AWS", "", instances, &scylla.CloudProvider{})
+	err := setClusterKVs(data, cluster, "AWS", "", "", instances, &scylla.CloudProvider{})
 	require.NoError(t, err)
 	require.Equal(t, []interface{}{map[string]interface{}{
 		"instance_families": []interface{}{},
@@ -468,4 +476,123 @@ func TestBackupRetentionDaysSchemaDefault(t *testing.T) {
 	require.True(t, ok, "backup_retention_days schema field must exist")
 	require.Equal(t, 1, s.Default, "default must be 1 to prevent accidental data loss")
 	require.True(t, s.Optional, "field must be optional")
+}
+
+func TestCACertificateSchema(t *testing.T) {
+	t.Parallel()
+
+	resource := ResourceCluster()
+	s, ok := resource.Schema["ca_certificate"]
+	require.True(t, ok, "ca_certificate schema field must exist")
+	require.Equal(t, schema.TypeString, s.Type)
+	require.True(t, s.Computed, "field must be computed")
+	require.False(t, s.Optional, "field must not be optional")
+	require.False(t, s.Sensitive, "public CA certificate is not sensitive")
+}
+
+func TestFetchCACertificate(t *testing.T) {
+	t.Parallel()
+
+	const pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+
+	tests := []struct {
+		name       string
+		status     int
+		body       string
+		prev       string
+		want       string
+		wantDiags  int
+		wantDetail string
+	}{
+		{
+			name:   "success",
+			status: http.StatusOK,
+			body:   `{"data":{"format":"PEM","content":"` + strings.ReplaceAll(pem, "\n", `\n`) + `"}}`,
+			prev:   "old",
+			want:   pem,
+		},
+		{
+			name:   "encryption disabled clears value",
+			status: http.StatusOK, // the gateway responds 200 with an error body
+			body:   `{"error":"041201"}`,
+			prev:   "old",
+			want:   "",
+		},
+		{
+			name:   "encryption disabled clears value, direct API",
+			status: http.StatusBadRequest,
+			body:   `{"error":"041201"}`,
+			prev:   "old",
+			want:   "",
+		},
+		{
+			name:       "generic failure keeps previous value with warning",
+			status:     http.StatusInternalServerError,
+			body:       `{"error":"041200"}`,
+			prev:       "old",
+			want:       "old",
+			wantDiags:  1,
+			wantDetail: "041200",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/account/7/cluster/42/certificate", r.URL.Path)
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			endpoint, err := url.Parse(srv.URL)
+			require.NoError(t, err)
+
+			client := &scylla.Client{
+				Endpoint:   endpoint,
+				Headers:    make(http.Header),
+				HTTPClient: srv.Client(),
+				Retry:      retrier.New(nil, nil),
+				AccountID:  7,
+			}
+
+			got, diags := fetchCACertificate(context.Background(), client, 42, tt.prev)
+			require.Equal(t, tt.want, got)
+			require.Len(t, diags, tt.wantDiags)
+			if tt.wantDiags > 0 {
+				require.Equal(t, diag.Warning, diags[0].Severity)
+				require.Contains(t, diags[0].Detail, tt.wantDetail)
+			}
+		})
+	}
+}
+
+func TestSetClusterKVsSetsCACertificate(t *testing.T) {
+	t.Parallel()
+
+	const pem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+
+	resource := ResourceCluster()
+	data := resource.TestResourceData()
+	cluster := &model.Cluster{
+		ID:               123,
+		ClusterName:      "encrypted",
+		UserAPIInterface: "CQL",
+		BroadcastType:    "PRIVATE",
+		DNS:              true,
+		Status:           "ACTIVE",
+		Region:           &model.CloudProviderRegion{ExternalID: "us-east-1"},
+		ScyllaVersion:    &model.ScyllaVersion{Version: "2025.1"},
+		Datacenter: &model.Datacenter{
+			Name:      "AWS_US_EAST_1",
+			CIDRBlock: "172.31.0.0/16",
+		},
+		Datacenters: []model.Datacenter{{}},
+	}
+
+	err := setClusterKVs(data, cluster, "AWS", "", pem, nil, &scylla.CloudProvider{})
+	require.NoError(t, err)
+	require.Equal(t, pem, data.Get("ca_certificate"))
 }

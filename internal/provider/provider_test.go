@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"sync"
 	"testing"
@@ -92,6 +93,11 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 						"scylladbcloud_cluster.test",
 						tfjsonpath.New("scylla_version"),
 						knownvalue.StringExact("2026.1.1"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("ca_certificate"),
+						knownvalue.StringRegexp(regexp.MustCompile(`^-----BEGIN CERTIFICATE-----`)),
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(

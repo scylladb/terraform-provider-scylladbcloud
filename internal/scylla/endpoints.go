@@ -87,6 +87,17 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 	return cluster, nil
 }
 
+func (c *Client) GetClusterCertificate(ctx context.Context, clusterID int64) (*model.ClusterCertificate, error) {
+	var result model.ClusterCertificate
+
+	path := fmt.Sprintf("/account/%d/cluster/%d/certificate", c.AccountID, clusterID)
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 func (c *Client) Bundle(ctx context.Context, clusterID int64) ([]byte, error) {
 	var raw []byte
 
