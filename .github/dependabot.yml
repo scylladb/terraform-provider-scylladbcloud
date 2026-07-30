@@ -4,6 +4,10 @@ updates:
   directory: /
   schedule:
     interval: weekly
+  groups:
+    github-actions:
+      patterns:
+      - "*"
   assignees:
   - charconstpointer
   - adambabik
@@ -11,6 +15,10 @@ updates:
   directory: /
   schedule:
     interval: weekly
+  groups:
+    go-dependencies:
+      patterns:
+      - "*"
   assignees:
   - charconstpointer
   - adambabik
