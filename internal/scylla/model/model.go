@@ -181,6 +181,13 @@ type Progress struct {
 	ProgressDescription string `json:"ProgressDescription"`
 }
 
+// ClusterCertificate is the cluster's TLS CA certificate used for
+// client-to-node (in-transit) encryption.
+type ClusterCertificate struct {
+	Format  string `json:"format"`
+	Content string `json:"content"`
+}
+
 type Clusters struct {
 	Clusters []Cluster `json:"clusters"`
 }

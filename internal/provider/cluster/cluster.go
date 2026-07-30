@@ -507,6 +507,12 @@ func ResourceCluster() *schema.Resource {
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
+			"ca_certificate": {
+				Description: "The PEM-encoded CA certificate used to verify TLS (client-to-node encrypted) " +
+					"connections to the cluster. Empty if in-transit encryption is not enabled.",
+				Computed: true,
+				Type:     schema.TypeString,
+			},
 			"node_disk_size": {
 				Description:   "The disk size in gigabytes of the node.",
 				ForceNew:      true,
@@ -707,7 +713,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if hasScaling(cluster) && instanceExternalID == "" {
 		return diag.Errorf("instance external ID is expected to be set for cluster %d with scaling configuration", cluster.ID)
 	}
-	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, instances, cloudProvider)
+	caCert, warns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
+	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -715,7 +722,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	d.SetId(strconv.Itoa(int(cr.ClusterID)))
 	_ = d.Set("request_id", cr.ID)
 
-	return nil
+	return warns
 }
 
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -778,15 +785,35 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		}
 		instanceExternalID = i.ExternalID
 	}
-	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, instances, p)
+	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, caCert, instances, p)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
-	return nil
+	return warns
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
+// fetchCACertificate retrieves the cluster's CA certificate. Clusters without
+// in-transit encryption (error 041201) yield an empty string. Any other
+// failure is downgraded to a warning and prev is returned, so a misbehaving
+// certificate endpoint never breaks plan/refresh or leaks a created cluster.
+func fetchCACertificate(ctx context.Context, c *scylla.Client, clusterID int64, prev string) (string, diag.Diagnostics) {
+	cert, err := c.GetClusterCertificate(ctx, clusterID)
+	switch {
+	case scylla.IsEncryptionDisabledErr(err):
+		return "", nil
+	case err != nil:
+		return prev, diag.Diagnostics{{
+			Severity: diag.Warning,
+			Summary:  fmt.Sprintf("Unable to retrieve CA certificate for cluster %d", clusterID),
+			Detail:   err.Error(),
+		}}
+	}
+	return cert.Content, nil
+}
+
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
@@ -836,6 +863,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("enable_dns", cluster.DNS)
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("status", cluster.Status)
+	_ = d.Set("ca_certificate", caCert)
 
 	if cluster.UserAPIInterface == "ALTERNATOR" {
 		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
