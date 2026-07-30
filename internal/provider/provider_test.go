@@ -6,9 +6,11 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -27,6 +29,7 @@ import (
 	providercluster "github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
+	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 )
 
 var provider *schema.Provider = New(context.Background())
@@ -587,6 +590,41 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestTraceOrNew(t *testing.T) {
+	t.Run("configured trace is preserved", func(t *testing.T) {
+		trace, err := traceOrNew("explicit")
+		require.NoError(t, err)
+		require.Equal(t, "explicit", trace)
+	})
+
+	t.Run("missing trace is generated", func(t *testing.T) {
+		trace, err := traceOrNew("")
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(trace, v2scylla.TracePrefix),
+			"trace %q missing prefix %q", trace, v2scylla.TracePrefix)
+	})
+}
+
+func TestProviderTraceEnvDefault(t *testing.T) {
+	t.Setenv("SCYLLADB_CLOUD_TRACE", "from-env")
+
+	p := New(context.Background())
+
+	require.Equal(t, "from-env", p.Schema["trace"].Default)
+}
+
+func TestProviderTraceValidation(t *testing.T) {
+	p := New(context.Background())
+	validate := p.Schema["trace"].ValidateDiagFunc
+
+	require.Nil(t, validate("valid-trace", cty.Path{}))
+
+	diags := validate("bad\r\ntrace", cty.Path{})
+	require.Len(t, diags, 1)
+	require.Equal(t, diag.Error, diags[0].Severity)
+	require.Equal(t, "invalid trace value", diags[0].Summary)
 }
 
 var configureProviderOnce sync.Once
