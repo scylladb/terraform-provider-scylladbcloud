@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 	"github.com/stretchr/testify/require"
@@ -595,4 +596,464 @@ func TestSetClusterKVsSetsCACertificate(t *testing.T) {
 	err := setClusterKVs(data, cluster, "AWS", "", pem, nil, &scylla.CloudProvider{})
 	require.NoError(t, err)
 	require.Equal(t, pem, data.Get("ca_certificate"))
+}
+
+func TestExpandEncryptionAtRest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		cloud string
+		raw   interface{}
+		want  *model.EncryptionAtRest
+	}{
+		{
+			name:  "returns nil for absent block",
+			cloud: "AWS",
+			raw:   []interface{}{},
+			want:  nil,
+		},
+		{
+			name:  "returns nil when disabled",
+			cloud: "AWS",
+			raw:   []interface{}{map[string]interface{}{"enabled": false, "key_id": "", "provider": ""}},
+			want:  nil,
+		},
+		{
+			name:  "derives scylla managed key provider for aws",
+			cloud: "AWS",
+			raw:   []interface{}{map[string]interface{}{"enabled": true, "key_id": "", "provider": ""}},
+			want:  &model.EncryptionAtRest{Provider: "scylla-aws"},
+		},
+		{
+			name:  "derives scylla managed key provider for gcp",
+			cloud: "GCP",
+			raw:   []interface{}{map[string]interface{}{"enabled": true, "key_id": "", "provider": ""}},
+			want:  &model.EncryptionAtRest{Provider: "scylla-gcp"},
+		},
+		{
+			name:  "derives customer managed key provider for aws",
+			cloud: "AWS",
+			raw:   []interface{}{map[string]interface{}{"enabled": true, "key_id": "key-deadbeef", "provider": ""}},
+			want:  &model.EncryptionAtRest{Provider: "aws", KeyID: "key-deadbeef"},
+		},
+		{
+			name:  "derives customer managed key provider for gcp",
+			cloud: "GCP",
+			raw:   []interface{}{map[string]interface{}{"enabled": true, "key_id": "key-deadbeef", "provider": ""}},
+			want:  &model.EncryptionAtRest{Provider: "gcp", KeyID: "key-deadbeef"},
+		},
+		{
+			name:  "accepts lowercase cloud",
+			cloud: "aws",
+			raw:   []interface{}{map[string]interface{}{"enabled": true, "key_id": "", "provider": ""}},
+			want:  &model.EncryptionAtRest{Provider: "scylla-aws"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := expandEncryptionAtRest(tt.cloud, tt.raw)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+
+	t.Run("returns error for unsupported cloud", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := expandEncryptionAtRest("AZURE", []interface{}{
+			map[string]interface{}{"enabled": true, "key_id": "", "provider": ""},
+		})
+		require.Nil(t, got)
+		require.EqualError(t, err, `encryption at rest is not supported for cloud "AZURE"`)
+	})
+}
+
+func TestFlattenEncryptionAtRest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  *model.EncryptionAtRest
+		want []map[string]interface{}
+	}{
+		{
+			name: "unencrypted reads back as disabled rather than an empty list",
+			raw:  nil,
+			want: []map[string]interface{}{{"enabled": false, "key_id": "", "provider": ""}},
+		},
+		{
+			name: "encrypted",
+			raw:  &model.EncryptionAtRest{Provider: "scylla-aws", KeyID: "key-T10FDq19E1b8Vukm"},
+			want: []map[string]interface{}{{"enabled": true, "key_id": "key-T10FDq19E1b8Vukm", "provider": "scylla-aws"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, flattenEncryptionAtRest(tt.raw))
+		})
+	}
+}
+
+func TestValidateEncryptionAtRest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cloud   string
+		enabled bool
+		keyID   string
+		wantErr string
+	}{
+		{
+			name:    "enabled without key",
+			cloud:   "AWS",
+			enabled: true,
+		},
+		{
+			name:    "enabled with key",
+			cloud:   "GCP",
+			enabled: true,
+			keyID:   "key-deadbeef",
+		},
+		{
+			name:  "disabled",
+			cloud: "AWS",
+		},
+		{
+			name:    "disabled with key",
+			cloud:   "AWS",
+			keyID:   "key-deadbeef",
+			wantErr: `"key_id" cannot be set when "enabled" is false in the "encryption_at_rest" block`,
+		},
+		{
+			name:    "malformed key",
+			cloud:   "AWS",
+			enabled: true,
+			keyID:   "deadbeef",
+			wantErr: `invalid "key_id" "deadbeef" in the "encryption_at_rest" block, expected a portal key ID such as "key-deadbeef"`,
+		},
+		{
+			name:    "unsupported cloud",
+			cloud:   "AZURE",
+			enabled: true,
+			wantErr: `encryption at rest is not supported for cloud "AZURE"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateEncryptionAtRest(tt.cloud, tt.enabled, tt.keyID)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestSetClusterKVsSetsEncryptionAtRest(t *testing.T) {
+	t.Parallel()
+
+	resource := ResourceCluster()
+	data := resource.TestResourceData()
+	cluster := &model.Cluster{
+		ID:               123,
+		ClusterName:      "encrypted-at-rest",
+		UserAPIInterface: "CQL",
+		BroadcastType:    "PRIVATE",
+		DNS:              true,
+		Status:           "ACTIVE",
+		Region:           &model.CloudProviderRegion{ExternalID: "us-east-1"},
+		ScyllaVersion:    &model.ScyllaVersion{Version: "2025.1"},
+		Datacenter: &model.Datacenter{
+			Name:      "AWS_US_EAST_1",
+			CIDRBlock: "172.31.0.0/16",
+		},
+		Datacenters:      []model.Datacenter{{}},
+		EncryptionAtRest: &model.EncryptionAtRest{Provider: "scylla-aws", KeyID: "key-T10FDq19E1b8Vukm"},
+	}
+
+	require.NoError(t, setClusterKVs(data, cluster, "AWS", "", "", nil, &scylla.CloudProvider{}))
+	require.Equal(t, []interface{}{map[string]interface{}{
+		"enabled":  true,
+		"key_id":   "key-T10FDq19E1b8Vukm",
+		"provider": "scylla-aws",
+	}}, data.Get("encryption_at_rest"))
+}
+
+// TestConfiguredEncryptionAtRest covers the branches TestEncryptionAtRestPlan
+// cannot reach, notably the null configuration of a destroy plan.
+func TestConfiguredEncryptionAtRest(t *testing.T) {
+	t.Parallel()
+
+	blockType := cty.Object(map[string]cty.Type{
+		"enabled":  cty.Bool,
+		"key_id":   cty.String,
+		"provider": cty.String,
+	})
+	configType := cty.Object(map[string]cty.Type{
+		"encryption_at_rest": cty.List(blockType),
+	})
+
+	config := func(blocks cty.Value) cty.Value {
+		return cty.ObjectVal(map[string]cty.Value{"encryption_at_rest": blocks})
+	}
+	block := func(keyID cty.Value) cty.Value {
+		return cty.ListVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+			"enabled":  cty.True,
+			"key_id":   keyID,
+			"provider": cty.NullVal(cty.String),
+		})})
+	}
+
+	tests := []struct {
+		name           string
+		config         cty.Value
+		wantKeyID      string
+		wantConfigured bool
+	}{
+		{
+			name:   "null config, as on a destroy plan",
+			config: cty.NullVal(configType),
+		},
+		{
+			name:   "no block",
+			config: config(cty.ListValEmpty(blockType)),
+		},
+		{
+			name:           "block without key_id",
+			config:         config(block(cty.NullVal(cty.String))),
+			wantConfigured: true,
+		},
+		{
+			name:           "block with key_id",
+			config:         config(block(cty.StringVal("key-deadbeef"))),
+			wantKeyID:      "key-deadbeef",
+			wantConfigured: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			keyID, configured := configuredEncryptionAtRest(tt.config)
+			require.Equal(t, tt.wantKeyID, keyID)
+			require.Equal(t, tt.wantConfigured, configured)
+		})
+	}
+}
+
+// clusterDiff runs the resource through the real diff path, including
+// CustomizeDiff, from the given cty configuration values. Attributes that are
+// not listed are left null, mirroring what Terraform sends for an unset field.
+func clusterDiff(t *testing.T, state *terraform.InstanceState, values map[string]cty.Value) (*terraform.InstanceDiff, error) {
+	t.Helper()
+
+	resource := ResourceCluster()
+	block := resource.CoreConfigSchema()
+
+	attrs := map[string]cty.Value{}
+	for name, ty := range block.ImpliedType().AttributeTypes() {
+		if v, ok := values[name]; ok {
+			attrs[name] = v
+			continue
+		}
+		attrs[name] = cty.NullVal(ty)
+	}
+
+	value := cty.ObjectVal(attrs)
+	config := terraform.NewResourceConfigShimmed(value, block)
+
+	// Mirror what PlanResourceChange does, so CustomizeDiff sees the same raw
+	// configuration it sees in production.
+	if state == nil {
+		state = &terraform.InstanceState{}
+	}
+	state.RawConfig = value
+
+	return resource.Diff(context.Background(), state, config, nil)
+}
+
+// TestEncryptionAtRestPlan drives the real diff path, including CustomizeDiff.
+// It pins down the behaviours the attribute's design depends on: Default on a
+// nested block attribute, Optional+Computed suppressing the diff for an omitted
+// block, and ForceNew reaching the nested fields.
+func TestEncryptionAtRestPlan(t *testing.T) {
+	t.Parallel()
+
+	encryptionAtRest := func(enabled, keyID cty.Value) cty.Value {
+		return cty.ListVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+			"enabled":  enabled,
+			"key_id":   keyID,
+			"provider": cty.NullVal(cty.String),
+		})})
+	}
+
+	baseConfig := map[string]cty.Value{
+		"name":      cty.StringVal("cluster"),
+		"cloud":     cty.StringVal("AWS"),
+		"region":    cty.StringVal("us-east-1"),
+		"node_type": cty.StringVal("i3.large"),
+		"min_nodes": cty.NumberIntVal(3),
+	}
+
+	withEncryptionAtRest := func(block cty.Value) map[string]cty.Value {
+		values := map[string]cty.Value{"encryption_at_rest": block}
+		for k, v := range baseConfig {
+			values[k] = v
+		}
+		return values
+	}
+
+	t.Run("enabled defaults to true when the block is present", func(t *testing.T) {
+		t.Parallel()
+
+		diff, err := clusterDiff(t, nil, withEncryptionAtRest(
+			encryptionAtRest(cty.NullVal(cty.Bool), cty.NullVal(cty.String)),
+		))
+		require.NoError(t, err)
+		require.Equal(t, "true", diff.Attributes["encryption_at_rest.0.enabled"].New)
+	})
+
+	t.Run("key_id alone still enables encryption", func(t *testing.T) {
+		t.Parallel()
+
+		diff, err := clusterDiff(t, nil, withEncryptionAtRest(
+			encryptionAtRest(cty.NullVal(cty.Bool), cty.StringVal("key-deadbeef")),
+		))
+		require.NoError(t, err)
+		require.Equal(t, "true", diff.Attributes["encryption_at_rest.0.enabled"].New)
+		require.Equal(t, "key-deadbeef", diff.Attributes["encryption_at_rest.0.key_id"].New)
+	})
+
+	t.Run("replacement create plans key_id as unknown, not the old key", func(t *testing.T) {
+		t.Parallel()
+
+		// A nil prior state is what Terraform sends for the create half of a
+		// replacement: it re-plans with a null prior so that computed values
+		// from the doomed object are not carried over.
+		diff, err := clusterDiff(t, nil, withEncryptionAtRest(
+			encryptionAtRest(cty.True, cty.NullVal(cty.String)),
+		))
+		require.NoError(t, err)
+
+		keyID := diff.Attributes["encryption_at_rest.0.key_id"]
+		require.NotNil(t, keyID)
+		require.True(t, keyID.NewComputed,
+			"a ScyllaDB-managed key must never be resent as a customer-managed one")
+		require.Empty(t, keyID.New)
+	})
+
+	encryptedState := func() *terraform.InstanceState {
+		return &terraform.InstanceState{
+			ID: "42",
+			Attributes: map[string]string{
+				"id":                            "42",
+				"encryption_at_rest.#":          "1",
+				"encryption_at_rest.0.enabled":  "true",
+				"encryption_at_rest.0.key_id":   "key-deadbeef",
+				"encryption_at_rest.0.provider": "scylla-aws",
+				"name":                          "cluster",
+				"cloud":                         "AWS",
+				"region":                        "us-east-1",
+				"node_type":                     "i3.large",
+				"min_nodes":                     "3",
+			},
+		}
+	}
+
+	t.Run("omitting the block does not plan a replacement", func(t *testing.T) {
+		t.Parallel()
+
+		diff, err := clusterDiff(t, encryptedState(), baseConfig)
+		require.NoError(t, err)
+
+		// Optional+Computed means the block is reported as "known after
+		// apply" rather than removed. Anything else would replace the cluster
+		// for every user who has not adopted the new attribute.
+		for key, attr := range diff.Attributes {
+			if !strings.HasPrefix(key, "encryption_at_rest") {
+				continue
+			}
+			require.Equal(t, "encryption_at_rest.#", key, "no per-field diff expected")
+			require.True(t, attr.NewComputed)
+			require.False(t, attr.RequiresNew, "omitting the block must not replace the cluster")
+			require.False(t, attr.NewRemoved)
+		}
+	})
+
+	t.Run("flipping enabled forces a replacement", func(t *testing.T) {
+		t.Parallel()
+
+		diff, err := clusterDiff(t, encryptedState(), withEncryptionAtRest(
+			encryptionAtRest(cty.False, cty.NullVal(cty.String)),
+		))
+		// NoError also matters here: key_id is Optional+Computed, so the diff
+		// still carries the key the API reported. Validating it rather than the
+		// raw configuration would reject this as "key_id with enabled = false".
+		require.NoError(t, err)
+
+		enabled := diff.Attributes["encryption_at_rest.0.enabled"]
+		require.NotNil(t, enabled)
+		require.Equal(t, "true", enabled.Old)
+		require.Equal(t, "false", enabled.New)
+		require.True(t, enabled.RequiresNew, "encryption at rest is create-time only")
+	})
+
+	t.Run("changing key_id forces a replacement", func(t *testing.T) {
+		t.Parallel()
+
+		diff, err := clusterDiff(t, encryptedState(), withEncryptionAtRest(
+			encryptionAtRest(cty.NullVal(cty.Bool), cty.StringVal("key-cafebabe")),
+		))
+		require.NoError(t, err)
+
+		keyID := diff.Attributes["encryption_at_rest.0.key_id"]
+		require.NotNil(t, keyID)
+		require.Equal(t, "key-deadbeef", keyID.Old)
+		require.Equal(t, "key-cafebabe", keyID.New)
+		require.True(t, keyID.RequiresNew, "encryption at rest is create-time only")
+	})
+
+	t.Run("removing a customer managed key from the block is reported", func(t *testing.T) {
+		t.Parallel()
+
+		state := encryptedState()
+		state.Attributes["encryption_at_rest.0.provider"] = "aws"
+
+		_, err := clusterDiff(t, state, withEncryptionAtRest(
+			encryptionAtRest(cty.True, cty.NullVal(cty.String)),
+		))
+		require.ErrorContains(t, err, `"key_id" is missing from the "encryption_at_rest" block`)
+	})
+
+	t.Run("omitting the whole block on a customer managed cluster stays a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		state := encryptedState()
+		state.Attributes["encryption_at_rest.0.provider"] = "aws"
+
+		_, err := clusterDiff(t, state, baseConfig)
+		require.NoError(t, err)
+	})
+
+	t.Run("malformed key_id is rejected at plan time", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := clusterDiff(t, nil, withEncryptionAtRest(
+			encryptionAtRest(cty.NullVal(cty.Bool), cty.StringVal("deadbeef")),
+		))
+		require.ErrorContains(t, err, `invalid "key_id" "deadbeef"`)
+	})
 }

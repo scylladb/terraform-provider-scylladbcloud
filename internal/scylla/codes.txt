@@ -134,6 +134,7 @@
 040722	Account billing is not verified
 040723	Account does not have encryption at rest enabled
 040724	General error related to key service
+040733	Invalid encryption at rest parameter
 040801	Invalid request format
 040802	General error deleting the cluster
 040803	Cluster name is invalid

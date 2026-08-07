@@ -17,12 +17,23 @@ resource "scylladbcloud_cluster" "example" {
 	name       = "My Cluster"
 	cloud      = "AWS"
 	region     = "us-east-1"
-	node_count = 3
+	min_nodes  = 3
 	node_type  = "i3.xlarge"
 	cidr_block = "172.31.0.0/16"
 
 	enable_vpc_peering = true
 	enable_dns         = true
+
+	# Encrypt the cluster data at rest with a ScyllaDB-managed key.
+	# Use `key_id` instead to point at a customer-managed key created
+	# beforehand in the ScyllaDB Cloud portal:
+	#
+	#   encryption_at_rest {
+	#     key_id = "key-deadbeef"
+	#   }
+	encryption_at_rest {
+		enabled = true
+	}
 }
 
 output "scylladbcloud_cluster_id" {
@@ -35,6 +46,10 @@ output "scylladbcloud_cluster_datacenter" {
 
 output "scylladbcloud_cluster_ca_certificate" {
 	value = scylladbcloud_cluster.example.ca_certificate
+}
+
+output "scylladbcloud_cluster_encryption_key_provider" {
+	value = scylladbcloud_cluster.example.encryption_at_rest[0].provider
 }
 ```
 
@@ -56,6 +71,7 @@ output "scylladbcloud_cluster_ca_certificate" {
 - `cloud` (String) The cloud provider. Accepted values: AWS, GCP.
 - `enable_dns` (Boolean) Whether to enable DNS for the cluster.
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering for the cluster.
+- `encryption_at_rest` (Block List, Max: 1) Enables database-level encryption at rest. The key provider is derived from the `cloud` attribute. Encryption at rest can only be configured when the cluster is created, so changing any field in this block replaces the cluster. Omitting the block leaves the cluster unencrypted. (see [below for nested schema](#nestedblock--encryption_at_rest))
 - `min_nodes` (Number) Minimum number of nodes in the cluster. Defaults to 3. Applies to Standard clusters only. Must not be set when the scaling block is present. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.
 - `node_disk_size` (Number) The disk size in gigabytes of the node.
 - `node_type` (String) The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. Must not be set when the scaling block is present.
@@ -75,6 +91,19 @@ output "scylladbcloud_cluster_ca_certificate" {
 - `node_private_ips` (Set of String) The cluster nodes private IP addresses.
 - `request_id` (Number) The cluster creation request ID.
 - `status` (String) The cluster status.
+
+<a id="nestedblock--encryption_at_rest"></a>
+### Nested Schema for `encryption_at_rest`
+
+Optional:
+
+- `enabled` (Boolean) Whether the cluster data is encrypted at rest. Defaults to true when the block is present; set it to false to opt out explicitly.
+- `key_id` (String) The ID of a customer-managed key pre-created in the ScyllaDB Cloud portal (e.g. `key-deadbeef`). Leave it unset to let ScyllaDB Cloud manage the key.
+
+Read-Only:
+
+- `provider` (String) The key provider resolved by the API: `scylla-aws` or `scylla-gcp` for a ScyllaDB-managed key, `aws` or `gcp` for a customer-managed one. Empty if encryption at rest is not enabled.
+
 
 <a id="nestedblock--scaling"></a>
 ### Nested Schema for `scaling`
