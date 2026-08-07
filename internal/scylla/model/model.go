@@ -114,31 +114,51 @@ type ClusterRequest struct {
 	Status              string `json:"status"`
 }
 
+// Encryption-at-rest key providers. The scylla-prefixed ones denote a
+// service-managed key, the bare ones a customer-managed key created in the
+// ScyllaDB Cloud portal.
+const (
+	EncryptionProviderScyllaAWS = "scylla-aws"
+	EncryptionProviderScyllaGCP = "scylla-gcp"
+	EncryptionProviderAWS       = "aws"
+	EncryptionProviderGCP       = "gcp"
+)
+
+// EncryptionAtRest is the database-level encryption-at-rest configuration of a
+// cluster. It can only be set when the cluster is created; the API exposes no
+// way to change it afterwards. It is omitted from cluster responses when the
+// cluster does not use encryption at rest.
+type EncryptionAtRest struct {
+	Provider string `json:"provider,omitempty"`
+	KeyID    string `json:"keyId,omitempty"`
+}
+
 type ClusterCreateRequest struct {
-	AccountCredentialID      int64       `json:"accountCredentialId,omitempty"`
-	AlternatorWriteIsolation string      `json:"alternatorWriteIsolation,omitempty"`
-	AvailabilityZoneIDs      []string    `json:"availabilityZoneIdsOverride,omitempty"`
-	BroadcastType            string      `json:"broadcastType,omitempty"`
-	CidrBlock                string      `json:"cidrBlock,omitempty"`
-	CloudProviderID          int64       `json:"cloudProviderId,omitempty"`
-	InstanceID               int64       `json:"instanceId,omitempty"`
-	RegionID                 int64       `json:"regionId,omitempty"`
-	Scaling                  *Scaling    `json:"scaling,omitempty"`
-	Tablets                  tabletsMode `json:"tablets,omitempty"`
-	EnableDNSAssociation     bool        `json:"enableDnsAssociation"`
-	AllowedIPs               []string    `json:"allowedIPs,omitempty"`
-	FreeTier                 bool        `json:"freeTier"`
-	JumpStart                bool        `json:"jumpStart"`
-	ClusterName              string      `json:"clusterName"`
-	NumberOfNodes            int64       `json:"numberOfNodes"`
-	PromProxy                bool        `json:"promProxy"`
-	ReplicationFactor        int64       `json:"replicationFactor"`
-	ScyllaVersionID          int64       `json:"scyllaVersionId,omitempty"`
-	UserAPIInterface         string      `json:"userApiInterface,omitempty"`
-	Provisioning             string      `json:"provisioning,omitempty"`
-	ProcessingUnits          int         `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
-	Expiration               string      `json:"expiration,omitempty" example:"12"`
-	Placement                string      `json:"placement,omitempty"`
+	AccountCredentialID      int64             `json:"accountCredentialId,omitempty"`
+	AlternatorWriteIsolation string            `json:"alternatorWriteIsolation,omitempty"`
+	AvailabilityZoneIDs      []string          `json:"availabilityZoneIdsOverride,omitempty"`
+	BroadcastType            string            `json:"broadcastType,omitempty"`
+	CidrBlock                string            `json:"cidrBlock,omitempty"`
+	CloudProviderID          int64             `json:"cloudProviderId,omitempty"`
+	EncryptionAtRest         *EncryptionAtRest `json:"encryptionAtRest,omitempty"`
+	InstanceID               int64             `json:"instanceId,omitempty"`
+	RegionID                 int64             `json:"regionId,omitempty"`
+	Scaling                  *Scaling          `json:"scaling,omitempty"`
+	Tablets                  tabletsMode       `json:"tablets,omitempty"`
+	EnableDNSAssociation     bool              `json:"enableDnsAssociation"`
+	AllowedIPs               []string          `json:"allowedIPs,omitempty"`
+	FreeTier                 bool              `json:"freeTier"`
+	JumpStart                bool              `json:"jumpStart"`
+	ClusterName              string            `json:"clusterName"`
+	NumberOfNodes            int64             `json:"numberOfNodes"`
+	PromProxy                bool              `json:"promProxy"`
+	ReplicationFactor        int64             `json:"replicationFactor"`
+	ScyllaVersionID          int64             `json:"scyllaVersionId,omitempty"`
+	UserAPIInterface         string            `json:"userApiInterface,omitempty"`
+	Provisioning             string            `json:"provisioning,omitempty"`
+	ProcessingUnits          int               `json:"pu,omitempty" minimum:"1" maximum:"1000" default:"1"`
+	Expiration               string            `json:"expiration,omitempty" example:"12"`
+	Placement                string            `json:"placement,omitempty"`
 }
 
 type Cluster struct {
@@ -174,6 +194,10 @@ type Cluster struct {
 	VPCList                  []VPC        `json:"vpcList,omitempty"`
 	VPCPeeringList           []VPCPeering `json:"vpcPeeringList,omitempty"`
 	AlternatorWriteIsolation string       `json:"alternatorWriteIsolation,omitempty"`
+
+	// EncryptionAtRest is absent when the cluster does not use encryption at
+	// rest; its presence is the status signal.
+	EncryptionAtRest *EncryptionAtRest `json:"encryptionAtRest,omitempty"`
 }
 
 type Progress struct {

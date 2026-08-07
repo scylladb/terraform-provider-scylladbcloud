@@ -509,6 +509,208 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 	})
 }
 
+// testAccEncryptionAtRestConfig renders a minimal cluster whose
+// encryption_at_rest block holds the single given attribute assignment.
+func testAccEncryptionAtRestConfig(name, cloud, region, nodeType, attribute string) string {
+	return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name                  = %[1]q
+  cloud                 = %[2]q
+  region                = %[3]q
+  node_type             = %[4]q
+  min_nodes             = 3
+  cidr_block            = "10.0.1.0/24"
+  enable_dns            = true
+  backup_retention_days = 0
+
+  encryption_at_rest {
+    %[5]s
+  }
+}`, name, cloud, region, nodeType, attribute)
+}
+
+// testAccEncryptionAtRestEnabledConfig renders a cluster that opts in to, or
+// explicitly out of, encryption at rest with a ScyllaDB-managed key.
+func testAccEncryptionAtRestEnabledConfig(name, cloud, region, nodeType string, enabled bool) string {
+	return testAccEncryptionAtRestConfig(name, cloud, region, nodeType,
+		fmt.Sprintf("enabled = %t", enabled))
+}
+
+// testAccEncryptionAtRestKeyConfig renders a cluster encrypted with the given
+// customer-managed key. It leaves "enabled" out on purpose, so that the test
+// also covers its default.
+func testAccEncryptionAtRestKeyConfig(name, cloud, region, nodeType, keyID string) string {
+	return testAccEncryptionAtRestConfig(name, cloud, region, nodeType,
+		fmt.Sprintf("key_id = %q", keyID))
+}
+
+func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("ear-enabled")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", true),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
+						knownvalue.Bool(true),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
+						knownvalue.StringExact("scylla-aws"),
+					),
+					// The API returns a key ID even for ScyllaDB-managed keys.
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
+						knownvalue.StringRegexp(regexp.MustCompile(`^key-`)),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+			{
+				// Encryption at rest is create-time only, so any change must
+				// plan a replacement rather than an in-place update. PlanOnly
+				// keeps this assertion from costing a second real cluster.
+				Config:             testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction(
+							"scylladbcloud_cluster.test",
+							plancheck.ResourceActionDestroyBeforeCreate,
+						),
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("ear-disabled")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
+						knownvalue.Bool(false),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
+						knownvalue.StringExact(""),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
+						knownvalue.StringExact(""),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
+// TestAccScyllaDBCloudCluster_encryptionAtRestGCP requires the enable_ear_gcp
+// feature flag to be on in the target environment.
+func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("ear-gcp")
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "GCP", "us-central1", "n2d-highmem-2", true),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
+						knownvalue.StringExact("scylla-gcp"),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
+// TestAccScyllaDBCloudCluster_encryptionAtRestCMK needs a customer-managed key
+// created up front in the ScyllaDB Cloud portal; there is no public keys API.
+func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("ear-cmk")
+
+	keyID := envEARKeyID()
+	if keyID == "" {
+		t.Skip("TEST_SCYLLADB_CLOUD_EAR_KEY_ID must be set for this test")
+	}
+
+	var cluster model.Cluster
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEncryptionAtRestKeyConfig(resourceName, "AWS", "us-east-1", "i3.large", keyID),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
+						knownvalue.Bool(true),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
+						knownvalue.StringExact("aws"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
+						knownvalue.StringExact(keyID),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+				),
+			},
+		},
+	})
+}
+
 func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 	ctx := t.Context()
 	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
@@ -704,6 +906,10 @@ func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestC
 
 func envGCPBYOAID() string {
 	return os.Getenv("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID")
+}
+
+func envEARKeyID() string {
+	return os.Getenv("TEST_SCYLLADB_CLOUD_EAR_KEY_ID")
 }
 
 func getClientFromProvider(provider *schema.Provider) *scylla.Client {

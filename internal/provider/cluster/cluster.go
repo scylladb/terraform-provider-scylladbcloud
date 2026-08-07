@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -178,6 +179,70 @@ func flattenScaling(raw *model.Scaling, instances []model.CloudProviderInstance,
 	return []map[string]interface{}{block}, nil
 }
 
+// encryptionKeyProviders maps the cloud provider name to the pair of
+// encryption-at-rest key providers the API accepts for it: the service-managed
+// one and the customer-managed one.
+var encryptionKeyProviders = map[string]struct{ scyllaManaged, customerManaged string }{
+	"aws": {model.EncryptionProviderScyllaAWS, model.EncryptionProviderAWS},
+	"gcp": {model.EncryptionProviderScyllaGCP, model.EncryptionProviderGCP},
+}
+
+// isCustomerManagedKeyProvider reports whether the key behind the given
+// provider was created by the customer rather than by ScyllaDB Cloud.
+func isCustomerManagedKeyProvider(provider string) bool {
+	return provider == model.EncryptionProviderAWS || provider == model.EncryptionProviderGCP
+}
+
+// expandEncryptionAtRest derives the API request object from the
+// encryption_at_rest block. The key provider is derived from cloud so that
+// users never have to restate AWS/GCP. A nil result means the field is left out
+// of the request entirely, which is how encryption at rest is opted out of.
+func expandEncryptionAtRest(cloud string, raw interface{}) (*model.EncryptionAtRest, error) {
+	block, ok := castToNestedBlock(raw)
+	if !ok {
+		return nil, nil
+	}
+
+	if enabled, _ := block["enabled"].(bool); !enabled {
+		return nil, nil
+	}
+
+	providers, ok := encryptionKeyProviders[strings.ToLower(cloud)]
+	if !ok {
+		return nil, fmt.Errorf("encryption at rest is not supported for cloud %q", cloud)
+	}
+
+	// key_id is Optional+Computed, but reading it off the diff is safe here:
+	// create only ever runs against a null prior state - Terraform re-plans a
+	// replacement with a null prior precisely so computed values are not carried
+	// over - so this is the configured key or nothing, never a read back one.
+	if keyID, _ := block["key_id"].(string); keyID != "" {
+		return &model.EncryptionAtRest{Provider: providers.customerManaged, KeyID: keyID}, nil
+	}
+
+	return &model.EncryptionAtRest{Provider: providers.scyllaManaged}, nil
+}
+
+// flattenEncryptionAtRest always returns exactly one block, never an empty
+// list: an unencrypted cluster reads back as enabled = false. Returning an empty
+// list instead would leave "encryption_at_rest { enabled = false }" diffing
+// against nothing forever.
+func flattenEncryptionAtRest(raw *model.EncryptionAtRest) []map[string]interface{} {
+	if raw == nil || raw.Provider == "" {
+		return []map[string]interface{}{{
+			"enabled":  false,
+			"key_id":   "",
+			"provider": "",
+		}}
+	}
+
+	return []map[string]interface{}{{
+		"enabled":  true,
+		"key_id":   raw.KeyID,
+		"provider": raw.Provider,
+	}}
+}
+
 func isScalingEqual(lhs, rhs *model.Scaling) bool {
 	if lhs == nil || !lhs.Enabled() {
 		lhs = nil
@@ -275,12 +340,115 @@ func validateScaling(hasMinNodes, hasNodeType bool, scaling map[string]interface
 	return nil
 }
 
+// encryptionKeyIDRegexp mirrors the pattern the backend router enforces on
+// customer-managed key IDs.
+var encryptionKeyIDRegexp = regexp.MustCompile(`^key-[a-zA-Z0-9]+$`)
+
+// validateEncryptionAtRest checks the configured encryption_at_rest block.
+// keyID must come from the raw configuration rather than from the diff: it is
+// Optional+Computed, so the diff falls back to the key ID the API reported for
+// the existing cluster and cannot tell configured from read back.
+func validateEncryptionAtRest(cloud string, enabled bool, keyID string) error {
+	if !enabled {
+		if keyID != "" {
+			return fmt.Errorf(`"key_id" cannot be set when "enabled" is false in the "encryption_at_rest" block`)
+		}
+		return nil
+	}
+
+	if keyID != "" && !encryptionKeyIDRegexp.MatchString(keyID) {
+		return fmt.Errorf(`invalid "key_id" %q in the "encryption_at_rest" block, expected a portal key ID such as "key-deadbeef"`, keyID)
+	}
+
+	if _, ok := encryptionKeyProviders[strings.ToLower(cloud)]; !ok {
+		return fmt.Errorf("encryption at rest is not supported for cloud %q", cloud)
+	}
+
+	return nil
+}
+
+// validateEncryptionKeyIDNotRemoved reports dropping a customer-managed
+// "key_id" from the configuration as an error.
+//
+// "key_id" is Optional+Computed so that the key ID the API returns can be read
+// back into state, and the SDK suppresses the diff when an Optional+Computed
+// value disappears from the configuration. Encryption at rest is also
+// create-time only, so the removal can neither be applied in place nor planned
+// as a replacement from here. Reporting it beats silently ignoring it.
+func validateEncryptionKeyIDNotRemoved(d *schema.ResourceDiff) error {
+	if d.Id() == "" {
+		return nil
+	}
+
+	configuredKeyID, blockConfigured := configuredEncryptionAtRest(d.GetRawConfig())
+	if !blockConfigured || configuredKeyID != "" {
+		// Dropping the whole block is the documented Optional+Computed no-op,
+		// the same as for every other read back attribute on this resource.
+		return nil
+	}
+
+	// The key provider is Computed, so the diff reports it as unknown as soon
+	// as the block appears in the configuration. Only the prior state says
+	// which key the cluster actually runs on.
+	state, _ := d.GetChange("encryption_at_rest")
+	block, ok := castToNestedBlock(state)
+	if !ok {
+		return nil
+	}
+
+	keyID, _ := block["key_id"].(string)
+	provider, _ := block["provider"].(string)
+	if keyID == "" || !isCustomerManagedKeyProvider(provider) {
+		return nil
+	}
+
+	return fmt.Errorf(
+		`"key_id" is missing from the "encryption_at_rest" block but the cluster uses customer-managed key %q; `+
+			`encryption at rest cannot be changed after creation, so either restore "key_id" or recreate the cluster`,
+		keyID,
+	)
+}
+
+// configuredEncryptionAtRest reads encryption_at_rest[0].key_id straight off
+// the raw configuration, bypassing the Optional+Computed fallback to state, and
+// reports whether the block is configured at all.
+func configuredEncryptionAtRest(config cty.Value) (keyID string, configured bool) {
+	if config.IsNull() || !config.IsKnown() {
+		// Destroy plan: there is no configuration to read.
+		return "", false
+	}
+
+	blocks := config.GetAttr("encryption_at_rest")
+	if blocks.IsNull() || !blocks.IsKnown() || blocks.LengthInt() == 0 {
+		return "", false
+	}
+
+	value := blocks.Index(cty.NumberIntVal(0)).GetAttr("key_id")
+	if value.IsNull() || !value.IsKnown() {
+		return "", true
+	}
+
+	return value.AsString(), true
+}
+
 func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ interface{}) error {
 	scaling, _ := castToNestedBlock(d.Get("scaling"))
 	_, hasMinNodes := d.GetOk("min_nodes")
 	_, hasNodeType := d.GetOk("node_type")
 
-	return validateScaling(hasMinNodes, hasNodeType, scaling)
+	if err := validateScaling(hasMinNodes, hasNodeType, scaling); err != nil {
+		return err
+	}
+
+	if encryptionAtRest, ok := castToNestedBlock(d.Get("encryption_at_rest")); ok {
+		enabled, _ := encryptionAtRest["enabled"].(bool)
+		configuredKeyID, _ := configuredEncryptionAtRest(d.GetRawConfig())
+		if err := validateEncryptionAtRest(d.Get("cloud").(string), enabled, configuredKeyID); err != nil {
+			return err
+		}
+	}
+
+	return validateEncryptionKeyIDNotRemoved(d)
 }
 
 func ResourceCluster() *schema.Resource {
@@ -541,6 +709,42 @@ func ResourceCluster() *schema.Resource {
 				Default:          1,
 				ValidateDiagFunc: validateBackupRetentionDaysDiag,
 			},
+			"encryption_at_rest": {
+				Description: "Enables database-level encryption at rest. The key provider is derived from " +
+					"the `cloud` attribute. Encryption at rest can only be configured when the cluster is " +
+					"created, so changing any field in this block replaces the cluster. " +
+					"Omitting the block leaves the cluster unencrypted.",
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+					"enabled": {
+						Description: "Whether the cluster data is encrypted at rest. Defaults to true when the " +
+							"block is present; set it to false to opt out explicitly.",
+						Optional: true,
+						ForceNew: true,
+						Default:  true,
+						Type:     schema.TypeBool,
+					},
+					"key_id": {
+						Description: "The ID of a customer-managed key pre-created in the ScyllaDB Cloud portal " +
+							"(e.g. `key-deadbeef`). Leave it unset to let ScyllaDB Cloud manage the key.",
+						Optional: true,
+						Computed: true,
+						ForceNew: true,
+						Type:     schema.TypeString,
+					},
+					"provider": {
+						Description: "The key provider resolved by the API: `scylla-aws` or `scylla-gcp` for a " +
+							"ScyllaDB-managed key, `aws` or `gcp` for a customer-managed one. " +
+							"Empty if encryption at rest is not enabled.",
+						Computed: true,
+						Type:     schema.TypeString,
+					},
+				}},
+			},
 		},
 	}
 }
@@ -603,6 +807,11 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cloudProvider.CloudProvider.ID, mr.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
+	}
+
+	clusterCreateRequest.EncryptionAtRest, err = expandEncryptionAtRest(cloud, d.Get("encryption_at_rest"))
+	if err != nil {
+		return diag.FromErr(err)
 	}
 
 	scaling, err = expandScaling(d.Get("scaling"), region, instances, cloudProvider)
@@ -864,6 +1073,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
 	_ = d.Set("status", cluster.Status)
 	_ = d.Set("ca_certificate", caCert)
+	_ = d.Set("encryption_at_rest", flattenEncryptionAtRest(cluster.EncryptionAtRest))
 
 	if cluster.UserAPIInterface == "ALTERNATOR" {
 		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
