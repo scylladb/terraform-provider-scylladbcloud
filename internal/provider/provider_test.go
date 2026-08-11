@@ -510,7 +510,7 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 }
 
 // testAccEncryptionAtRestConfig renders a minimal cluster whose
-// encryption_at_rest block holds the single given attribute assignment.
+// encryption_at_rest block holds the single attribute assignment.
 func testAccEncryptionAtRestConfig(name, cloud, region, nodeType, attribute string) string {
 	return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
   name                  = %[1]q
@@ -528,8 +528,7 @@ func testAccEncryptionAtRestConfig(name, cloud, region, nodeType, attribute stri
 }`, name, cloud, region, nodeType, attribute)
 }
 
-// testAccEncryptionAtRestEnabledConfig renders a cluster that opts in to, or
-// explicitly out of, encryption at rest with a ScyllaDB-managed key.
+// testAccEncryptionAtRestEnabledConfig renders a cluster that enabled or disables encryption at rest.
 func testAccEncryptionAtRestEnabledConfig(name, cloud, region, nodeType string, enabled bool) string {
 	return testAccEncryptionAtRestConfig(name, cloud, region, nodeType,
 		fmt.Sprintf("enabled = %t", enabled))
