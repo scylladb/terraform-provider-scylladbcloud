@@ -180,15 +180,12 @@ func flattenScaling(raw *model.Scaling, instances []model.CloudProviderInstance,
 }
 
 // encryptionKeyProviders maps the cloud provider name to the pair of
-// encryption-at-rest key providers the API accepts for it: the service-managed
-// one and the customer-managed one.
+// encryption-at-rest key providers the API accepts.
 var encryptionKeyProviders = map[string]struct{ scyllaManaged, customerManaged string }{
 	"aws": {model.EncryptionProviderScyllaAWS, model.EncryptionProviderAWS},
 	"gcp": {model.EncryptionProviderScyllaGCP, model.EncryptionProviderGCP},
 }
 
-// isCustomerManagedKeyProvider reports whether the key behind the given
-// provider was created by the customer rather than by ScyllaDB Cloud.
 func isCustomerManagedKeyProvider(provider string) bool {
 	return provider == model.EncryptionProviderAWS || provider == model.EncryptionProviderGCP
 }
@@ -214,8 +211,8 @@ func expandEncryptionAtRest(cloud string, raw interface{}) (*model.EncryptionAtR
 
 	// key_id is Optional+Computed, but reading it off the diff is safe here:
 	// create only ever runs against a null prior state - Terraform re-plans a
-	// replacement with a null prior precisely so computed values are not carried
-	// over - so this is the configured key or nothing, never a read back one.
+	// replacement with a null prior - so this is the configured key or nothing,
+	// never a read of an outdated one.
 	if keyID, _ := block["key_id"].(string); keyID != "" {
 		return &model.EncryptionAtRest{Provider: providers.customerManaged, KeyID: keyID}, nil
 	}
@@ -224,9 +221,8 @@ func expandEncryptionAtRest(cloud string, raw interface{}) (*model.EncryptionAtR
 }
 
 // flattenEncryptionAtRest always returns exactly one block, never an empty
-// list: an unencrypted cluster reads back as enabled = false. Returning an empty
-// list instead would leave "encryption_at_rest { enabled = false }" diffing
-// against nothing forever.
+// list. An unencrypted cluster reads back as "encryption_at_rest { enabled = false }".
+// Returning an empty list would leave diffing against nothing forever.
 func flattenEncryptionAtRest(raw *model.EncryptionAtRest) []map[string]interface{} {
 	if raw == nil || raw.Provider == "" {
 		return []map[string]interface{}{{
@@ -345,9 +341,9 @@ func validateScaling(hasMinNodes, hasNodeType bool, scaling map[string]interface
 var encryptionKeyIDRegexp = regexp.MustCompile(`^key-[a-zA-Z0-9]+$`)
 
 // validateEncryptionAtRest checks the configured encryption_at_rest block.
-// keyID must come from the raw configuration rather than from the diff: it is
-// Optional+Computed, so the diff falls back to the key ID the API reported for
-// the existing cluster and cannot tell configured from read back.
+//
+// keyID must come from the raw configuration rather than from the diff because
+// the diff falls back to the key ID reported by the API.
 func validateEncryptionAtRest(cloud string, enabled bool, keyID string) error {
 	if !enabled {
 		if keyID != "" {
@@ -374,7 +370,7 @@ func validateEncryptionAtRest(cloud string, enabled bool, keyID string) error {
 // back into state, and the SDK suppresses the diff when an Optional+Computed
 // value disappears from the configuration. Encryption at rest is also
 // create-time only, so the removal can neither be applied in place nor planned
-// as a replacement from here. Reporting it beats silently ignoring it.
+// as a replacement. Reporting it avoids confusion compared to silently ignoring it.
 func validateEncryptionKeyIDNotRemoved(d *schema.ResourceDiff) error {
 	if d.Id() == "" {
 		return nil
@@ -389,7 +385,7 @@ func validateEncryptionKeyIDNotRemoved(d *schema.ResourceDiff) error {
 
 	// The key provider is Computed, so the diff reports it as unknown as soon
 	// as the block appears in the configuration. Only the prior state says
-	// which key the cluster actually runs on.
+	// which key the cluster actually uses.
 	state, _ := d.GetChange("encryption_at_rest")
 	block, ok := castToNestedBlock(state)
 	if !ok {
@@ -409,12 +405,11 @@ func validateEncryptionKeyIDNotRemoved(d *schema.ResourceDiff) error {
 	)
 }
 
-// configuredEncryptionAtRest reads encryption_at_rest[0].key_id straight off
-// the raw configuration, bypassing the Optional+Computed fallback to state, and
-// reports whether the block is configured at all.
+// configuredEncryptionAtRest returns encryption_at_rest[0].key_id from the raw configuration.
+// It also reports whether the block is configured at all.
 func configuredEncryptionAtRest(config cty.Value) (keyID string, configured bool) {
 	if config.IsNull() || !config.IsKnown() {
-		// Destroy plan: there is no configuration to read.
+		// Destroy plan condition.
 		return "", false
 	}
 
