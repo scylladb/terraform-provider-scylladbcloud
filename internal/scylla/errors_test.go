@@ -30,3 +30,26 @@ func TestIsEncryptionDisabledErr(t *testing.T) {
 		})
 	}
 }
+
+func TestIsEncryptionAtRestUnavailableErr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil error"},
+		{name: "plain error", err: errors.New("boom")},
+		{name: "invalid encryption parameter", err: &APIError{Code: "040733"}},
+		{name: "encryption at rest unavailable", err: &APIError{Code: "040723"}, want: true},
+		{name: "wrapped encryption at rest unavailable", err: fmt.Errorf("create cluster: %w", &APIError{Code: "040723"}), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, IsEncryptionAtRestUnavailableErr(tt.err))
+		})
+	}
+}

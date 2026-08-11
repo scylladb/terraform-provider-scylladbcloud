@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -607,6 +608,114 @@ func TestFetchCACertificate(t *testing.T) {
 	}
 }
 
+func TestCreateClusterWithEncryptionFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// createError is the body the cluster POST answers with while it still
+		// carries encryptionAtRest. Empty means the first attempt succeeds.
+		createError string
+		configured  bool
+		wantPosts   []*model.EncryptionAtRest
+		wantDiags   int
+		wantErr     string
+	}{
+		{
+			name:      "creates encrypted when the account is entitled",
+			wantPosts: []*model.EncryptionAtRest{{Provider: "scylla-aws"}},
+		},
+		{
+			name:        "retries unencrypted when the account is not entitled",
+			createError: "040723",
+			wantPosts:   []*model.EncryptionAtRest{{Provider: "scylla-aws"}, nil},
+			wantDiags:   1,
+		},
+		{
+			name:        "fails when the user asked for encryption explicitly",
+			createError: "040723",
+			configured:  true,
+			wantPosts:   []*model.EncryptionAtRest{{Provider: "scylla-aws"}},
+			wantErr:     "040723",
+		},
+		{
+			name:        "never retries an invalid encryption parameter",
+			createError: "040733",
+			wantPosts:   []*model.EncryptionAtRest{{Provider: "scylla-aws"}},
+			wantErr:     "040733",
+		},
+		{
+			name:        "never retries an unrelated failure",
+			createError: "040001",
+			wantPosts:   []*model.EncryptionAtRest{{Provider: "scylla-aws"}},
+			wantErr:     "040001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var posts []*model.EncryptionAtRest
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/account/7/cluster":
+					var body model.ClusterCreateRequest
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+					posts = append(posts, body.EncryptionAtRest)
+
+					if tt.createError != "" && body.EncryptionAtRest != nil {
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = w.Write([]byte(`{"error":"` + tt.createError + `"}`))
+						return
+					}
+					_, _ = w.Write([]byte(`{"data":{"requestId":11}}`))
+				case "/account/7/cluster/request/11":
+					_, _ = w.Write([]byte(`{"data":{"id":11,"clusterId":42}}`))
+				default:
+					t.Errorf("unexpected path %q", r.URL.Path)
+				}
+			}))
+			defer srv.Close()
+
+			endpoint, err := url.Parse(srv.URL)
+			require.NoError(t, err)
+
+			client := &scylla.Client{
+				Endpoint:   endpoint,
+				Headers:    make(http.Header),
+				HTTPClient: srv.Client(),
+				Retry:      retrier.New(nil, nil),
+				AccountID:  7,
+			}
+
+			req := &model.ClusterCreateRequest{
+				ClusterName:      "encrypted-by-default",
+				EncryptionAtRest: &model.EncryptionAtRest{Provider: model.EncryptionProviderScyllaAWS},
+			}
+
+			cr, diags, err := createClusterWithEncryptionFallback(context.Background(), client, req, tt.configured)
+			require.Equal(t, tt.wantPosts, posts)
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.Nil(t, cr)
+				require.Empty(t, diags)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, int64(42), cr.ClusterID)
+			require.Len(t, diags, tt.wantDiags)
+			if tt.wantDiags > 0 {
+				require.Equal(t, diag.Warning, diags[0].Severity)
+				require.Contains(t, diags[0].Detail, "not entitled to encryption at rest")
+			}
+		})
+	}
+}
+
 func TestSetClusterKVsSetsCACertificate(t *testing.T) {
 	t.Parallel()
 
@@ -645,8 +754,22 @@ func TestExpandEncryptionAtRest(t *testing.T) {
 		want  *model.EncryptionAtRest
 	}{
 		{
-			name:  "returns nil for absent block",
+			name:  "defaults to a scylla managed key for aws when the block is absent",
 			cloud: "AWS",
+			raw:   []interface{}{},
+			want:  &model.EncryptionAtRest{Provider: "scylla-aws"},
+		},
+		{
+			name:  "defaults to a scylla managed key for gcp when the block is absent",
+			cloud: "GCP",
+			raw:   []interface{}{},
+			want:  &model.EncryptionAtRest{Provider: "scylla-gcp"},
+		},
+		{
+			// The user did not ask for encryption, so an unsupported cloud must
+			// not start failing creates.
+			name:  "returns nil for an absent block on an unsupported cloud",
+			cloud: "AZURE",
 			raw:   []interface{}{},
 			want:  nil,
 		},

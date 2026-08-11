@@ -87,6 +87,20 @@ The provider supports specifying exact availability zone placement for cluster n
 
 ~> **Note:** You must provide at least two availability zone IDs when using this field.
 
+## Encryption at Rest
+
+New clusters are created with database-level encryption at rest enabled, using a ScyllaDB-managed key, matching what the ScyllaDB Cloud portal does. No configuration is required.
+
+To use a customer-managed key instead, create it in the ScyllaDB Cloud portal first and pass its ID:
+
+```terraform
+encryption_at_rest {
+  key_id = "key-deadbeef"
+}
+```
+
+~> **Note:** Encryption at rest can only be configured when a cluster is created, so changing any field in this block replaces the cluster. Clusters created before this default was introduced are unaffected: omitting the block keeps whatever the cluster already uses and never plans a replacement.
+
 ## Useful Links
 
 [Reporting bugs or feature requests](https://github.com/scylladb/terraform-provider-scylladbcloud/issues)

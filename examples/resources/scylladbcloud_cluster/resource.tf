@@ -10,16 +10,14 @@ resource "scylladbcloud_cluster" "example" {
 	enable_vpc_peering = true
 	enable_dns         = true
 
-	# Encrypt the cluster data at rest with a ScyllaDB-managed key.
-	# Use `key_id` instead to point at a customer-managed key created
-	# beforehand in the ScyllaDB Cloud portal:
+	# Encryption at rest is enabled by default using a key managed by ScyllaDB Cloud.
+	# This block is optional and should only be configured if you wish to use a
+	# customer-managed key previously created in the ScyllaDB Cloud portal.
 	#
 	#   encryption_at_rest {
 	#     key_id = "key-deadbeef"
 	#   }
-	encryption_at_rest {
-		enabled = true
-	}
+	#
 }
 
 output "scylladbcloud_cluster_id" {
