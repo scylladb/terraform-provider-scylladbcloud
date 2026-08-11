@@ -521,7 +521,9 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description:      "Minimum number of nodes in the cluster. Defaults to 3. Applies to Standard clusters only. Must not be set when the scaling block is present. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.",
+				Description: "Minimum number of nodes in the cluster. Required for Standard clusters; must be at least 3 and divisible by 3. " +
+					"Must not be set when the scaling block is present, in which case it reads back as `0` and `node_count` reports the number of nodes the cluster currently runs. " +
+					"Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.",
 				Optional:         true,
 				Type:             schema.TypeInt,
 				ConflictsWith:    []string{"scaling"},
@@ -549,7 +551,8 @@ func ResourceCluster() *schema.Resource {
 			},
 			"node_type": {
 				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
-					"Must not be set when the scaling block is present.",
+					"Must not be set when the scaling block is present, in which case it reads back as empty: " +
+					"the control plane picks the instance from the scaling policy and changes it as the cluster scales.",
 				Optional:      true,
 				ForceNew:      true,
 				Type:          schema.TypeString,
@@ -682,7 +685,9 @@ func ResourceCluster() *schema.Resource {
 				Type:     schema.TypeString,
 			},
 			"node_disk_size": {
-				Description:   "The disk size in gigabytes of the node.",
+				Description: "The disk size in gigabytes of the node. " +
+					"Must not be set when the scaling block is present, in which case it reads back as `0`: " +
+					"the control plane picks the instance from the scaling policy and changes it as the cluster scales.",
 				ForceNew:      true,
 				Optional:      true,
 				Computed:      true,
@@ -911,16 +916,17 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
+	// The instance the cluster runs on is only tracked for Standard clusters.
+	// X Cloud picks it from the scaling policy and changes it as the cluster
+	// scales, so resolving it here would only produce a value setClusterKVs
+	// discards.
 	instanceExternalID := ""
-	if cluster.Datacenter.InstanceID != 0 {
+	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
 		i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
 			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
 		}
 		instanceExternalID = i.ExternalID
-	}
-	if hasScaling(cluster) && instanceExternalID == "" {
-		return diag.Errorf("instance external ID is expected to be set for cluster %d with scaling configuration", cluster.ID)
 	}
 	caCert, warns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
 	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
@@ -987,7 +993,8 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
 	}
-	if cluster.Datacenter.InstanceID != 0 {
+	// Standard clusters only; see the matching comment in resourceClusterCreate.
+	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
 		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
 			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
@@ -1032,8 +1039,14 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("node_count", nodeCount)
 
 	if hasScaling(cluster) {
+		// min_nodes, node_type and node_disk_size describe a Standard cluster.
+		// For X Cloud the scaling policy owns them and the control plane keeps
+		// changing the instance as the cluster scales, so tracking them would
+		// report drift after every scaling event. The SDK cannot store null in
+		// a primitive, so they read back as 0 and "".
 		_ = d.Set("min_nodes", nil)
 		_ = d.Set("node_type", nil)
+		_ = d.Set("node_disk_size", nil)
 		scaling, err := flattenScaling(cluster.Datacenters[0].Scaling, instances, cloudProvider)
 		if err != nil {
 			return err
@@ -1083,7 +1096,7 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		_ = d.Set("byoa_id", id)
 	}
 
-	if cluster.Instance != nil {
+	if !hasScaling(cluster) && cluster.Instance != nil {
 		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
 	}
 
