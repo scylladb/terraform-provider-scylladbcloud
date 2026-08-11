@@ -24,16 +24,14 @@ resource "scylladbcloud_cluster" "example" {
 	enable_vpc_peering = true
 	enable_dns         = true
 
-	# Encrypt the cluster data at rest with a ScyllaDB-managed key.
-	# Use `key_id` instead to point at a customer-managed key created
-	# beforehand in the ScyllaDB Cloud portal:
+	# Encryption at rest is enabled by default using a key managed by ScyllaDB Cloud.
+	# This block is optional and should only be configured if you wish to use a
+	# customer-managed key previously created in the ScyllaDB Cloud portal.
 	#
 	#   encryption_at_rest {
 	#     key_id = "key-deadbeef"
 	#   }
-	encryption_at_rest {
-		enabled = true
-	}
+	#
 }
 
 output "scylladbcloud_cluster_id" {
@@ -71,7 +69,7 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 - `cloud` (String) The cloud provider. Accepted values: AWS, GCP.
 - `enable_dns` (Boolean) Whether to enable DNS for the cluster.
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering for the cluster.
-- `encryption_at_rest` (Block List, Max: 1) Enables database-level encryption at rest. The key provider is derived from the `cloud` attribute. Encryption at rest can only be configured when the cluster is created, so changing any field in this block replaces the cluster. Omitting the block leaves the cluster unencrypted. (see [below for nested schema](#nestedblock--encryption_at_rest))
+- `encryption_at_rest` (Block List, Max: 1) Configures database-level encryption at rest. The key provider is derived from the `cloud` attribute. Encryption at rest can only be configured when the cluster is created, so changing any field in this block replaces the cluster. New clusters are encrypted with a ScyllaDB-managed key by default. The block is needed to opt out with `enabled = false` or to point at a customer-managed key. Existing clusters are never modified. (see [below for nested schema](#nestedblock--encryption_at_rest))
 - `min_nodes` (Number) Minimum number of nodes in the cluster. Required for Standard clusters; must be at least 3 and divisible by 3. Must not be set when the scaling block is present, in which case it reads back as `0` and `node_count` reports the number of nodes the cluster currently runs. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.
 - `node_disk_size` (Number) The disk size in gigabytes of the node. Must not be set when the scaling block is present, in which case it reads back as `0`: the control plane picks the instance from the scaling policy and changes it as the cluster scales.
 - `node_type` (String) The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. Must not be set when the scaling block is present, in which case it reads back as empty: the control plane picks the instance from the scaling policy and changes it as the cluster scales.
@@ -97,7 +95,7 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 
 Optional:
 
-- `enabled` (Boolean) Whether the cluster data is encrypted at rest. Defaults to true when the block is present; set it to false to opt out explicitly.
+- `enabled` (Boolean) Whether the cluster data is encrypted at rest. Defaults to true; set it to false to create the cluster unencrypted.
 - `key_id` (String) The ID of a customer-managed key pre-created in the ScyllaDB Cloud portal (e.g. `key-deadbeef`). Leave it unset to let ScyllaDB Cloud manage the key.
 
 Read-Only:

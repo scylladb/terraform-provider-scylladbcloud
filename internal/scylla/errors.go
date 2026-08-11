@@ -37,6 +37,16 @@ func IsEncryptionDisabledErr(err error) bool {
 	return false
 }
 
+// IsEncryptionAtRestUnavailableErr reports whether err is API error 040723:
+// "Account does not have encryption at rest enabled". It means the account is
+// not entitled to encryption at rest, not that the request was malformed.
+func IsEncryptionAtRestUnavailableErr(err error) bool {
+	if e := new(APIError); errors.As(err, &e) && e.Code == "040723" {
+		return true
+	}
+	return false
+}
+
 func IsNotFound(err error) bool {
 	if e := new(APIError); errors.As(err, &e) && e.StatusCode == http.StatusNotFound {
 		return true

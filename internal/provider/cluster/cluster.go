@@ -194,18 +194,25 @@ func isCustomerManagedKeyProvider(provider string) bool {
 // encryption_at_rest block. The key provider is derived from cloud so that
 // users never have to restate AWS/GCP. A nil result means the field is left out
 // of the request entirely, which is how encryption at rest is opted out of.
+//
+// Omitting the block selects a ScyllaDB-managed key, matching the desired default.
+// Opting out takes an explicit "enabled = false".
 func expandEncryptionAtRest(cloud string, raw interface{}) (*model.EncryptionAtRest, error) {
-	block, ok := castToNestedBlock(raw)
-	if !ok {
-		return nil, nil
-	}
+	block, configured := castToNestedBlock(raw)
 
-	if enabled, _ := block["enabled"].(bool); !enabled {
-		return nil, nil
+	if configured {
+		if enabled, _ := block["enabled"].(bool); !enabled {
+			return nil, nil
+		}
 	}
 
 	providers, ok := encryptionKeyProviders[strings.ToLower(cloud)]
 	if !ok {
+		if !configured {
+			// The default must never fail a create for a cloud the user did
+			// not ask to encrypt on.
+			return nil, nil
+		}
 		return nil, fmt.Errorf("encryption at rest is not supported for cloud %q", cloud)
 	}
 
@@ -218,6 +225,55 @@ func expandEncryptionAtRest(cloud string, raw interface{}) (*model.EncryptionAtR
 	}
 
 	return &model.EncryptionAtRest{Provider: providers.scyllaManaged}, nil
+}
+
+// createClusterWithEncryptionFallback creates the cluster, retrying once
+// without encryption at rest when the account is not entitled to it and the
+// user never asked for it.
+//
+// Encryption at rest is on by default, so an account without the entitlement
+// would otherwise fail every "terraform apply" over a setting it did not
+// choose. The retry is deliberately narrow: only error 040723, which the API
+// rejects on the cluster POST before anything is provisioned. Retrying on any
+// other error risks creating a second cluster, because CreateCluster also
+// fetches the cluster request it just enqueued.
+//
+// An explicitly configured block always fails hard - a user who asked for
+// encryption must not silently get an unencrypted cluster.
+func createClusterWithEncryptionFallback(
+	ctx context.Context,
+	c *scylla.Client,
+	req *model.ClusterCreateRequest,
+	encryptionConfigured bool,
+) (*model.ClusterRequest, diag.Diagnostics, error) {
+	cr, err := c.CreateCluster(ctx, req)
+	if err == nil {
+		return cr, nil, nil
+	}
+
+	if encryptionConfigured || req.EncryptionAtRest == nil || !scylla.IsEncryptionAtRestUnavailableErr(err) {
+		return nil, nil, err
+	}
+
+	tflog.Debug(ctx, "Account is not entitled to encryption at rest; retrying without it", map[string]interface{}{
+		"cluster_name": req.ClusterName,
+	})
+
+	req.EncryptionAtRest = nil
+
+	cr, err = c.CreateCluster(ctx, req)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cr, diag.Diagnostics{{
+		Severity: diag.Warning,
+		Summary:  fmt.Sprintf("Cluster %q was created without encryption at rest", req.ClusterName),
+		Detail: "This account is not entitled to encryption at rest, which new clusters use by " +
+			"default. The cluster was created unencrypted. Contact ScyllaDB Cloud support to " +
+			`enable it, or set "enabled = false" in the "encryption_at_rest" block to silence ` +
+			"this warning.",
+	}}, nil
 }
 
 // flattenEncryptionAtRest always returns exactly one block, never an empty
@@ -710,10 +766,12 @@ func ResourceCluster() *schema.Resource {
 				ValidateDiagFunc: validateBackupRetentionDaysDiag,
 			},
 			"encryption_at_rest": {
-				Description: "Enables database-level encryption at rest. The key provider is derived from " +
+				Description: "Configures database-level encryption at rest. The key provider is derived from " +
 					"the `cloud` attribute. Encryption at rest can only be configured when the cluster is " +
 					"created, so changing any field in this block replaces the cluster. " +
-					"Omitting the block leaves the cluster unencrypted.",
+					"New clusters are encrypted with a ScyllaDB-managed key by default. The block is " +
+					"needed to opt out with `enabled = false` or to point at a customer-managed key. " +
+					"Existing clusters are never modified.",
 				Optional: true,
 				Computed: true,
 				ForceNew: true,
@@ -721,8 +779,8 @@ func ResourceCluster() *schema.Resource {
 				MaxItems: 1,
 				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
 					"enabled": {
-						Description: "Whether the cluster data is encrypted at rest. Defaults to true when the " +
-							"block is present; set it to false to opt out explicitly.",
+						Description: "Whether the cluster data is encrypted at rest. Defaults to true; set it " +
+							"to false to create the cluster unencrypted.",
 						Optional: true,
 						ForceNew: true,
 						Default:  true,
@@ -893,7 +951,9 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf(`unrecognized value %q for "scylla_version" attribute`, version)
 	}
 
-	cr, err := scyllaClient.CreateCluster(ctx, clusterCreateRequest)
+	_, encryptionConfigured := configuredEncryptionAtRest(d.GetRawConfig())
+
+	cr, warns, err := createClusterWithEncryptionFallback(ctx, scyllaClient, clusterCreateRequest, encryptionConfigured)
 	if err != nil {
 		return diag.Errorf("failed to create a cluster request: %s", err)
 	}
@@ -923,7 +983,9 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		}
 		instanceExternalID = i.ExternalID
 	}
-	caCert, warns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
+	caCert, certWarns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
+	warns = append(warns, certWarns...)
+
 	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
