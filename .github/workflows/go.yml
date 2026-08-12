@@ -5,11 +5,16 @@ on:
     branches:
     - "main"
   pull_request:
-    branches:
-    - "main"
 
 permissions:
   contents: read
+
+# Supersede in-flight runs for a pull request. Rebasing a stack force-pushes
+# every branch in it, so each rebase would otherwise start a full matrix run
+# per pull request. Pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
