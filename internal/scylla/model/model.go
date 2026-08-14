@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-type tabletsMode string
-
-const (
-	TabletsEnforced tabletsMode = "enforced"
-)
-
 type CloudProvider struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -144,7 +138,6 @@ type ClusterCreateRequest struct {
 	InstanceID               int64             `json:"instanceId,omitempty"`
 	RegionID                 int64             `json:"regionId,omitempty"`
 	Scaling                  *Scaling          `json:"scaling,omitempty"`
-	Tablets                  tabletsMode       `json:"tablets,omitempty"`
 	EnableDNSAssociation     bool              `json:"enableDnsAssociation"`
 	AllowedIPs               []string          `json:"allowedIPs,omitempty"`
 	FreeTier                 bool              `json:"freeTier"`

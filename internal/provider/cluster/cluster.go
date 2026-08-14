@@ -879,7 +879,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if scaling != nil {
 		clusterCreateRequest.Scaling = scaling
-		clusterCreateRequest.Tablets = model.TabletsEnforced
 	} else {
 		minNodes := d.Get("min_nodes").(int)
 		clusterCreateRequest.NumberOfNodes = int64(minNodes)
