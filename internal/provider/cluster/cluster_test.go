@@ -1217,3 +1217,48 @@ func TestEncryptionAtRestPlan(t *testing.T) {
 		require.ErrorContains(t, err, `invalid "key_id" "deadbeef"`)
 	})
 }
+
+func TestSetClusterKVsSetsAlternatorWriteIsolation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		userAPIInterface string
+		apiValue         string
+		want             string
+	}{
+		{name: "cql empty seeds default", userAPIInterface: "CQL", apiValue: "", want: "only_rmw_uses_lwt"},
+		{name: "cql stray value pinned to default", userAPIInterface: "CQL", apiValue: "always_use_lwt", want: "only_rmw_uses_lwt"},
+		{name: "alternator uses api value", userAPIInterface: "ALTERNATOR", apiValue: "always_use_lwt", want: "always_use_lwt"},
+		{name: "alternator empty seeds default", userAPIInterface: "ALTERNATOR", apiValue: "", want: "only_rmw_uses_lwt"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			resource := ResourceCluster()
+			data := resource.TestResourceData()
+			cluster := &model.Cluster{
+				ID:                       123,
+				ClusterName:              "test",
+				UserAPIInterface:         tt.userAPIInterface,
+				AlternatorWriteIsolation: tt.apiValue,
+				BroadcastType:            "PRIVATE",
+				DNS:                      true,
+				Status:                   "ACTIVE",
+				Region:                   &model.CloudProviderRegion{ExternalID: "us-east-1"},
+				ScyllaVersion:            &model.ScyllaVersion{Version: "2025.1"},
+				Datacenter: &model.Datacenter{
+					Name:      "AWS_US_EAST_1",
+					CIDRBlock: "172.31.0.0/16",
+				},
+				Datacenters: []model.Datacenter{{}},
+			}
+
+			require.NoError(t, setClusterKVs(data, cluster, "AWS", "", "", nil, &scylla.CloudProvider{}))
+			require.Equal(t, tt.want, data.Get("alternator_write_isolation"))
+		})
+	}
+}

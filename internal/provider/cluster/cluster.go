@@ -23,6 +23,8 @@ const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
 	clusterPollInterval  = 10 * time.Second
+
+	defaultAlternatorWriteIsolation = "only_rmw_uses_lwt"
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -598,7 +600,7 @@ func ResourceCluster() *schema.Resource {
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
-				Default:     "only_rmw_uses_lwt",
+				Default:     defaultAlternatorWriteIsolation,
 			},
 			"node_type": {
 				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
@@ -1144,9 +1146,11 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("ca_certificate", caCert)
 	_ = d.Set("encryption_at_rest", flattenEncryptionAtRest(cluster.EncryptionAtRest))
 
-	if cluster.UserAPIInterface == "ALTERNATOR" {
-		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
+	writeIsolation := defaultAlternatorWriteIsolation
+	if cluster.UserAPIInterface == "ALTERNATOR" && cluster.AlternatorWriteIsolation != "" {
+		writeIsolation = cluster.AlternatorWriteIsolation
 	}
+	_ = d.Set("alternator_write_isolation", writeIsolation)
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
 		_ = d.Set("byoa_id", id)
