@@ -576,3 +576,14 @@ func (c *Client) GetAccountCertificate(ctx context.Context) (*model.ClusterCerti
 	}
 	return &result, nil
 }
+
+// ListVectorSearchInstances lists the instance types vector search nodes can
+// use in a region.
+func (c *Client) ListVectorSearchInstances(ctx context.Context, providerID, regionID int64) ([]model.CloudProviderInstance, error) {
+	var result model.CloudProviderInstances
+	path := fmt.Sprintf("/deployment/cloud-provider/%d/region/%d", providerID, regionID)
+	if err := c.get(ctx, path, &result, "target", "VECTOR_SEARCH"); err != nil {
+		return nil, err
+	}
+	return result.Instances, nil
+}
