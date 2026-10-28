@@ -3,6 +3,7 @@ package scylla
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"strconv"
 
@@ -455,4 +456,123 @@ func nonempty(s []string) (f []string) {
 	}
 
 	return f
+}
+
+func (c *Client) clusterPath(clusterID int64, suffix string, args ...any) string {
+	return fmt.Sprintf("/account/%d/cluster/%d", c.AccountID, clusterID) + fmt.Sprintf(suffix, args...)
+}
+
+// RenameCluster starts renaming a cluster; wait for the returned request.
+func (c *Client) RenameCluster(ctx context.Context, clusterID int64, name string) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.patch(ctx, c.clusterPath(clusterID, "/name"), map[string]string{"name": name}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// SetClientEncryptionMode starts switching client-to-node encryption to mode
+// (model.ClientEncryptionModeEncrypted or Both). The API refuses the mode the
+// cluster already has.
+func (c *Client) SetClientEncryptionMode(ctx context.Context, clusterID int64, mode string) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.put(ctx, c.clusterPath(clusterID, "/encryption/mode"), map[string]string{"mode": mode}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) GetBackupRetention(ctx context.Context, clusterID int64) (*model.BackupRetention, error) {
+	var result model.BackupRetention
+	if err := c.get(ctx, c.clusterPath(clusterID, "/backup-retention"), &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UpdateBackupRetention changes an existing retention (0-60 days, 0 cancels
+// it); the API cannot create one.
+func (c *Client) UpdateBackupRetention(ctx context.Context, clusterID, retentionDays int64) (*model.BackupRetention, error) {
+	var result model.BackupRetention
+	if err := c.patch(ctx, c.clusterPath(clusterID, "/backup-retention"), map[string]int64{"retentionDays": retentionDays}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) GetVectorSearch(ctx context.Context, clusterID, dcID int64) (*model.VectorSearch, error) {
+	var result model.VectorSearch
+	if err := c.get(ctx, c.clusterPath(clusterID, "/dc/%d/vector-search", dcID), &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) CreateVectorSearch(ctx context.Context, clusterID, dcID int64, req *model.VectorSearchRequest) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.post(ctx, c.clusterPath(clusterID, "/dc/%d/vector-search", dcID), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) UpdateVectorSearch(ctx context.Context, clusterID, dcID int64, req *model.VectorSearchRequest) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.patch(ctx, c.clusterPath(clusterID, "/dc/%d/vector-search", dcID), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) DeleteVectorSearch(ctx context.Context, clusterID, dcID int64) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.retryCall(ctx, http.MethodDelete, c.clusterPath(clusterID, "/dc/%d/vector-search", dcID), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UpdateClusterVPCPeering changes a peering in place. The response is not in
+// the documented shape, so the peering is read again.
+func (c *Client) UpdateClusterVPCPeering(ctx context.Context, clusterID, peerID int64, req *model.VPCPeeringUpdateRequest) (*model.VPCPeering, error) {
+	if err := c.put(ctx, c.clusterPath(clusterID, "/network/vpc/peer/%d", peerID), req, nil); err != nil {
+		return nil, err
+	}
+	return c.GetClusterVPCPeering(ctx, clusterID, peerID)
+}
+
+// RecreateClusterConnection replaces a connection's revision (not supported
+// for AWS PrivateLink or GCP PSC); wait for the returned request.
+func (c *Client) RecreateClusterConnection(ctx context.Context, clusterID, connectionID int64, req *model.ClusterConnectionRecreateRequest) (*model.ClusterRequest, error) {
+	var result model.ClusterRequest
+	if err := c.put(ctx, c.clusterPath(clusterID, "/network/vpc/connection/%d", connectionID), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) GetAccountNotificationEmails(ctx context.Context) ([]string, error) {
+	var result model.NotificationEmails
+	if err := c.get(ctx, fmt.Sprintf("/account/%d/notifications/email", c.AccountID), &result); err != nil {
+		return nil, err
+	}
+	return result.Emails, nil
+}
+
+// SetAccountNotificationEmails replaces the account's notification emails;
+// the API refuses an empty list.
+func (c *Client) SetAccountNotificationEmails(ctx context.Context, emails []string) ([]string, error) {
+	var result model.NotificationEmails
+	if err := c.post(ctx, fmt.Sprintf("/account/%d/notifications/email", c.AccountID), model.NotificationEmails{Emails: emails}, &result); err != nil {
+		return nil, err
+	}
+	return result.Emails, nil
+}
+
+func (c *Client) GetAccountCertificate(ctx context.Context) (*model.ClusterCertificate, error) {
+	var result model.ClusterCertificate
+	if err := c.get(ctx, fmt.Sprintf("/account/%d/certificate", c.AccountID), &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

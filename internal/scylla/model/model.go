@@ -191,6 +191,10 @@ type Cluster struct {
 	// EncryptionAtRest is absent when the cluster does not use encryption at
 	// rest; its presence is the status signal.
 	EncryptionAtRest *EncryptionAtRest `json:"encryptionAtRest,omitempty"`
+
+	// EncryptionMode is the client-to-node encryption mode: unencrypted,
+	// encrypted or both. It can be absent.
+	EncryptionMode string `json:"encryptionMode,omitempty"`
 }
 
 type Progress struct {
@@ -451,4 +455,68 @@ type Stack struct {
 	RequestType        string         `json:"RequestType"`
 	RequestID          string         `json:"RequestId"`
 	ResourceProperties map[string]any `json:"ResourceProperties"`
+}
+
+// Client-to-node encryption modes accepted by SetClientEncryptionMode.
+const (
+	ClientEncryptionModeEncrypted = "encrypted"
+	ClientEncryptionModeBoth      = "both"
+)
+
+// BackupRetention is a cluster's backup retention after it is deleted.
+type BackupRetention struct {
+	RetentionDays  int64    `json:"retentionDays"`
+	StartDate      string   `json:"startDate"`
+	EncryptionKeys []string `json:"encryptionKeys"`
+}
+
+// Vector search status values.
+const (
+	VectorSearchStatusHealthy   = "HEALTHY"
+	VectorSearchStatusDegraded  = "DEGRADED"
+	VectorSearchStatusUnhealthy = "UNHEALTHY"
+	VectorSearchStatusUnknown   = "UNKNOWN"
+)
+
+type VectorSearchRequest struct {
+	NodeCount             int64 `json:"nodeCount"`
+	DefaultInstanceTypeID int64 `json:"defaultInstanceTypeId"`
+}
+
+type VectorSearch struct {
+	Status            string             `json:"status"`
+	AvailabilityZones []VectorSearchZone `json:"availabilityZones"`
+}
+
+type VectorSearchZone struct {
+	AZID     string             `json:"azid"`
+	RackName string             `json:"rackName"`
+	Nodes    []VectorSearchNode `json:"nodes"`
+}
+
+type VectorSearchNode struct {
+	ID             int64  `json:"id"`
+	InstanceTypeID int64  `json:"instanceTypeId"`
+	Status         string `json:"status"`
+	Up             bool   `json:"up"`
+}
+
+// VPCPeeringUpdateRequest changes a peering's status and peer CIDRs in place.
+// CIDRBlock is a comma-separated list; empty keeps the current CIDRs.
+type VPCPeeringUpdateRequest struct {
+	Status    string `json:"status,omitempty"`
+	CIDRBlock string `json:"cidrBlock,omitempty"`
+}
+
+// ClusterConnectionRecreateRequest replaces a connection's whole revision:
+// omitted fields are sent empty and an empty Status means ACTIVE.
+type ClusterConnectionRecreateRequest struct {
+	Name     string            `json:"name"`
+	CIDRList []string          `json:"cidrList"`
+	Data     map[string]string `json:"data,omitempty"`
+	Status   string            `json:"status,omitempty"`
+}
+
+type NotificationEmails struct {
+	Emails []string `json:"emails"`
 }
