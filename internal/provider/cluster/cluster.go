@@ -554,9 +554,8 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"name": {
-				Description: "The name of the cluster.",
+				Description: "The name of the cluster. Changing it renames the cluster in place.",
 				Required:    true,
-				ForceNew:    true,
 				Type:        schema.TypeString,
 			},
 			"region": {
@@ -1167,12 +1166,44 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
+	if d.HasChange("name") {
+		if diags := resourceClusterUpdateName(ctx, d, scyllaClient); diags.HasError() {
+			return diags
+		}
+	}
+
 	if d.HasChange("scaling") {
 		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
 	}
 
 	if d.HasChange("min_nodes") {
 		return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+	}
+
+	return nil
+}
+
+func resourceClusterUpdateName(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client) diag.Diagnostics {
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	name := d.Get("name").(string)
+	tflog.Debug(ctx, "Renaming cluster", map[string]interface{}{"cluster_id": clusterID, "name": name})
+
+	// Rename fails if there is any ongoing cluster request.
+	if err := WaitForNoInProgressRequests(ctx, scyllaClient, clusterID); err != nil {
+		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", clusterID, err)
+	}
+
+	r, err := scyllaClient.RenameCluster(ctx, clusterID, name)
+	if err != nil {
+		return diag.Errorf("failed to rename the cluster %d to %q: %s", clusterID, name, err)
+	}
+
+	if err := WaitForClusterRequestID(ctx, scyllaClient, r.ID); err != nil {
+		return diag.Errorf("failed to rename the cluster %d to %q: %s", clusterID, name, err)
 	}
 
 	return nil
