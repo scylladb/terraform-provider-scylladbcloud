@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/notificationemails"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vectorsearch"
@@ -109,6 +110,7 @@ func New(context.Context) *schema.Provider {
 			"scylladbcloud_stack":                    stack.ResourceStack(),
 			"scylladbcloud_cluster_backup_retention": backupretention.ResourceBackupRetention(),
 			"scylladbcloud_vector_search":            vectorsearch.ResourceVectorSearch(),
+			"scylladbcloud_notification_emails":      notificationemails.ResourceNotificationEmails(),
 		},
 	}
 
