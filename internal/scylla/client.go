@@ -51,6 +51,10 @@ type Client struct {
 	// Retry is used to retry requests to the API.
 	Retry *retrier.Retrier
 
+	// PollInterval is how often cluster requests are polled; zero means
+	// DefaultPollInterval.
+	PollInterval time.Duration
+
 	// V2 is the client to call the V2 API, it does not require costly
 	// metadata building.
 	V2 *v2scylla.Client
