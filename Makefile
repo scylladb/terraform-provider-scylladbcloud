@@ -40,6 +40,15 @@ testacc: pkgs?=./...
 testacc:
 	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=30m -parallel=3 -race -run="$(value run)" $(pkgs)
 
+# Acceptance tests against the local stack (scripts/local/stack.sh up).
+testacc-local: run?=TestAccScyllaDBCloudCluster_encryptionAtRestDisabled
+testacc-local: pkgs?=./internal/provider/
+testacc-local:
+	scripts/local/stack.sh status >/dev/null
+	TF_ACC=1 SCYLLADB_CLOUD_DEV_MODE=1 SCYLLADB_CLOUD_ENDPOINT=http://localhost:3011 \
+		SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE=$${SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE:-$(if $(filter arm64,$(shell uname -m)),i8g.large,i3.large)} \
+		go test -tags dev -v -timeout=60m -parallel=1 -run="$(value run)" $(pkgs)
+
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
 
@@ -50,4 +59,4 @@ list-testacc:
 $(GOPATH)/bin/golangci-lint:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/9f61b0f53f80672872fced07b6874397c3ed197b/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
 
-.PHONY: build build-dev check-release fmt generate lint test test-dev testacc
+.PHONY: build build-dev check-release fmt generate lint test test-dev testacc testacc-local

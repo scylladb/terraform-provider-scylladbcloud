@@ -658,7 +658,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
+				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", testAccAWSNodeType("i3.large"), false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -1031,9 +1031,16 @@ func TestProviderTraceValidation(t *testing.T) {
 
 var configureProviderOnce sync.Once
 
+// testAccAWSNodeType lets a local stack swap the node type, e.g. for ARM64
+// instances on Apple Silicon.
+func testAccAWSNodeType(def string) string {
+	return nonempty(os.Getenv("SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE"), def)
+}
+
 func testAccPreCheck(t *testing.T) {
-	// Validate that required environment variables are set.
-	if v := envToken(); v == "" {
+	// Validate that required environment variables are set; dev builds log
+	// in by themselves.
+	if devMode, _ := strconv.ParseBool(os.Getenv("SCYLLADB_CLOUD_DEV_MODE")); envToken() == "" && !devMode {
 		t.Fatal("SCYLLADB_CLOUD_TOKEN must be set for acceptance tests")
 	}
 	if v := envEndpoint(); v == "" {
