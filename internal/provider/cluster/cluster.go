@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
 
 const (
@@ -558,6 +559,15 @@ func ResourceCluster() *schema.Resource {
 				Required:    true,
 				Type:        schema.TypeString,
 			},
+			"client_encryption_mode": {
+				Description: "Client-to-node encryption: `encrypted` accepts only TLS connections, `both` accepts TLS and plain connections. " +
+					"When unset, the cluster's current mode is read back.",
+				Optional: true,
+				Computed: true,
+				Type:     schema.TypeString,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice(
+					[]string{model.ClientEncryptionModeEncrypted, model.ClientEncryptionModeBoth}, false)),
+			},
 			"region": {
 				Description: "The cloud region to deploy the cluster in (e.g. us-east-1).",
 				Required:    true,
@@ -968,6 +978,13 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
+	if mode, ok := d.GetOk("client_encryption_mode"); ok {
+		if cluster, err = ensureClientEncryptionMode(ctx, scyllaClient, cluster, mode.(string)); err != nil {
+			d.SetId(strconv.Itoa(int(cr.ClusterID)))
+			return diag.Errorf("cluster %d was created, but setting its client encryption mode failed: %s", cr.ClusterID, err)
+		}
+	}
+
 	// The instance the cluster runs on is only tracked for Standard clusters.
 	// X Cloud picks it from the scaling policy and changes it as the cluster
 	// scales, so resolving it here would only produce a value setClusterKVs
@@ -1086,6 +1103,7 @@ func fetchCACertificate(ctx context.Context, c *scylla.Client, clusterID int64, 
 func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
+	_ = d.Set("client_encryption_mode", cluster.EncryptionMode)
 	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
 
@@ -1172,6 +1190,12 @@ func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta int
 		}
 	}
 
+	if mode := d.Get("client_encryption_mode").(string); d.HasChange("client_encryption_mode") && mode != "" {
+		if diags := resourceClusterUpdateClientEncryptionMode(ctx, d, scyllaClient, mode); diags.HasError() {
+			return diags
+		}
+	}
+
 	if d.HasChange("scaling") {
 		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
 	}
@@ -1207,6 +1231,52 @@ func resourceClusterUpdateName(ctx context.Context, d *schema.ResourceData, scyl
 	}
 
 	return nil
+}
+
+func resourceClusterUpdateClientEncryptionMode(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client, mode string) diag.Diagnostics {
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	cluster, err := scyllaClient.GetCluster(ctx, clusterID)
+	if err != nil {
+		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	if _, err := ensureClientEncryptionMode(ctx, scyllaClient, cluster, mode); err != nil {
+		return diag.Errorf("failed to set client encryption mode of cluster %d to %q: %s", clusterID, mode, err)
+	}
+
+	return nil
+}
+
+// ensureClientEncryptionMode switches the cluster to mode unless it already
+// uses it, since the API refuses to set the current mode, and returns the
+// cluster as read afterwards.
+func ensureClientEncryptionMode(ctx context.Context, c *scylla.Client, cluster *model.Cluster, mode string) (*model.Cluster, error) {
+	if mode == "" || cluster.EncryptionMode == mode {
+		return cluster, nil
+	}
+
+	tflog.Debug(ctx, "Setting client encryption mode", map[string]interface{}{
+		"cluster_id": cluster.ID, "from": cluster.EncryptionMode, "to": mode,
+	})
+
+	if err := WaitForNoInProgressRequests(ctx, c, cluster.ID); err != nil {
+		return nil, err
+	}
+
+	r, err := c.SetClientEncryptionMode(ctx, cluster.ID, mode)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := WaitForClusterRequestID(ctx, c, r.ID); err != nil {
+		return nil, err
+	}
+
+	return c.GetCluster(ctx, cluster.ID)
 }
 
 func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, meta interface{}, scyllaClient *scylla.Client) diag.Diagnostics {
