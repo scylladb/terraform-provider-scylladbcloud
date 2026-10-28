@@ -108,6 +108,8 @@ func New(context.Context) *schema.Provider {
 		},
 	}
 
+	devSchema(p.Schema)
+
 	p.ConfigureContextFunc = func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
 		return configure(ctx, p, d)
 	}
@@ -115,31 +117,43 @@ func New(context.Context) *schema.Provider {
 	return p
 }
 
+// devSettings is what dev mode changes in the client; only -tags dev builds
+// fill more than the token.
+type devSettings struct {
+	token           string
+	userAgentSuffix string
+	opts            []scylla.ClientOption
+}
+
 func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) (*scylla.Client, diag.Diagnostics) {
 	var (
 		endpoint = d.Get("endpoint").(string)
-		token    = d.Get("token").(string)
 		metadata = d.Get("metadata").(bool)
 	)
+
+	dev, diags := devConfigure(ctx, d, endpoint, d.Get("token").(string))
+	if diags.HasError() {
+		return nil, diags
+	}
 
 	// A trace supplied in the configuration or via SCYLLADB_CLOUD_TRACE matches
 	// the trace already recorded for the stack, so it is preferred over a
 	// generated one.
 	trace, err := traceOrNew(d.Get("trace").(string))
 	if err != nil {
-		return nil, diag.Errorf("could not generate trace id: %s", err)
+		return nil, append(diags, diag.Errorf("could not generate trace id: %s", err)...)
 	}
 
 	tflog.Info(ctx, "using external trace id for ScyllaDB Cloud API calls", map[string]any{
 		"trace": trace,
 	})
 
-	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), trace, metadata)
+	c, err := scylla.NewClient(endpoint, dev.token, userAgent(p.TerraformVersion)+dev.userAgentSuffix, trace, metadata, dev.opts...)
 	if err != nil {
-		return nil, diag.Errorf("could not create new Scylla client: %s", err)
+		return nil, append(diags, diag.Errorf("could not create new Scylla client: %s", err)...)
 	}
 
-	return c, nil
+	return c, diags
 }
 
 // traceOrNew returns the configured trace or a freshly generated one.

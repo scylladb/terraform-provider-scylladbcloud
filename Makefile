@@ -3,6 +3,17 @@ GOPATH?=$(shell go env GOPATH)
 build:
 	CGO_ENABLED=0 go build -o terraform-provider-scylladbcloud .
 
+# Dev mode (local Siren login, loopback-only endpoints) exists only in this build.
+build-dev:
+	CGO_ENABLED=0 go build -tags dev -o $(GOPATH)/bin/terraform-provider-scylladbcloud .
+
+# Fails if dev mode code reaches the release binary.
+check-release:
+	@! go list -deps . | grep -q '/internal/devauth$$' || { echo "release build imports internal/devauth" >&2; exit 1; }
+	@CGO_ENABLED=0 go build -o $(or $(TMPDIR),/tmp)/tfprovider-release-check . && \
+		! grep -q -a 'dev_siren_endpoint' $(or $(TMPDIR),/tmp)/tfprovider-release-check || { echo "release binary contains dev mode" >&2; exit 1; }
+	@echo "release build has no dev mode"
+
 fmt:
 	go tool gofumpt -w -l .
 
@@ -19,6 +30,11 @@ test: pkgs?=./...
 test:
 	go test -timeout=1m -race -run="$(value run)" $(pkgs)
 
+test-dev: run?=.*
+test-dev: pkgs?=./...
+test-dev:
+	go test -tags dev -timeout=1m -race -run="$(value run)" $(pkgs)
+
 testacc: run?=.*
 testacc: pkgs?=./...
 testacc:
@@ -34,4 +50,4 @@ list-testacc:
 $(GOPATH)/bin/golangci-lint:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/9f61b0f53f80672872fced07b6874397c3ed197b/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
 
-.PHONY: build fmt generate lint test testacc
+.PHONY: build build-dev check-release fmt generate lint test test-dev testacc
