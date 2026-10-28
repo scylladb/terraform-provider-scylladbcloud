@@ -66,9 +66,8 @@ func ResourceVPCPeering() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"peer_cidr_blocks": {
-				Description: "Peer VPC CIDR block list",
+				Description: "Peer VPC CIDR block list. Changing it updates the peering in place while it is ACTIVE or INACTIVE.",
 				Optional:    true,
-				ForceNew:    true,
 				Type:        schema.TypeList,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
@@ -286,7 +285,53 @@ lookup:
 }
 
 func resourceVPCPeeringUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	return diag.Errorf(`updating "scylla_vpc_peering" resource is not supported`)
+	if d.HasChange("allow_cql") {
+		return diag.Errorf(`changing "allow_cql" of an existing VPC peering is not supported`)
+	}
+	if !d.HasChange("peer_cidr_blocks") {
+		return nil
+	}
+
+	var (
+		c         = meta.(*scylla.Client)
+		clusterID = int64(d.Get("cluster_id").(int))
+		peerID    = int64(d.Get("vpc_peering_id").(int))
+	)
+
+	blocks, err := schemautils.ConvertListToConcrete[string](d.Get("peer_cidr_blocks"))
+	if err != nil {
+		return diag.Errorf(`"peer_cidr_blocks" must be a list of strings`)
+	}
+	if len(blocks) == 0 {
+		var cidr string
+		ok := false
+		if c.Meta != nil {
+			cidr, ok = c.Meta.GCPBlocks[d.Get("peer_region").(string)]
+		}
+		if !ok {
+			return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
+		}
+		blocks = []string{cidr}
+	}
+
+	current, err := c.GetClusterVPCPeering(ctx, clusterID, peerID)
+	if err != nil {
+		return diag.Errorf("error reading vpc peering %d: %s", peerID, err)
+	}
+	if current.Status != "ACTIVE" && current.Status != "INACTIVE" {
+		return diag.Errorf(`"peer_cidr_blocks" can be changed only while the VPC peering is ACTIVE or INACTIVE, it is %s`, current.Status)
+	}
+
+	vp, err := c.UpdateClusterVPCPeering(ctx, clusterID, peerID, &model.VPCPeeringUpdateRequest{
+		Status:    current.Status,
+		CIDRBlock: strings.Join(blocks, ","),
+	})
+	if err != nil {
+		return diag.Errorf("error updating vpc peering %d: %s", peerID, err)
+	}
+
+	_ = d.Set("peer_cidr_blocks", vp.CIDRList)
+	return nil
 }
 
 func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
