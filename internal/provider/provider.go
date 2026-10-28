@@ -11,6 +11,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vectorsearch"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
@@ -105,6 +106,7 @@ func New(context.Context) *schema.Provider {
 			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
 			"scylladbcloud_cluster_connection": connection.ResourceClusterConnection(),
 			"scylladbcloud_stack":              stack.ResourceStack(),
+			"scylladbcloud_vector_search":      vectorsearch.ResourceVectorSearch(),
 		},
 	}
 
