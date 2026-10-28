@@ -51,6 +51,9 @@ type Client struct {
 	// Retry is used to retry requests to the API.
 	Retry *retrier.Retrier
 
+	// PollInterval is how often cluster requests are polled.
+	PollInterval time.Duration
+
 	// V2 is the client to call the V2 API, it does not require costly
 	// metadata building.
 	V2 *v2scylla.Client
@@ -74,12 +77,13 @@ func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client
 	)
 
 	c := &Client{
-		Token:      token,
-		ErrCodes:   errCodes,
-		Headers:    make(http.Header),
-		HTTPClient: &http.Client{Timeout: defaultTimeout},
-		Retry:      retry,
-		Endpoint:   end,
+		Token:        token,
+		ErrCodes:     errCodes,
+		Headers:      make(http.Header),
+		HTTPClient:   &http.Client{Timeout: defaultTimeout},
+		Retry:        retry,
+		PollInterval: DefaultPollInterval,
+		Endpoint:     end,
 		V2: v2scylla.New(
 			v2scylla.WithRetryPolicy(retry),
 			v2scylla.WithUserAgent(useragent),
