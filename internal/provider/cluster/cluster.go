@@ -23,6 +23,8 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
+
+	defaultReplicationFactor = 3
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -568,6 +570,14 @@ func ResourceCluster() *schema.Resource {
 				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice(
 					[]string{model.ClientEncryptionModeEncrypted, model.ClientEncryptionModeBoth}, false)),
 			},
+			"replication_factor": {
+				Description:      "Replication factor of the cluster's keyspaces. Defaults to 3 at creation; changing it recreates the cluster.",
+				Optional:         true,
+				Computed:         true,
+				ForceNew:         true,
+				Type:             schema.TypeInt,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.IntAtLeast(1)),
+			},
 			"region": {
 				Description: "The cloud region to deploy the cluster in (e.g. us-east-1).",
 				Required:    true,
@@ -821,7 +831,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		clusterCreateRequest = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
-			ReplicationFactor:    3,
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Placement:            "true",
@@ -840,6 +849,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if !enableVpcPeering {
 		clusterCreateRequest.BroadcastType = "PUBLIC"
 	}
+
+	clusterCreateRequest.ReplicationFactor = replicationFactor(d)
 
 	if clusterCreateRequest.UserAPIInterface == "ALTERNATOR" {
 		clusterCreateRequest.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
@@ -1011,6 +1022,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	return warns
 }
 
+// replicationFactor is the configured replication factor, or the default.
+func replicationFactor(d *schema.ResourceData) int64 {
+	if rf, ok := d.GetOk("replication_factor"); ok {
+		return int64(rf.(int))
+	}
+	return defaultReplicationFactor
+}
+
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
 
@@ -1104,6 +1123,9 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("client_encryption_mode", cluster.EncryptionMode)
+	if cluster.ReplicationFactor > 0 {
+		_ = d.Set("replication_factor", cluster.ReplicationFactor)
+	}
 	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
 
