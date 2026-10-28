@@ -117,3 +117,17 @@ func WithBaseURL(s string) func(*Client) {
 		})
 	}
 }
+
+func WithTransport(rt http.RoundTripper) func(*Client) {
+	return func(c *Client) {
+		c.client.Transport = rt
+	}
+}
+
+func WithHeader(key, value string) func(*Client) {
+	return func(c *Client) {
+		c.reqmw = append(c.reqmw, func(r *http.Request) {
+			r.Header.Set(key, value)
+		})
+	}
+}
