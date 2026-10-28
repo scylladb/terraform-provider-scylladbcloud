@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/backupretention"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
@@ -99,12 +100,13 @@ func New(context.Context) *schema.Provider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"scylladbcloud_cluster":            cluster.ResourceCluster(),
-			"scylladbcloud_allowlist_rule":     allowlistrule.ResourceAllowlistRule(),
-			"scylladbcloud_vpc_peering":        vpcpeering.ResourceVPCPeering(),
-			"scylladbcloud_serverless_cluster": serverless.ResourceServerlessCluster(),
-			"scylladbcloud_cluster_connection": connection.ResourceClusterConnection(),
-			"scylladbcloud_stack":              stack.ResourceStack(),
+			"scylladbcloud_cluster":                  cluster.ResourceCluster(),
+			"scylladbcloud_allowlist_rule":           allowlistrule.ResourceAllowlistRule(),
+			"scylladbcloud_vpc_peering":              vpcpeering.ResourceVPCPeering(),
+			"scylladbcloud_serverless_cluster":       serverless.ResourceServerlessCluster(),
+			"scylladbcloud_cluster_connection":       connection.ResourceClusterConnection(),
+			"scylladbcloud_stack":                    stack.ResourceStack(),
+			"scylladbcloud_cluster_backup_retention": backupretention.ResourceBackupRetention(),
 		},
 	}
 
