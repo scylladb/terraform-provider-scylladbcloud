@@ -775,7 +775,8 @@ func ResourceCluster() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"backup_retention_days": {
-				Description: "The number of days to retain backups after deleting the cluster between 0 and 60. " +
+				Description: "The number of days, between 0 and 60, to keep the cluster's backups once it is deleted. " +
+					"It is sent only when the cluster is deleted and does not affect a running cluster. " +
 					"If set to 0, backups are deleted immediately. " +
 					"Defaults to 1 to prevent accidental data loss.",
 				Optional:         true,
@@ -1204,29 +1205,38 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	return nil
 }
 
+// resourceClusterUpdate applies every changed attribute in turn and stops at
+// the first error, so a later step never runs on a half-updated cluster.
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
-	if d.HasChange("name") {
-		if diags := resourceClusterUpdateName(ctx, d, scyllaClient); diags.HasError() {
+	mode := d.Get("client_encryption_mode").(string)
+
+	steps := []struct {
+		changed bool
+		apply   func() diag.Diagnostics
+	}{
+		{d.HasChange("name"), func() diag.Diagnostics { return resourceClusterUpdateName(ctx, d, scyllaClient) }},
+		{d.HasChange("client_encryption_mode") && mode != "", func() diag.Diagnostics {
+			return resourceClusterUpdateClientEncryptionMode(ctx, d, scyllaClient, mode)
+		}},
+		{d.HasChange("scaling"), func() diag.Diagnostics { return resourceClusterUpdateScaling(ctx, d, scyllaClient) }},
+		// A change of scaling owns min_nodes too (Standard to X Cloud).
+		{d.HasChange("min_nodes") && !d.HasChange("scaling"), func() diag.Diagnostics {
+			return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+		}},
+	}
+
+	var diags diag.Diagnostics
+	for _, step := range steps {
+		if !step.changed {
+			continue
+		}
+		diags = append(diags, step.apply()...)
+		if diags.HasError() || d.Id() == "" {
 			return diags
 		}
 	}
-
-	if mode := d.Get("client_encryption_mode").(string); d.HasChange("client_encryption_mode") && mode != "" {
-		if diags := resourceClusterUpdateClientEncryptionMode(ctx, d, scyllaClient, mode); diags.HasError() {
-			return diags
-		}
-	}
-
-	if d.HasChange("scaling") {
-		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
-	}
-
-	if d.HasChange("min_nodes") {
-		return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
-	}
-
-	return nil
+	return diags
 }
 
 func resourceClusterUpdateName(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client) diag.Diagnostics {
