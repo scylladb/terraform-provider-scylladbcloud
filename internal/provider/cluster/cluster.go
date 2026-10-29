@@ -501,6 +501,8 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 	return validateEncryptionKeyIDNotRemoved(d)
 }
 
+const defaultAlternatorWriteIsolation = "only_rmw_uses_lwt"
+
 func ResourceCluster() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceClusterCreate,
@@ -597,7 +599,7 @@ func ResourceCluster() *schema.Resource {
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
-				Default:     "only_rmw_uses_lwt",
+				Default:     defaultAlternatorWriteIsolation,
 			},
 			"node_type": {
 				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
@@ -1145,6 +1147,14 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 
 	if cluster.UserAPIInterface == "ALTERNATOR" {
 		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
+	} else {
+		// Unused by CQL clusters, but ForceNew with a default: an import must
+		// still store it, or the next plan would replace the cluster.
+		isolation := d.Get("alternator_write_isolation").(string)
+		if isolation == "" {
+			isolation = defaultAlternatorWriteIsolation
+		}
+		_ = d.Set("alternator_write_isolation", isolation)
 	}
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
