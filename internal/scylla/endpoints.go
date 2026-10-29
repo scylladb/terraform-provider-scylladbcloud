@@ -587,3 +587,12 @@ func (c *Client) ListVectorSearchInstances(ctx context.Context, providerID, regi
 	}
 	return result.Instances, nil
 }
+
+// GetDefaultAccount returns the account the token belongs to.
+func (c *Client) GetDefaultAccount(ctx context.Context) (*model.Account, error) {
+	var result model.Account
+	if err := c.get(ctx, "/account/default", &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
