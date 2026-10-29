@@ -15,6 +15,14 @@ func computed(t schema.ValueType, description string) *schema.Schema {
 	return &schema.Schema{Type: t, Computed: true, Description: description}
 }
 
+func computedList(description string, elem map[string]*schema.Schema) *schema.Schema {
+	return &schema.Schema{Type: schema.TypeList, Computed: true, Description: description, Elem: &schema.Resource{Schema: elem}}
+}
+
+func stringList(description string) *schema.Schema {
+	return &schema.Schema{Type: schema.TypeList, Computed: true, Description: description, Elem: &schema.Schema{Type: schema.TypeString}}
+}
+
 func DataSourceAccount() *schema.Resource {
 	return &schema.Resource{
 		Description: "The ScyllaDB Cloud account the provider's token belongs to.",
