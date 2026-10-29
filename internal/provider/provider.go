@@ -109,6 +109,12 @@ func New(context.Context) *schema.Provider {
 			"scylladbcloud_vpc_peerings":        datasource.DataSourceVPCPeerings(),
 			"scylladbcloud_cluster_connections": datasource.DataSourceClusterConnections(),
 			"scylladbcloud_cloud_accounts":      datasource.DataSourceCloudAccounts(),
+			"scylladbcloud_cloud_providers":     datasource.DataSourceCloudProviders(),
+			"scylladbcloud_regions":             datasource.DataSourceRegions(),
+			"scylladbcloud_instance_types":      datasource.DataSourceInstanceTypes(),
+			"scylladbcloud_scylla_versions":     datasource.DataSourceScyllaVersions(),
+			"scylladbcloud_availability_zones":  datasource.DataSourceAvailabilityZones(),
+			"scylladbcloud_cluster_requests":    datasource.DataSourceClusterRequests(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
