@@ -47,7 +47,7 @@ func protoV5ProviderFactoriesInit(ctx context.Context) map[string]func() (tfprot
 
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-aws")
 
 	var cluster model.Cluster
 
@@ -113,7 +113,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("xcloud-aws")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "xcloud-aws")
 
 	var cluster model.Cluster
 
@@ -164,7 +164,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-single-az")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-aws-single-az")
 
 	var cluster model.Cluster
 
@@ -207,7 +207,7 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-aws-scale-out")
 
 	var cluster model.Cluster
 
@@ -273,7 +273,7 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out-outside")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-aws-scale-out-outside")
 
 	var cluster model.Cluster
 
@@ -327,7 +327,7 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-gcp")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-gcp")
 
 	var cluster model.Cluster
 
@@ -361,7 +361,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-gcp-byoa")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-gcp-byoa")
 
 	if envGCPBYOAID() == "" {
 		t.Skip("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID must be set for this test")
@@ -403,7 +403,7 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("backup-retention-default")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "backup-retention-default")
 
 	var cluster model.Cluster
 
@@ -487,7 +487,7 @@ var earAbsent = config.Variables{"encryption_at_rest": config.BoolVariable(false
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-enabled")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-enabled")
 
 	var cluster model.Cluster
 
@@ -544,7 +544,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-disabled")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-disabled")
 
 	var cluster model.Cluster
 
@@ -585,7 +585,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 // feature flag to be on in the target environment.
 func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-gcp")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-gcp")
 
 	var cluster model.Cluster
 
@@ -616,7 +616,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 // created up front in the ScyllaDB Cloud portal; there is no public keys API.
 func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-cmk")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-cmk")
 
 	keyID := envEARKeyID()
 	if keyID == "" {
@@ -660,7 +660,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-default")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-default")
 
 	var cluster model.Cluster
 
@@ -706,7 +706,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-default-gcp")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-default-gcp")
 
 	var cluster model.Cluster
 
@@ -752,7 +752,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 // below and would silently test the local build against itself.
 func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-no-diff-on-upgrade")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "ear-no-diff-on-upgrade")
 
 	var cluster model.Cluster
 
@@ -806,7 +806,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
+	resourceName := acctest.RandomWithPrefix(testAccPrefix + "basic-aws-migration-v1-to-v2")
 
 	var cluster model.Cluster
 
