@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/datasource"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
@@ -94,8 +95,10 @@ func New(context.Context) *schema.Provider {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
-			"scylladbcloud_cql_auth":          cqlauth.DataSourceCQLAuth(),
-			"scylladbcloud_serverless_bundle": serverless.DataSourceServerlessBundle(),
+			"scylladbcloud_cql_auth":            cqlauth.DataSourceCQLAuth(),
+			"scylladbcloud_serverless_bundle":   serverless.DataSourceServerlessBundle(),
+			"scylladbcloud_account":             datasource.DataSourceAccount(),
+			"scylladbcloud_account_certificate": datasource.DataSourceAccountCertificate(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
