@@ -101,3 +101,19 @@ List all available acceptance tests:
 ```bash
 make list-acc-tests
 ```
+
+### Cleaning Up Leaked Clusters
+
+Acceptance tests name every cluster they create with the `tf-acc-test-`
+prefix. A run killed before its destroy check (a `go test` timeout, Ctrl-C, a
+cancelled CI job) leaves those clusters running. The sweeper deletes every live
+cluster in the account whose name starts with `tf-acc-test-`, and nothing else:
+
+```bash
+make sweep
+```
+
+It uses the same `SCYLLADB_CLOUD_TOKEN` and `SCYLLADB_CLOUD_ENDPOINT` as the
+acceptance tests, logs each cluster it deletes, and carries on past a failed
+delete, reporting all failures at the end. Against a local stack in dev mode,
+run `SCYLLADB_CLOUD_DEV_MODE=1 make sweep tags=dev`.
