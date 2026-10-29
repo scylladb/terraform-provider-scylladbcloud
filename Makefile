@@ -50,6 +50,13 @@ testacc-local:
 		SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE=$${SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE:-$(if $(filter arm64,$(shell uname -m)),i8g.large,i3.large)} \
 		go test -tags dev -v -timeout=60m -parallel=1 -run="$(value run)" $(pkgs)
 
+# Delete clusters left behind by killed acceptance test runs: every live
+# cluster whose name starts with tf-acc-test-. Pass tags=dev to sweep a local
+# stack in dev mode.
+sweep: tags?=
+sweep:
+	go test -tags "$(tags)" -v -timeout=60m ./internal/provider -sweep=all
+
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
 
@@ -60,4 +67,4 @@ list-testacc:
 $(GOPATH)/bin/golangci-lint:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/9f61b0f53f80672872fced07b6874397c3ed197b/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
 
-.PHONY: build build-dev check-release fmt generate lint test test-dev testacc testacc-local
+.PHONY: build build-dev check-release fmt generate lint sweep test test-dev testacc testacc-local
