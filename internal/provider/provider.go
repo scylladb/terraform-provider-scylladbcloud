@@ -106,6 +106,9 @@ func New(context.Context) *schema.Provider {
 			"scylladbcloud_cluster":             datasource.DataSourceCluster(),
 			"scylladbcloud_cluster_nodes":       datasource.DataSourceClusterNodes(),
 			"scylladbcloud_cluster_datacenters": datasource.DataSourceClusterDatacenters(),
+			"scylladbcloud_vpc_peerings":        datasource.DataSourceVPCPeerings(),
+			"scylladbcloud_cluster_connections": datasource.DataSourceClusterConnections(),
+			"scylladbcloud_cloud_accounts":      datasource.DataSourceCloudAccounts(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{

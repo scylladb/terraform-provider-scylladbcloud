@@ -57,7 +57,9 @@ func (c *Client) ListCloudProviderInstancesPerRegion(ctx context.Context, provid
 	return result.Instances, nil
 }
 
-func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluster, error) {
+// GetClusterSummary returns the cluster as the API reports it, without the
+// datacenter details GetCluster adds; it works for multi-datacenter clusters.
+func (c *Client) GetClusterSummary(ctx context.Context, clusterID int64) (*model.Cluster, error) {
 	var result struct {
 		Cluster model.Cluster `json:"cluster"`
 	}
@@ -67,7 +69,14 @@ func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluste
 		return nil, err
 	}
 
-	cluster := &result.Cluster
+	return &result.Cluster, nil
+}
+
+func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluster, error) {
+	cluster, err := c.GetClusterSummary(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Fetch datacenter topology if we have exactly one datacenter.
 	// The GetCluster API doesn't return the Topology field which contains
