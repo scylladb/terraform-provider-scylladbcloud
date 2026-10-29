@@ -102,6 +102,10 @@ func New(context.Context) *schema.Provider {
 			"scylladbcloud_serverless_bundle":   serverless.DataSourceServerlessBundle(),
 			"scylladbcloud_account":             datasource.DataSourceAccount(),
 			"scylladbcloud_account_certificate": datasource.DataSourceAccountCertificate(),
+			"scylladbcloud_clusters":            datasource.DataSourceClusters(),
+			"scylladbcloud_cluster":             datasource.DataSourceCluster(),
+			"scylladbcloud_cluster_nodes":       datasource.DataSourceClusterNodes(),
+			"scylladbcloud_cluster_datacenters": datasource.DataSourceClusterDatacenters(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
