@@ -32,6 +32,10 @@ go.work.sum
 /dist
 /terraform-provider-scylladbcloud
 
+# local Terraform runs, e.g. of internal/provider/testdata
+**/.terraform/
+*.tfstate*
+
 # editor config
 .vscode
 .idea

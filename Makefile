@@ -22,6 +22,7 @@ generate:
 
 lint: $(GOPATH)/bin/golangci-lint
 	go tool gofumpt -l -d -e .
+	terraform fmt -check -recursive -diff internal/provider/testdata
 	$(GOPATH)/bin/golangci-lint run ./...
 	go vet ./...
 
