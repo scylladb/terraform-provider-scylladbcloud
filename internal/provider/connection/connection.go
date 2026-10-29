@@ -99,7 +99,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Default:     "ACTIVE",
 				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
 					status := i.(string)
-					if status != "ACTIVE" && status != "INACTIVE " {
+					if status != "ACTIVE" && status != "INACTIVE" {
 						return diag.Errorf("status must be one of: ACTIVE or INACTIVE")
 					}
 					return nil
@@ -271,17 +271,22 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error converting cidrlist: %s", err)
 	}
 
-	req := model.ClusterConnectionUpdateRequest{
-		Name:     d.Get("name").(string),
-		CIDRList: cidrlist,
-		Status:   d.Get("status").(string),
+	status := d.Get("status").(string)
+	if d.HasChange("data") {
+		if diags := recreateClusterConnection(ctx, c, d, int64(clusterID), connID, cidrlist); diags.HasError() {
+			return diags
+		}
+	} else {
+		req := model.ClusterConnectionUpdateRequest{
+			Name:     d.Get("name").(string),
+			CIDRList: cidrlist,
+			Status:   status,
+		}
+		if err := c.UpdateClusterConnections(ctx, int64(clusterID), connID, &req); err != nil {
+			return diag.Errorf("error updating cluster connection: %s", err)
+		}
 	}
-
-	err = c.UpdateClusterConnections(ctx, int64(clusterID), connID, &req)
-	if err != nil {
-		return diag.Errorf("error updating cluster connection: %s", err)
-	}
-	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, req.Status)
+	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, status)
 	if err != nil {
 		return diag.Errorf("%+v", err)
 	}
@@ -291,6 +296,35 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error reading cluster connection %d: %s", connID, err)
 	}
 	_ = d.Set("external_id", conn.ExternalID)
+	return nil
+}
+
+// recreateClusterConnection applies a change of data, which only a full
+// replacement of the connection's revision (PUT) can do. AWS PrivateLink and
+// GCP Private Service Connect connections do not support it.
+func recreateClusterConnection(ctx context.Context, c *scylla.Client, d *schema.ResourceData, clusterID, connID int64, cidrlist []string) diag.Diagnostics {
+	switch t := d.Get("type").(string); t {
+	case "AWS_PRIVATE_LINK", "GCP_PRIVATE_SERVICE_CONNECT":
+		return diag.Errorf(`changing "data" of a %s connection is not supported; recreate the connection instead`, t)
+	}
+
+	data := make(map[string]string)
+	for k, v := range d.Get("data").(map[string]interface{}) {
+		data[k] = v.(string)
+	}
+
+	r, err := c.RecreateClusterConnection(ctx, clusterID, connID, &model.ClusterConnectionRecreateRequest{
+		Name:     d.Get("name").(string),
+		CIDRList: cidrlist,
+		Data:     data,
+		Status:   d.Get("status").(string),
+	})
+	if err != nil {
+		return diag.Errorf("error updating cluster connection data: %s", err)
+	}
+	if err := c.AwaitClusterRequest(ctx, r.ID); err != nil {
+		return diag.Errorf("error updating cluster connection data: %s", err)
+	}
 	return nil
 }
 
