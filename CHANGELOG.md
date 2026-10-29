@@ -43,6 +43,9 @@ upgrading produces no plan changes.
 
 ### Bug fixes
 
+- `scylladbcloud_cluster`: importing a CQL cluster now stores
+  `alternator_write_isolation`; it was left empty, so the first plan after
+  `terraform import` replaced the cluster.
 - `scylladbcloud_cluster_connection`: the `INACTIVE` status value no
   longer carries a trailing space.
 
