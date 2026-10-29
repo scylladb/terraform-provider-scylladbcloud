@@ -108,7 +108,7 @@ resource "google_compute_network_peering" "app" {
 ### Optional
 
 - `allow_cql` (Boolean) Whether to allow CQL traffic
-- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list
+- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list. Changing it updates the peering in place while it is ACTIVE or INACTIVE.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

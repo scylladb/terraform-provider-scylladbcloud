@@ -56,16 +56,17 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 
 ### Required
 
-- `name` (String) The name of the cluster.
+- `name` (String) The name of the cluster. Changing it renames the cluster in place.
 - `region` (String) The cloud region to deploy the cluster in (e.g. us-east-1).
 
 ### Optional
 
 - `alternator_write_isolation` (String) The write isolation policy. Used only for the ALTERNATOR API interface.
 - `availability_zone_ids` (Set of String) Availability zone IDs where cluster nodes are provisioned. Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). If omitted, zones are selected automatically. After refreshing state with terraform refresh, you can read back the IDs that were assigned.
-- `backup_retention_days` (Number) The number of days to retain backups after deleting the cluster between 0 and 60. If set to 0, backups are deleted immediately. Defaults to 1 to prevent accidental data loss.
+- `backup_retention_days` (Number) The number of days, between 0 and 60, to keep the cluster's backups once it is deleted. It is sent only when the cluster is deleted and does not affect a running cluster. If set to 0, backups are deleted immediately. Defaults to 1 to prevent accidental data loss.
 - `byoa_id` (Number) The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).
 - `cidr_block` (String) The CIDR block for the cluster network.
+- `client_encryption_mode` (String) Client-to-node encryption: `encrypted` accepts only TLS connections, `both` accepts TLS and plain connections. When unset, the cluster's current mode is read back.
 - `cloud` (String) The cloud provider. Accepted values: AWS, GCP.
 - `enable_dns` (Boolean) Whether to enable DNS for the cluster.
 - `enable_vpc_peering` (Boolean) Whether to enable VPC peering for the cluster.
@@ -73,6 +74,7 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 - `min_nodes` (Number) Minimum number of nodes in the cluster. Required for Standard clusters; must be at least 3 and divisible by 3. Must not be set when the scaling block is present, in which case it reads back as `0` and `node_count` reports the number of nodes the cluster currently runs. Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.
 - `node_disk_size` (Number) The disk size in gigabytes of the node. Must not be set when the scaling block is present, in which case it reads back as `0`: the control plane picks the instance from the scaling policy and changes it as the cluster scales.
 - `node_type` (String) The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. Must not be set when the scaling block is present, in which case it reads back as empty: the control plane picks the instance from the scaling policy and changes it as the cluster scales.
+- `replication_factor` (Number) Replication factor of the cluster's keyspaces. Defaults to 3 at creation; changing it recreates the cluster.
 - `scaling` (Block List, Max: 1) Defines the autoscaling policy for an X Cloud cluster. Mutually exclusive with `node_type` and `min_nodes`. When present, the control plane manages scaling automatically based on the policy defined below. (see [below for nested schema](#nestedblock--scaling))
 - `scylla_version` (String) Scylla version. The latest version will be used by default.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
