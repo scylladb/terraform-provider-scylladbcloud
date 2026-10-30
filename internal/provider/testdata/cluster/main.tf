@@ -5,6 +5,10 @@ variable "name" {
   type = string
 }
 
+variable "cidr_block" {
+  type = string
+}
+
 variable "cloud" {
   type    = string
   default = "AWS"
@@ -68,7 +72,7 @@ resource "scylladbcloud_cluster" "test" {
   node_type             = var.node_type
   min_nodes             = var.min_nodes
   scylla_version        = var.scylla_version
-  cidr_block            = "10.0.1.0/24"
+  cidr_block            = var.cidr_block
   enable_dns            = true
   backup_retention_days = var.backup_retention_days
   availability_zone_ids = var.availability_zone_ids

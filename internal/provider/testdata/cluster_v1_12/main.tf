@@ -18,13 +18,17 @@ variable "name" {
   type = string
 }
 
+variable "cidr_block" {
+  type = string
+}
+
 resource "scylladbcloud_cluster" "test" {
   name                  = var.name
   cloud                 = "AWS"
   region                = "us-east-1"
   node_type             = "i3.large"
   min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
+  cidr_block            = var.cidr_block
   enable_dns            = true
   backup_retention_days = 0
 }
