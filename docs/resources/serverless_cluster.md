@@ -2,12 +2,12 @@
 page_title: "scylladbcloud_serverless_cluster Resource - terraform-provider-scylladbcloud"
 subcategory: ""
 description: |-
-  
+  Deprecated: this resource will be removed in v2.0.0. Use scylladbcloud_cluster instead.
 ---
 
 # scylladbcloud_serverless_cluster (Resource)
 
-
+**Deprecated**: this resource will be removed in v2.0.0. Use `scylladbcloud_cluster` instead.
 
 ## Example Usage
 
