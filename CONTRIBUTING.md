@@ -14,10 +14,11 @@ We welcome contributions to this repository. Here are some guidelines to follow 
 - Make sure your code follows the [Effective Go](https://golang.org/doc/effective_go.html).
 - Run the tests and make sure they pass before submitting your changes.
 - Use clear and descriptive commit messages.
-- Make sure you ran linters before submitting your code:
-  - `goimports -w ./`
-  - `gofmt -s -w ./`
-  - `golangci-run run ./...`
+- Make sure you ran the formatter and linters before submitting your code:
+  - `make fmt` formats the Go code with gofumpt.
+  - `make lint` checks Go formatting, `terraform fmt` of the test
+    configurations in `internal/provider/testdata`, golangci-lint and
+    `go vet`. It installs golangci-lint on first use.
 - Create a pull request, follow the PR template to fill the description.
 - The maintainers will review your pull request and may request changes or ask questions.
     - <details><summary>The `git log` of you PR is also a subject of review, and you could be asked to fix it by squashing with a meaningful message or simply amending commits in the way that you see it fit.</summary>
@@ -48,13 +49,23 @@ make test
 
 Acceptance tests create real resources in ScyllaDB Cloud, so they require valid credentials and may incur costs.
 
-### Required Environment Variables
+### Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
+| `SCYLLADB_CLOUD_ENDPOINT` | API endpoint, e.g. `https://api.cloud.scylladb.com` | Yes |
 | `SCYLLADB_CLOUD_TOKEN` | API token for authentication | Yes |
-| `SCYLLADB_CLOUD_ENDPOINT` | Custom API endpoint (optional) | No |
-| `SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID for BYOA tests | For GCP BYOA tests only |
+| `SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE` | AWS node type for the tests that honour it; defaults to each test's own type | No |
+| `TEST_SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID | For the GCP BYOA test only |
+| `TEST_SCYLLADB_CLOUD_EAR_KEY_ID` | Customer-managed encryption key ID, e.g. `key-deadbeef` | For the encryption at rest CMK test only |
+| `TEST_SCYLLADB_CLOUD_TGW_ID` | AWS transit gateway ID | For the cluster connection test only |
+| `TEST_SCYLLADB_CLOUD_TGW_RAM_ARN` | RAM resource share ARN of that transit gateway | For the cluster connection test only |
+| `TEST_SCYLLADB_CLOUD_PEER_VPC_ID` | AWS VPC ID to peer with | For the VPC peering test only |
+| `TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID` | AWS account ID that owns that VPC | For the VPC peering test only |
+| `TEST_SCYLLADB_CLOUD_PEER_CIDR` | CIDR block of that VPC | For the VPC peering test only |
+
+Tests whose optional variables are unset are skipped. `.envrc.example` lists
+them all; copy it to `.envrc` (ignored by git) and fill it in.
 
 ### Running Acceptance Tests
 
@@ -70,10 +81,33 @@ Run a specific test:
 make testacc run=TestAccScyllaDBCloudCluster_basicAWS
 ```
 
+Terraform and provider debug logs are off by default. To keep them, set
+`TF_ACC_LOG_PATH` to a file; the log level is `TF_LOG`, which defaults to
+`DEBUG` when a log path is set:
+
+```bash
+make testacc run=TestAccScyllaDBCloudCluster_basicAWS TF_ACC_LOG_PATH=testacc.log
+```
+
+Results are never cached: every run talks to the API again. Each cluster
+test takes 15 to 30 minutes, so `make testacc` allows 120 minutes in total;
+raise it with `timeout=180m`.
+
 List all available acceptance tests:
 
 ```bash
-make list-acc-tests
+make list-testacc
+```
+
+### Running Against a Local Stack
+
+`make testacc-local` runs the acceptance tests in dev mode against a local
+Siren stack started with `scripts/local/stack.sh up`. It needs no token: the
+dev build logs in to the stack itself. It runs one cluster test by default;
+pick others with `run=`:
+
+```bash
+make testacc-local run='TestAccScyllaDBCloudCluster_invalidConfig'
 ```
 
 ### Cleaning Up Leaked Clusters
