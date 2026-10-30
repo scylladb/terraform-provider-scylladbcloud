@@ -35,6 +35,14 @@ We welcome contributions to this repository. Here are some guidelines to follow 
     - Try to avoid merging in main your branch instead of rebasing.
 - Merge your PR after getting at least one approval (two are preferable on larger PRs).
 
+# Internal Resources
+
+`scylladbcloud_stack` exists for the ScyllaDB Cloud Stacks API integration
+and is not meant for users. Its docs page is generated but git-ignored, so it
+is never published. Keep it registered: removing a resource type breaks every
+state that still holds it. Changing or removing it needs agreement from the
+Stacks API owners.
+
 # Running Tests
 
 ## Unit Tests

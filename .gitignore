@@ -40,7 +40,8 @@ go.work.sum
 .vscode
 .idea
 
-# Certain docs files should not be created
+# scylladbcloud_stack is internal to the Stacks API integration, so its
+# generated docs page is not published.
 docs/resources/stack.md
 
 # local dev workspace (state, CLI configs)
