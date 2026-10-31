@@ -163,3 +163,19 @@ func JSON(t testing.TB, body []byte, v any) {
 		t.Fatalf("decoding request body %q: %v", body, err)
 	}
 }
+
+// ClusterRequest is a queued cluster request (ID 42 on cluster 3) as the
+// public API returns it.
+var ClusterRequest = map[string]any{"id": 42, "requestType": "X", "accountId": AccountID, "clusterId": 3, "status": "QUEUED"}
+
+// Body decodes the body of the only call received for method and path.
+func (s *Server) Body(t testing.TB, method, path string) map[string]any {
+	t.Helper()
+	calls := s.CallsTo(method, path)
+	if len(calls) != 1 {
+		t.Fatalf("%s %s: got %d calls, want 1", method, path, len(calls))
+	}
+	var got map[string]any
+	JSON(t, calls[0].Body, &got)
+	return got
+}
