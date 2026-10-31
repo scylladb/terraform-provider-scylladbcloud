@@ -19,6 +19,12 @@ func request(status string) scyllatest.Response {
 	return scyllatest.Response{Data: model.ClusterRequest{ID: 7, Status: status}}
 }
 
+func failed(requestType string, percent int64, description string) scyllatest.Response {
+	return scyllatest.Response{Data: model.ClusterRequest{
+		ID: 7, Status: "FAILED", RequestType: requestType, ProgressPercent: percent, ProgressDescription: description,
+	}}
+}
+
 func TestAwaitClusterRequest(t *testing.T) {
 	t.Parallel()
 
@@ -26,11 +32,15 @@ func TestAwaitClusterRequest(t *testing.T) {
 		name      string
 		responses []scyllatest.Response
 		wantErr   string
+		exact     bool
 		wantPolls int
 	}{
 		{name: "completed after progress", responses: []scyllatest.Response{request("QUEUED"), request("IN_PROGRESS"), request("COMPLETED")}, wantPolls: 3},
 		{name: "status is case insensitive", responses: []scyllatest.Response{request("completed")}, wantPolls: 1},
 		{name: "failed", responses: []scyllatest.Response{request("IN_PROGRESS"), request("FAILED")}, wantErr: "cluster request ID 7 failed", wantPolls: 2},
+		{name: "failed with details", responses: []scyllatest.Response{failed("CREATE_CLUSTER", 30, " Registered error during request processing. Not enough capacity ")}, wantErr: "cluster request ID 7 failed (CREATE_CLUSTER at 30%): Registered error during request processing. Not enough capacity", exact: true, wantPolls: 1},
+		{name: "failed with generic description", responses: []scyllatest.Response{failed("CREATE_CLUSTER", 30, "Registered error during request processing")}, wantErr: "cluster request ID 7 failed (CREATE_CLUSTER at 30%)", exact: true, wantPolls: 1},
+		{name: "failed without description", responses: []scyllatest.Response{failed("RESIZE_CLUSTER", 0, "")}, wantErr: "cluster request ID 7 failed (RESIZE_CLUSTER at 0%)", exact: true, wantPolls: 1},
 		{name: "unknown status", responses: []scyllatest.Response{request("PAUSED")}, wantErr: "unknown cluster request status: PAUSED", wantPolls: 1},
 		{name: "api error", responses: []scyllatest.Response{{Status: http.StatusOK, Error: "040001"}}, wantErr: "failed to get cluster request with ID 7", wantPolls: 1},
 	}
@@ -42,9 +52,12 @@ func TestAwaitClusterRequest(t *testing.T) {
 			srv.Sequence(http.MethodGet, requestPath, tt.responses...)
 
 			err := srv.Client(t).AwaitClusterRequest(context.Background(), 7)
-			if tt.wantErr == "" {
+			switch {
+			case tt.wantErr == "":
 				require.NoError(t, err)
-			} else {
+			case tt.exact:
+				require.EqualError(t, err, tt.wantErr)
+			default:
 				require.ErrorContains(t, err, tt.wantErr)
 			}
 			require.Len(t, srv.CallsTo(http.MethodGet, requestPath), tt.wantPolls)

@@ -2,9 +2,12 @@ package scylla
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
 
 // DefaultPollInterval is how often cluster requests are polled when
@@ -36,7 +39,7 @@ func (c *Client) AwaitClusterRequest(ctx context.Context, requestID int64) error
 			case strings.EqualFold(r.Status, "COMPLETED"):
 				return nil
 			case strings.EqualFold(r.Status, "FAILED"):
-				return fmt.Errorf("cluster request ID %d failed", r.ID)
+				return clusterRequestFailed(r)
 			case strings.EqualFold(r.Status, "QUEUED"), strings.EqualFold(r.Status, "IN_PROGRESS"):
 				continue
 			}
@@ -46,6 +49,21 @@ func (c *Client) AwaitClusterRequest(ctx context.Context, requestID int64) error
 			return ctx.Err()
 		}
 	}
+}
+
+// genericFailure is the progress description of a failure the API gives no
+// reason for.
+const genericFailure = "Registered error during request processing"
+
+// clusterRequestFailed describes a failed request with what the API says
+// about it. The public API exposes only the progress description, not the
+// internal error behind the failure.
+func clusterRequestFailed(r model.ClusterRequest) error {
+	msg := fmt.Sprintf("cluster request ID %d failed (%s at %d%%)", r.ID, r.RequestType, r.ProgressPercent)
+	if d := strings.TrimSpace(r.ProgressDescription); d != "" && d != genericFailure {
+		msg += ": " + d
+	}
+	return errors.New(msg)
 }
 
 // AwaitNoInProgressRequests returns once the cluster has no request in
