@@ -34,6 +34,32 @@ We welcome contributions to this repository. Here are some guidelines to follow 
     - Try to avoid merging in main your branch instead of rebasing.
 - Merge your PR after getting at least one approval (two are preferable on larger PRs).
 
+# Developing Against a Local Stack
+
+Builds with the `dev` build tag add a dev mode that talks to a local Siren
+stack instead of ScyllaDB Cloud. Release builds never contain it;
+`make check-release` fails if dev mode code reaches the release binary.
+
+1. Start the stack with `scripts/local/stack.sh up`. It needs the `siren`
+   and `siren-frontend` repositories next to this one (override with
+   `SIREN_DIR` and `SIREN_FRONTEND_DIR`) and creates a verified dev user whose
+   credentials it saves under `~/.config/terraform-provider-scylladbcloud`.
+2. Install the dev build with `make build-dev`. It goes to `$GOPATH/bin`;
+   point Terraform at it with a `dev_overrides` block in your CLI config.
+3. Point the provider at the stack's public API and turn dev mode on:
+
+   ```bash
+   export SCYLLADB_CLOUD_ENDPOINT=http://localhost:3011
+   export SCYLLADB_CLOUD_DEV_MODE=1
+   ```
+
+   Dev mode logs in with the saved credentials, so no token is needed. It only
+   accepts loopback endpoints. `SCYLLADB_CLOUD_DEV_SIREN_ENDPOINT` overrides
+   the Siren API address (default `http://localhost:8080/api/v1`).
+
+`make testacc-local` runs acceptance tests against the stack the same way;
+pick tests with `run=`. Stop the stack with `scripts/local/stack.sh down`.
+
 # Running Tests
 
 ## Unit Tests
