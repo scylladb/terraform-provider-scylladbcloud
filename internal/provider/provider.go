@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/connection"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cqlauth"
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/datasource"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/serverless"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/stack"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/vpcpeering"
@@ -94,8 +95,23 @@ func New(context.Context) *schema.Provider {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
-			"scylladbcloud_cql_auth":          cqlauth.DataSourceCQLAuth(),
-			"scylladbcloud_serverless_bundle": serverless.DataSourceServerlessBundle(),
+			"scylladbcloud_cql_auth":            cqlauth.DataSourceCQLAuth(),
+			"scylladbcloud_serverless_bundle":   serverless.DataSourceServerlessBundle(),
+			"scylladbcloud_account":             datasource.DataSourceAccount(),
+			"scylladbcloud_account_certificate": datasource.DataSourceAccountCertificate(),
+			"scylladbcloud_clusters":            datasource.DataSourceClusters(),
+			"scylladbcloud_cluster":             datasource.DataSourceCluster(),
+			"scylladbcloud_cluster_nodes":       datasource.DataSourceClusterNodes(),
+			"scylladbcloud_cluster_datacenters": datasource.DataSourceClusterDatacenters(),
+			"scylladbcloud_vpc_peerings":        datasource.DataSourceVPCPeerings(),
+			"scylladbcloud_cluster_connections": datasource.DataSourceClusterConnections(),
+			"scylladbcloud_cloud_accounts":      datasource.DataSourceCloudAccounts(),
+			"scylladbcloud_cloud_providers":     datasource.DataSourceCloudProviders(),
+			"scylladbcloud_regions":             datasource.DataSourceRegions(),
+			"scylladbcloud_instance_types":      datasource.DataSourceInstanceTypes(),
+			"scylladbcloud_scylla_versions":     datasource.DataSourceScyllaVersions(),
+			"scylladbcloud_availability_zones":  datasource.DataSourceAvailabilityZones(),
+			"scylladbcloud_cluster_requests":    datasource.DataSourceClusterRequests(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
