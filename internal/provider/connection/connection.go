@@ -64,7 +64,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"name": {
-				Description: "Cluster Connection Name",
+				Description: "Cluster Connection Name. Changing it updates the connection in place.",
 				Optional:    true,
 				Type:        schema.TypeString,
 			},
@@ -80,7 +80,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"cidrlist": {
-				Description: "List of CIDRs to route to the cluster connection",
+				Description: "List of CIDRs to route to the cluster connection. Changing it updates the connection in place.",
 				Required:    true,
 				Type:        schema.TypeList,
 				Elem: &schema.Schema{
@@ -94,7 +94,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"status": {
-				Description: "Connection Status",
+				Description: "Connection Status: `ACTIVE` (the default) or `INACTIVE`. Changing it updates the connection in place.",
 				Optional:    true,
 				Default:     "ACTIVE",
 				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
@@ -112,9 +112,10 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"data": {
-				Description: "Connection Data",
-				Required:    true,
-				Type:        schema.TypeMap,
+				Description: "Connection Data. Changing it updates the connection in place, except for `AWS_PRIVATE_LINK` and " +
+					"`GCP_PRIVATE_SERVICE_CONNECT` connections, whose data cannot be changed: the apply fails and the connection must be recreated.",
+				Required: true,
+				Type:     schema.TypeMap,
 				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
 					nonLowerCasedKeys := make([]string, 0)
 					for k := range i.(map[string]interface{}) {
