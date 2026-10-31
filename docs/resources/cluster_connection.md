@@ -36,16 +36,16 @@ output "scylladbcloud_cluster_connection_id" {
 
 ### Required
 
-- `cidrlist` (List of String) List of CIDRs to route to the cluster connection
+- `cidrlist` (List of String) List of CIDRs to route to the cluster connection. Changing it updates the connection in place.
 - `cluster_id` (Number) Cluster ID
-- `data` (Map of String) Connection Data
+- `data` (Map of String) Connection Data. Changing it updates the connection in place, except for `AWS_PRIVATE_LINK` and `GCP_PRIVATE_SERVICE_CONNECT` connections, whose data cannot be changed: the apply fails and the connection must be recreated.
 - `datacenter` (String) Cluster datacenter name
 - `type` (String) Connection Type
 
 ### Optional
 
-- `name` (String) Cluster Connection Name
-- `status` (String) Connection Status
+- `name` (String) Cluster Connection Name. Changing it updates the connection in place.
+- `status` (String) Connection Status: `ACTIVE` (the default) or `INACTIVE`. Changing it updates the connection in place.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
