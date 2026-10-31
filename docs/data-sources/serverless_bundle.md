@@ -3,12 +3,12 @@
 page_title: "scylladbcloud_serverless_bundle Data Source - ScyllaDB Cloud"
 subcategory: ""
 description: |-
-  
+  Deprecated: this data source will be removed in v2.0.0. Use scylladbcloud_cluster and the scylladbcloud_cql_auth data source instead.
 ---
 
 # scylladbcloud_serverless_bundle (Data Source)
 
-
+**Deprecated**: this data source will be removed in v2.0.0. Use `scylladbcloud_cluster` and the `scylladbcloud_cql_auth` data source instead.
 
 ## Example Usage
 
