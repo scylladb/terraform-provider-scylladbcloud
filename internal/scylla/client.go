@@ -56,7 +56,26 @@ type Client struct {
 	V2 *v2scylla.Client
 }
 
-func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client, error) {
+// ClientOption customizes a Client before NewClient makes its first request.
+type ClientOption func(*Client)
+
+// WithTransport sets the HTTP transport of both API clients.
+func WithTransport(rt http.RoundTripper) ClientOption {
+	return func(c *Client) {
+		c.HTTPClient.Transport = rt
+		c.V2.With(v2scylla.WithTransport(rt))
+	}
+}
+
+// WithHeader adds a header to every request of both API clients.
+func WithHeader(key, value string) ClientOption {
+	return func(c *Client) {
+		c.Headers.Set(key, value)
+		c.V2.With(v2scylla.WithHeader(key, value))
+	}
+}
+
+func NewClient(endpoint, token, useragent, trace string, metadata bool, opts ...ClientOption) (*Client, error) {
 	errCodes, err := parse(codes, codesDelim, codesFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse error codes: %w", err)
@@ -94,6 +113,10 @@ func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client
 	c.Headers.Set("User-Agent", useragent)
 	if trace != "" {
 		c.Headers.Set(v2scylla.TraceHeader, trace)
+	}
+
+	for _, opt := range opts {
+		opt(c)
 	}
 
 	if metadata {

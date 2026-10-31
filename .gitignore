@@ -38,3 +38,6 @@ go.work.sum
 
 # Certain docs files should not be created
 docs/resources/stack.md
+
+# local dev workspace (state, CLI configs)
+/dev/
