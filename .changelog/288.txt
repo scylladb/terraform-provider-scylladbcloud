@@ -1,0 +1,7 @@
+```release-note:note
+resource/scylladbcloud_serverless_cluster: The resource is deprecated and will be removed in v2.0.0. Create a `scylladbcloud_cluster` and move your data to it before you upgrade
+```
+
+```release-note:note
+data-source/scylladbcloud_serverless_bundle: The data source is deprecated and will be removed in v2.0.0. Use the `scylladbcloud_cql_auth` data source for connection details
+```

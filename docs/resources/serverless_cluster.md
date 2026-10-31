@@ -2,12 +2,12 @@
 page_title: "scylladbcloud_serverless_cluster Resource - terraform-provider-scylladbcloud"
 subcategory: ""
 description: |-
-  
+  Deprecated. This resource will be removed in v2.0.0. Before you upgrade, create a scylladbcloud_cluster, move your data to it, and remove this resource. A scylladbcloud_cluster cannot take over a serverless cluster. Removing this resource deletes the serverless cluster.
 ---
 
 # scylladbcloud_serverless_cluster (Resource)
 
-
+**Deprecated.** This resource will be removed in v2.0.0. Before you upgrade, create a `scylladbcloud_cluster`, move your data to it, and remove this resource. A `scylladbcloud_cluster` cannot take over a serverless cluster. Removing this resource deletes the serverless cluster.
 
 ## Example Usage
 
