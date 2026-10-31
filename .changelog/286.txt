@@ -1,0 +1,3 @@
+```release-note:enhancement
+resource/scylladbcloud_cluster: When a cluster request fails or the wait for it times out, the error shows the request type and its progress. For a failed request, the error also shows the reason from the API
+```

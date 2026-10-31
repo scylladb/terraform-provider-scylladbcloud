@@ -27,16 +27,18 @@ func (c *Client) AwaitClusterRequest(ctx context.Context, requestID int64) error
 		case strings.EqualFold(r.Status, "COMPLETED"):
 			return nil
 		case strings.EqualFold(r.Status, "FAILED"):
-			return fmt.Errorf("cluster request ID %d failed", r.ID)
+			return fmt.Errorf("cluster request ID %d failed (%s at %d%%): %s",
+				r.ID, r.RequestType, r.ProgressPercent, r.ProgressDescription)
 		case strings.EqualFold(r.Status, "QUEUED"), strings.EqualFold(r.Status, "IN_PROGRESS"):
 		default:
-			return fmt.Errorf("unknown cluster request status: %s", r.Status)
+			return fmt.Errorf("cluster request ID %d has unknown status %q", r.ID, r.Status)
 		}
 
 		select {
 		case <-t.C:
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("cluster request ID %d is still %s (%s at %d%%): %w",
+				r.ID, r.Status, r.RequestType, r.ProgressPercent, ctx.Err())
 		}
 	}
 }
@@ -56,7 +58,9 @@ func (c *Client) AwaitNoInProgressRequests(ctx context.Context, clusterID int64)
 		select {
 		case <-t.C:
 		case <-ctx.Done():
-			return ctx.Err()
+			r := reqs[0]
+			return fmt.Errorf("cluster ID %d still has request ID %d in progress (%s at %d%%): %w",
+				clusterID, r.ID, r.RequestType, r.ProgressPercent, ctx.Err())
 		}
 	}
 }
