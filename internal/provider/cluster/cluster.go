@@ -22,7 +22,6 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
-	clusterPollInterval  = 10 * time.Second
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -1383,80 +1382,12 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 
 // WaitForClusterRequestID returns only after the cluster request is completed or failed.
 func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID int64) error {
-	t := time.NewTicker(clusterPollInterval)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-t.C:
-			r, err := c.GetClusterRequest(ctx, requestID)
-			if err != nil {
-				return fmt.Errorf("failed to get cluster request with ID %d: %w", requestID, err)
-			}
-
-			if strings.EqualFold(r.Status, "COMPLETED") {
-				return nil
-			}
-			if strings.EqualFold(r.Status, "FAILED") {
-				return fmt.Errorf("cluster request ID %d failed", r.ID)
-			}
-			if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
-				continue
-			}
-
-			return fmt.Errorf("unknown cluster request status: %s", r.Status)
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return c.AwaitClusterRequest(ctx, requestID)
 }
 
 // WaitForNoInProgressRequests waits until there are no requests in progress.
 func WaitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
-	t := time.NewTicker(clusterPollInterval)
-	defer t.Stop()
-
-	checkAllClear := func() (bool, error) {
-		for _, status := range []string{"IN_PROGRESS"} {
-			reqs, err := c.ListClusterRequest(
-				ctx,
-				clusterID,
-				scylla.ListClusterRequestParams{Status: status},
-			)
-			if err != nil {
-				return false, err
-			}
-			if len(reqs) > 0 {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-
-	// Check immediately before waiting for the first tick.
-	allClear, err := checkAllClear()
-	if err != nil {
-		return err
-	}
-	if allClear {
-		return nil
-	}
-
-	for {
-		select {
-		case <-t.C:
-			allClear, err := checkAllClear()
-			if err != nil {
-				return err
-			}
-			if allClear {
-				return nil
-			}
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return c.AwaitNoInProgressRequests(ctx, clusterID)
 }
 
 func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
