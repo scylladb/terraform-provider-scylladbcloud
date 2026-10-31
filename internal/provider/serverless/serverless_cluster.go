@@ -39,7 +39,14 @@ func ResourceServerlessCluster() *schema.Resource {
 			Delete: schema.DefaultTimeout(serverlessClusterDeleteTimeout),
 		},
 
-		DeprecationMessage: "This resource is deprecated and will be removed in one of the future releases of the provider.",
+		Description: "**Deprecated.** This resource will be removed in " + removalVersion + "." +
+			" Before you upgrade, create a `scylladbcloud_cluster`, move your data to it, and remove this resource." +
+			" A `scylladbcloud_cluster` cannot take over a serverless cluster." +
+			" Removing this resource deletes the serverless cluster.",
+		DeprecationMessage: "scylladbcloud_serverless_cluster is deprecated and will be removed in " + removalVersion + "." +
+			" Before you upgrade, create a scylladbcloud_cluster, move your data to it, and remove this resource." +
+			" A scylladbcloud_cluster cannot take over a serverless cluster." +
+			" Removing this resource deletes the serverless cluster.",
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
