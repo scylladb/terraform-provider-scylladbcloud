@@ -24,6 +24,14 @@ resource "scylladbcloud_cluster" "example" {
 	enable_vpc_peering = true
 	enable_dns         = true
 
+	# Accept only TLS client connections. Use "both" to also accept plain
+	# connections. Changing it updates the cluster in place.
+	client_encryption_mode = "encrypted"
+
+	# Replication factor of the cluster's keyspaces; defaults to 3. Changing
+	# it recreates the cluster.
+	replication_factor = 3
+
 	# Encryption at rest is enabled by default using a key managed by ScyllaDB Cloud.
 	# This block is optional and should only be configured if you wish to use a
 	# customer-managed key previously created in the ScyllaDB Cloud portal.
