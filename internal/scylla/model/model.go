@@ -191,6 +191,10 @@ type Cluster struct {
 	// EncryptionAtRest is absent when the cluster does not use encryption at
 	// rest; its presence is the status signal.
 	EncryptionAtRest *EncryptionAtRest `json:"encryptionAtRest,omitempty"`
+
+	// EncryptionMode is the client-to-node encryption mode: unencrypted,
+	// encrypted or both. It can be absent.
+	EncryptionMode string `json:"encryptionMode,omitempty"`
 }
 
 type Progress struct {
