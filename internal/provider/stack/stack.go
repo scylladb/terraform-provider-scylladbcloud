@@ -1,3 +1,9 @@
+// Package stack implements scylladbcloud_stack, an internal resource that
+// records the resources a deployment manages with the ScyllaDB Cloud Stacks
+// API. It is not meant for direct use: it is undocumented (its generated docs
+// page is git-ignored) and only works with a Stacks API token. It stays
+// registered because removing a resource type breaks every state that holds
+// it.
 package stack
 
 import (
@@ -35,6 +41,9 @@ func ResourceStack() *schema.Resource {
 			Delete: schema.DefaultTimeout(stackTimeout),
 		},
 
+		Description: "Internal resource used by the ScyllaDB Cloud Stacks API integration. " +
+			"It is not supported for direct use and may change without notice.",
+
 		Schema: map[string]*schema.Schema{
 			"attributes": {
 				Description: "List of managed resources",
@@ -67,6 +76,9 @@ func resourceStackCreate(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
+// resourceStackRead does nothing: the provider only sends Create, Update and
+// Delete events to the Stacks API and never reads a stack back, so the
+// configured attributes are the whole state.
 func resourceStackRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
@@ -105,6 +117,10 @@ func resourceStackDelete(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
+// sendStack posts a stack event to the API root. Stacks API tokens have the
+// form "user:secret" and requests carry an HMAC of the body keyed with the
+// secret instead of the usual bearer token. The user part becomes the
+// resource ID, so every stack created with one token shares the same ID.
 func sendStack(ctx context.Context, c *scylla.Client, s *model.Stack) (string, error) {
 	auth := strings.Split(c.Token, ":")
 
