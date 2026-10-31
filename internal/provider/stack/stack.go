@@ -1,3 +1,12 @@
+// Package stack implements scylladbcloud_stack. byok-stack-service
+// (siren-byok) writes it into the GCP BYOA and BYOK Terraform templates
+// that customers download and apply. It creates no cloud resource. When
+// Terraform applies the template, the resource sends the IDs that GCP
+// assigned to the template's resources to /webhook/stack, so that ScyllaDB
+// Cloud can use them.
+//
+// The resource works only with the stack token and attributes that the
+// generated templates contain, so it has no docs page.
 package stack
 
 import (
@@ -35,6 +44,9 @@ func ResourceStack() *schema.Resource {
 			Delete: schema.DefaultTimeout(stackTimeout),
 		},
 
+		Description: "Internal resource used by the ScyllaDB Cloud Stacks API integration. " +
+			"It is not supported for direct use and may change without notice.",
+
 		Schema: map[string]*schema.Schema{
 			"attributes": {
 				Description: "List of managed resources",
@@ -67,6 +79,9 @@ func resourceStackCreate(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
+// resourceStackRead does nothing: the provider only sends Create, Update and
+// Delete events to the Stacks API and never reads a stack back, so the
+// configured attributes are the whole state.
 func resourceStackRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
@@ -105,6 +120,10 @@ func resourceStackDelete(ctx context.Context, d *schema.ResourceData, meta inter
 	return nil
 }
 
+// sendStack posts a stack event to the endpoint, which the templates set to
+// /webhook/stack. The token is "<stack ID>:<stack secret>", and the request
+// carries an HMAC of the body keyed with the secret instead of a bearer
+// token. The stack ID becomes the resource ID.
 func sendStack(ctx context.Context, c *scylla.Client, s *model.Stack) (string, error) {
 	auth := strings.Split(c.Token, ":")
 
