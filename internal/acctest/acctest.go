@@ -59,7 +59,7 @@ func checkEnv() error {
 	if envEndpoint() == "" {
 		return errors.New("SCYLLADB_CLOUD_ENDPOINT must be set for acceptance tests")
 	}
-	if envToken() == "" && !(devBuild && envDevMode()) {
+	if envToken() == "" && (!devBuild || !envDevMode()) {
 		return errors.New("SCYLLADB_CLOUD_TOKEN must be set for acceptance tests")
 	}
 	return nil
