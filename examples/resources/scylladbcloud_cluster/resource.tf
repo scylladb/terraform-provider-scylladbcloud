@@ -18,6 +18,15 @@ resource "scylladbcloud_cluster" "example" {
 	# it recreates the cluster.
 	replication_factor = 3
 
+	# Optional: install vector search nodes when the cluster is created. The
+	# block is used only at creation; use scylladbcloud_vector_search to add or
+	# resize vector search later.
+	#
+	#   vector_search {
+	#     node_count = 2
+	#     node_type  = "r7g.large"
+	#   }
+
 	# Encryption at rest is enabled by default using a key managed by ScyllaDB Cloud.
 	# This block is optional and should only be configured if you wish to use a
 	# customer-managed key previously created in the ScyllaDB Cloud portal.

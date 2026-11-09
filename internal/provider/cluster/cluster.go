@@ -501,6 +501,10 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		}
 	}
 
+	if err := validateVectorSearchUnchanged(d); err != nil {
+		return err
+	}
+
 	return validateEncryptionKeyIDNotRemoved(d)
 }
 
@@ -579,6 +583,28 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:         true,
 				Type:             schema.TypeInt,
 				ValidateDiagFunc: validation.ToDiagFunc(validation.IntAtLeast(1)),
+			},
+			"vector_search": {
+				Description: "Vector search nodes to install when the cluster is created. The block is used only at creation: " +
+					"it is not read back, and adding or changing it on an existing cluster is an error. " +
+					"Use the `scylladbcloud_vector_search` resource to add, resize or remove vector search later. " +
+					"Removing the block leaves the nodes in place.",
+				Optional: true,
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+					"node_count": {
+						Description:      "Total number of vector search nodes in the datacenter.",
+						Required:         true,
+						Type:             schema.TypeInt,
+						ValidateDiagFunc: validation.ToDiagFunc(validation.IntAtLeast(1)),
+					},
+					"node_type": {
+						Description: "Instance type of the vector search nodes, e.g. r7g.large.",
+						Required:    true,
+						Type:        schema.TypeString,
+					},
+				}},
 			},
 			"region": {
 				Description: "The cloud region to deploy the cluster in (e.g. us-east-1).",
@@ -884,6 +910,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf(`unrecognized value %q for "region" attribute`, region)
 	}
 
+	if vs, ok := castToNestedBlock(d.Get("vector_search")); ok {
+		bootstrap, err := vectorSearchBootstrap(ctx, scyllaClient, cloudProvider.CloudProvider.ID, mr.ID, vs)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		clusterCreateRequest.VectorSearch = bootstrap
+	}
+
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cloudProvider.CloudProvider.ID, mr.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", region, err)
@@ -990,6 +1024,13 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if n := len(cluster.Datacenters); n != 1 {
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+	}
+
+	if clusterCreateRequest.VectorSearch != nil {
+		if err := awaitVectorSearchInstall(ctx, scyllaClient, cr.ClusterID); err != nil {
+			d.SetId(strconv.Itoa(int(cr.ClusterID)))
+			return diag.Errorf("cluster %d was created, but installing vector search failed: %s", cr.ClusterID, err)
+		}
 	}
 
 	if mode, ok := d.GetOk("client_encryption_mode"); ok {

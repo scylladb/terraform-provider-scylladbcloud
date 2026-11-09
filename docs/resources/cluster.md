@@ -32,6 +32,15 @@ resource "scylladbcloud_cluster" "example" {
 	# it recreates the cluster.
 	replication_factor = 3
 
+	# Optional: install vector search nodes when the cluster is created. The
+	# block is used only at creation; use scylladbcloud_vector_search to add or
+	# resize vector search later.
+	#
+	#   vector_search {
+	#     node_count = 2
+	#     node_type  = "r7g.large"
+	#   }
+
 	# Encryption at rest is enabled by default using a key managed by ScyllaDB Cloud.
 	# This block is optional and should only be configured if you wish to use a
 	# customer-managed key previously created in the ScyllaDB Cloud portal.
@@ -87,6 +96,7 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 - `scylla_version` (String) Scylla version. The latest version will be used by default.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 - `user_api_interface` (String) The type of user API interface. Valid values are CQL or ALTERNATOR.
+- `vector_search` (Block List, Max: 1) Vector search nodes to install when the cluster is created. The block is used only at creation: it is not read back, and adding or changing it on an existing cluster is an error. Use the `scylladbcloud_vector_search` resource to add, resize or remove vector search later. Removing the block leaves the nodes in place. (see [below for nested schema](#nestedblock--vector_search))
 
 ### Read-Only
 
@@ -149,6 +159,15 @@ Optional:
 - `create` (String)
 - `delete` (String)
 - `update` (String)
+
+
+<a id="nestedblock--vector_search"></a>
+### Nested Schema for `vector_search`
+
+Required:
+
+- `node_count` (Number) Total number of vector search nodes in the datacenter.
+- `node_type` (String) Instance type of the vector search nodes, e.g. r7g.large.
 
 ## Import
 

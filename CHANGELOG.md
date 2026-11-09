@@ -35,6 +35,8 @@ upgrading produces no plan changes.
 - `scylladbcloud_cluster`: new `replication_factor`, defaulting to 3.
 - `scylladbcloud_cluster`: an update applies every changed field in one
   apply.
+- `scylladbcloud_cluster`: new `vector_search` block installs vector
+  search nodes when the cluster is created.
 - `scylladbcloud_vpc_peering`: `peer_cidr_blocks` changes update the
   peering in place instead of recreating it.
 - `scylladbcloud_cluster_connection`: data changes update the
