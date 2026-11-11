@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -112,6 +113,43 @@ func TestLoginRejectsTokenFromFailedResponse(t *testing.T) {
 	_, err := l.Token(context.Background(), nil)
 	require.ErrorContains(t, err, "status 502")
 	require.NoFileExists(t, l.CachePath)
+}
+
+func TestLoginConcurrentRunsShareCache(t *testing.T) {
+	f := &fakeSiren{password: "pw"}
+	l := newLogin(t, f, time.Now())
+
+	var wg sync.WaitGroup
+	errs := make([]error, 16)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			run := *l
+			_, errs[i] = run.Token(context.Background(), func(string) bool { return false })
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(l.CachePath))
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "temporary files left behind")
+	require.Len(t, loadCache(l.CachePath), 1)
+}
+
+func TestLoginSurvivesUnwritableCache(t *testing.T) {
+	f := &fakeSiren{password: "pw"}
+	l := newLogin(t, f, time.Now())
+	blocker := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	l.CachePath = filepath.Join(blocker, "dev-token.json")
+
+	tok, err := l.Token(context.Background(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "access-1", tok)
 }
 
 func TestLoadCredentials(t *testing.T) {

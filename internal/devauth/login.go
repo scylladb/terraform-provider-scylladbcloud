@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 const (
@@ -104,11 +106,23 @@ func saveCache(path string, m map[string]cachedToken) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	// A temporary file of its own: concurrent runs must not write through
+	// the same one. CreateTemp makes it with mode 0600.
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), path)
+	}
+	if err != nil {
+		_ = os.Remove(f.Name())
+	}
+	return err
 }
 
 // Login holds what is needed to mint a public API token from a local Siren.
@@ -151,8 +165,9 @@ func (l *Login) Token(ctx context.Context, valid func(string) bool) (string, err
 	}
 
 	cache[key] = cachedToken{Token: token, Expires: expires}
+	// The token is good without the cache; the next run logs in again.
 	if err := saveCache(l.CachePath, cache); err != nil {
-		return "", fmt.Errorf("caching dev token: %w", err)
+		tflog.Warn(ctx, "dev token was not cached", map[string]any{"path": l.CachePath, "error": err.Error()})
 	}
 	return token, nil
 }
