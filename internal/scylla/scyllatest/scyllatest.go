@@ -14,6 +14,7 @@ import (
 	"github.com/eapache/go-resiliency/retrier"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
+	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 )
 
 // AccountID is the account every Client made by Server.Client uses.
@@ -123,6 +124,7 @@ func (s *Server) Client(t testing.TB) *scylla.Client {
 	}
 	c.AccountID = AccountID
 	c.Retry = retrier.New(nil, scylla.DefaultClassifier)
+	c.V2.With(v2scylla.WithRetryPolicy(c.Retry))
 	c.PollInterval = 5 * time.Millisecond
 	return c
 }
