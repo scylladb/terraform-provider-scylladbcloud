@@ -17,11 +17,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
 
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
+
+	defaultReplicationFactor = 3
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -498,6 +501,10 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		}
 	}
 
+	if err := validateVectorSearchUnchanged(d); err != nil {
+		return err
+	}
+
 	return validateEncryptionKeyIDNotRemoved(d)
 }
 
@@ -554,10 +561,48 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"name": {
-				Description: "The name of the cluster.",
+				Description: "The name of the cluster. Changing it renames the cluster in place.",
 				Required:    true,
-				ForceNew:    true,
 				Type:        schema.TypeString,
+			},
+			"client_encryption_mode": {
+				Description: "Client-to-node encryption: `encrypted` accepts only TLS connections, `both` accepts TLS and plain connections. " +
+					"When unset, the cluster's current mode is read back.",
+				Optional: true,
+				Computed: true,
+				Type:     schema.TypeString,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice(
+					[]string{model.ClientEncryptionModeEncrypted, model.ClientEncryptionModeBoth}, false)),
+			},
+			"replication_factor": {
+				Description:      "Replication factor of the cluster's keyspaces. Defaults to 3 at creation; changing it recreates the cluster.",
+				Optional:         true,
+				Computed:         true,
+				ForceNew:         true,
+				Type:             schema.TypeInt,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.IntAtLeast(1)),
+			},
+			"vector_search": {
+				Description: "Vector search nodes to install when the cluster is created. The block is used only at creation: " +
+					"it is not read back, and adding or changing it on an existing cluster is an error. " +
+					"Use the `scylladbcloud_vector_search` resource to add, resize or remove vector search later. " +
+					"Removing the block leaves the nodes in place.",
+				Optional: true,
+				Type:     schema.TypeList,
+				MaxItems: 1,
+				Elem: &schema.Resource{Schema: map[string]*schema.Schema{
+					"node_count": {
+						Description:      "Total number of vector search nodes in the datacenter.",
+						Required:         true,
+						Type:             schema.TypeInt,
+						ValidateDiagFunc: validation.ToDiagFunc(validation.IntAtLeast(1)),
+					},
+					"node_type": {
+						Description: "Instance type of the vector search nodes, e.g. r7g.large.",
+						Required:    true,
+						Type:        schema.TypeString,
+					},
+				}},
 			},
 			"region": {
 				Description: "The cloud region to deploy the cluster in (e.g. us-east-1).",
@@ -756,7 +801,8 @@ func ResourceCluster() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 			"backup_retention_days": {
-				Description: "The number of days to retain backups after deleting the cluster between 0 and 60. " +
+				Description: "The number of days, between 0 and 60, to keep the cluster's backups once it is deleted. " +
+					"It is sent only when the cluster is deleted and does not affect a running cluster. " +
 					"If set to 0, backups are deleted immediately. " +
 					"Defaults to 1 to prevent accidental data loss.",
 				Optional:         true,
@@ -812,7 +858,6 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		clusterCreateRequest = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
-			ReplicationFactor:    3,
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Placement:            "true",
@@ -831,6 +876,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if !enableVpcPeering {
 		clusterCreateRequest.BroadcastType = "PUBLIC"
 	}
+
+	clusterCreateRequest.ReplicationFactor = replicationFactor(d)
 
 	if clusterCreateRequest.UserAPIInterface == "ALTERNATOR" {
 		clusterCreateRequest.AlternatorWriteIsolation = d.Get("alternator_write_isolation").(string)
@@ -859,6 +906,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		clusterCreateRequest.RegionID = mr.ID
 	} else {
 		return diag.Errorf(`unrecognized value %q for "region" attribute`, region)
+	}
+
+	if vs, ok := castToNestedBlock(d.Get("vector_search")); ok {
+		bootstrap, err := vectorSearchBootstrap(ctx, scyllaClient, cloudProvider.CloudProvider.ID, mr.ID, vs)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		clusterCreateRequest.VectorSearch = bootstrap
 	}
 
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cloudProvider.CloudProvider.ID, mr.ID)
@@ -969,6 +1024,20 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
+	if clusterCreateRequest.VectorSearch != nil {
+		if err := awaitVectorSearchInstall(ctx, scyllaClient, cr.ClusterID); err != nil {
+			d.SetId(strconv.Itoa(int(cr.ClusterID)))
+			return diag.Errorf("cluster %d was created, but installing vector search failed: %s", cr.ClusterID, err)
+		}
+	}
+
+	if mode, ok := d.GetOk("client_encryption_mode"); ok {
+		if cluster, err = ensureClientEncryptionMode(ctx, scyllaClient, cluster, mode.(string)); err != nil {
+			d.SetId(strconv.Itoa(int(cr.ClusterID)))
+			return diag.Errorf("cluster %d was created, but setting its client encryption mode failed: %s", cr.ClusterID, err)
+		}
+	}
+
 	// The instance the cluster runs on is only tracked for Standard clusters.
 	// X Cloud picks it from the scaling policy and changes it as the cluster
 	// scales, so resolving it here would only produce a value setClusterKVs
@@ -993,6 +1062,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	_ = d.Set("request_id", cr.ID)
 
 	return warns
+}
+
+// replicationFactor is the configured replication factor, or the default.
+func replicationFactor(d *schema.ResourceData) int64 {
+	if rf, ok := d.GetOk("replication_factor"); ok {
+		return int64(rf.(int))
+	}
+	return defaultReplicationFactor
 }
 
 func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -1087,6 +1164,10 @@ func fetchCACertificate(ctx context.Context, c *scylla.Client, clusterID int64, 
 func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
+	_ = d.Set("client_encryption_mode", cluster.EncryptionMode)
+	if cluster.ReplicationFactor > 0 {
+		_ = d.Set("replication_factor", cluster.ReplicationFactor)
+	}
 	_ = d.Set("cloud", providerName)
 	_ = d.Set("region", cluster.Region.ExternalID)
 
@@ -1165,17 +1246,110 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	return nil
 }
 
+// resourceClusterUpdate applies every changed attribute in turn and stops at
+// the first error, so a later step never runs on a half-updated cluster.
 func resourceClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	scyllaClient := meta.(*scylla.Client)
-	if d.HasChange("scaling") {
-		return resourceClusterUpdateScaling(ctx, d, scyllaClient)
+	mode := d.Get("client_encryption_mode").(string)
+
+	steps := []struct {
+		changed bool
+		apply   func() diag.Diagnostics
+	}{
+		{d.HasChange("name"), func() diag.Diagnostics { return resourceClusterUpdateName(ctx, d, scyllaClient) }},
+		{d.HasChange("client_encryption_mode") && mode != "", func() diag.Diagnostics {
+			return resourceClusterUpdateClientEncryptionMode(ctx, d, scyllaClient, mode)
+		}},
+		{d.HasChange("scaling"), func() diag.Diagnostics { return resourceClusterUpdateScaling(ctx, d, scyllaClient) }},
+		// A change of scaling owns min_nodes too (Standard to X Cloud).
+		{d.HasChange("min_nodes") && !d.HasChange("scaling"), func() diag.Diagnostics {
+			return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+		}},
 	}
 
-	if d.HasChange("min_nodes") {
-		return resourceClusterUpdateMinNodes(ctx, d, meta, scyllaClient)
+	var diags diag.Diagnostics
+	for _, step := range steps {
+		if !step.changed {
+			continue
+		}
+		diags = append(diags, step.apply()...)
+		if diags.HasError() || d.Id() == "" {
+			return diags
+		}
+	}
+	return diags
+}
+
+func resourceClusterUpdateName(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client) diag.Diagnostics {
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	name := d.Get("name").(string)
+	tflog.Debug(ctx, "Renaming cluster", map[string]interface{}{"cluster_id": clusterID, "name": name})
+
+	// Rename fails if there is any ongoing cluster request.
+	if err := WaitForNoInProgressRequests(ctx, scyllaClient, clusterID); err != nil {
+		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", clusterID, err)
+	}
+
+	r, err := scyllaClient.RenameCluster(ctx, clusterID, name)
+	if err != nil {
+		return diag.Errorf("failed to rename the cluster %d to %q: %s", clusterID, name, err)
+	}
+
+	if err := WaitForClusterRequestID(ctx, scyllaClient, r.ID); err != nil {
+		return diag.Errorf("failed to rename the cluster %d to %q: %s", clusterID, name, err)
 	}
 
 	return nil
+}
+
+func resourceClusterUpdateClientEncryptionMode(ctx context.Context, d *schema.ResourceData, scyllaClient *scylla.Client, mode string) diag.Diagnostics {
+	clusterID, diags := parseClusterID(d)
+	if diags != nil {
+		return diags
+	}
+
+	cluster, err := scyllaClient.GetCluster(ctx, clusterID)
+	if err != nil {
+		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	if _, err := ensureClientEncryptionMode(ctx, scyllaClient, cluster, mode); err != nil {
+		return diag.Errorf("failed to set client encryption mode of cluster %d to %q: %s", clusterID, mode, err)
+	}
+
+	return nil
+}
+
+// ensureClientEncryptionMode switches the cluster to mode unless it already
+// uses it, since the API refuses to set the current mode, and returns the
+// cluster as read afterwards.
+func ensureClientEncryptionMode(ctx context.Context, c *scylla.Client, cluster *model.Cluster, mode string) (*model.Cluster, error) {
+	if mode == "" || cluster.EncryptionMode == mode {
+		return cluster, nil
+	}
+
+	tflog.Debug(ctx, "Setting client encryption mode", map[string]interface{}{
+		"cluster_id": cluster.ID, "from": cluster.EncryptionMode, "to": mode,
+	})
+
+	if err := WaitForNoInProgressRequests(ctx, c, cluster.ID); err != nil {
+		return nil, err
+	}
+
+	r, err := c.SetClientEncryptionMode(ctx, cluster.ID, mode)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := WaitForClusterRequestID(ctx, c, r.ID); err != nil {
+		return nil, err
+	}
+
+	return c.GetCluster(ctx, cluster.ID)
 }
 
 func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, meta interface{}, scyllaClient *scylla.Client) diag.Diagnostics {
