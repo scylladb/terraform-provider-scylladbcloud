@@ -30,6 +30,8 @@ func TestDevModeEnvDefault(t *testing.T) {
 }
 
 func TestDevConfigureWithoutDevModeRequiresToken(t *testing.T) {
+	// Developers export the variable to use the local stack.
+	t.Setenv("SCYLLADB_CLOUD_DEV_MODE", "")
 	d := devResourceData(t, map[string]any{"token": ""})
 	_, diags := devConfigure(context.Background(), d, "http://127.0.0.1:1", "")
 	require.True(t, diags.HasError())
