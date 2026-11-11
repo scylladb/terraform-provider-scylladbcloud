@@ -39,10 +39,14 @@ func ResourceServerlessCluster() *schema.Resource {
 			Delete: schema.DefaultTimeout(serverlessClusterDeleteTimeout),
 		},
 
-		Description: "**Deprecated**: this resource will be removed in " +
-			removalVersion + ". Use `scylladbcloud_cluster` instead.",
+		Description: "**Deprecated**: this resource will be removed in " + removalVersion +
+			". Its successor is `scylladbcloud_cluster`, which creates a new cluster with its own settings" +
+			" and does not take over a serverless one: create the new cluster, move your data to it," +
+			" then remove this resource.",
 		DeprecationMessage: "scylladbcloud_serverless_cluster is deprecated and will be removed in " + removalVersion +
-			". Use scylladbcloud_cluster instead, then drop the old resource with terraform state rm.",
+			". Its successor, scylladbcloud_cluster, creates a new cluster and does not take over this one:" +
+			" create the new cluster, move your data to it, then remove this resource before upgrading." +
+			" terraform destroy deletes the serverless cluster; terraform state rm only makes Terraform forget it.",
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {

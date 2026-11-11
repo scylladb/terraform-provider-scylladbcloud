@@ -3,12 +3,12 @@
 page_title: "scylladbcloud_serverless_bundle Data Source - ScyllaDB Cloud"
 subcategory: ""
 description: |-
-  Deprecated: this data source will be removed in v2.0.0. Use scylladbcloud_cluster and the scylladbcloud_cql_auth data source instead.
+  Deprecated: this data source will be removed in v2.0.0. For a scylladbcloud_cluster, the scylladbcloud_cql_auth data source gives the connection details as separate attributes (seeds, username, password); there is no connection bundle file.
 ---
 
 # scylladbcloud_serverless_bundle (Data Source)
 
-**Deprecated**: this data source will be removed in v2.0.0. Use `scylladbcloud_cluster` and the `scylladbcloud_cql_auth` data source instead.
+**Deprecated**: this data source will be removed in v2.0.0. For a `scylladbcloud_cluster`, the `scylladbcloud_cql_auth` data source gives the connection details as separate attributes (seeds, username, password); there is no connection bundle file.
 
 ## Example Usage
 
