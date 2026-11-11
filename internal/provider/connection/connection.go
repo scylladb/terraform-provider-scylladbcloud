@@ -64,7 +64,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"name": {
-				Description: "Cluster Connection Name",
+				Description: "Cluster Connection Name. Changing it updates the connection in place.",
 				Optional:    true,
 				Type:        schema.TypeString,
 			},
@@ -80,7 +80,7 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"cidrlist": {
-				Description: "List of CIDRs to route to the cluster connection",
+				Description: "List of CIDRs to route to the cluster connection. Changing it updates the connection in place.",
 				Required:    true,
 				Type:        schema.TypeList,
 				Elem: &schema.Schema{
@@ -94,12 +94,12 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"status": {
-				Description: "Connection Status",
+				Description: "Connection Status: `ACTIVE` (the default) or `INACTIVE`. Changing it updates the connection in place.",
 				Optional:    true,
 				Default:     "ACTIVE",
 				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
 					status := i.(string)
-					if status != "ACTIVE" && status != "INACTIVE " {
+					if status != "ACTIVE" && status != "INACTIVE" {
 						return diag.Errorf("status must be one of: ACTIVE or INACTIVE")
 					}
 					return nil
@@ -112,9 +112,10 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"data": {
-				Description: "Connection Data",
-				Required:    true,
-				Type:        schema.TypeMap,
+				Description: "Connection Data. Changing it updates the connection in place, except for `AWS_PRIVATE_LINK` and " +
+					"`GCP_PRIVATE_SERVICE_CONNECT` connections, whose data cannot be changed: the apply fails and the connection must be recreated.",
+				Required: true,
+				Type:     schema.TypeMap,
 				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
 					nonLowerCasedKeys := make([]string, 0)
 					for k := range i.(map[string]interface{}) {
@@ -271,17 +272,22 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error converting cidrlist: %s", err)
 	}
 
-	req := model.ClusterConnectionUpdateRequest{
-		Name:     d.Get("name").(string),
-		CIDRList: cidrlist,
-		Status:   d.Get("status").(string),
+	status := d.Get("status").(string)
+	if d.HasChange("data") {
+		if diags := recreateClusterConnection(ctx, c, d, int64(clusterID), connID, cidrlist); diags.HasError() {
+			return diags
+		}
+	} else {
+		req := model.ClusterConnectionUpdateRequest{
+			Name:     d.Get("name").(string),
+			CIDRList: cidrlist,
+			Status:   status,
+		}
+		if err := c.UpdateClusterConnections(ctx, int64(clusterID), connID, &req); err != nil {
+			return diag.Errorf("error updating cluster connection: %s", err)
+		}
 	}
-
-	err = c.UpdateClusterConnections(ctx, int64(clusterID), connID, &req)
-	if err != nil {
-		return diag.Errorf("error updating cluster connection: %s", err)
-	}
-	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, req.Status)
+	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, status)
 	if err != nil {
 		return diag.Errorf("%+v", err)
 	}
@@ -291,6 +297,35 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error reading cluster connection %d: %s", connID, err)
 	}
 	_ = d.Set("external_id", conn.ExternalID)
+	return nil
+}
+
+// recreateClusterConnection applies a change of data, which only a full
+// replacement of the connection's revision (PUT) can do. AWS PrivateLink and
+// GCP Private Service Connect connections do not support it.
+func recreateClusterConnection(ctx context.Context, c *scylla.Client, d *schema.ResourceData, clusterID, connID int64, cidrlist []string) diag.Diagnostics {
+	switch t := d.Get("type").(string); t {
+	case "AWS_PRIVATE_LINK", "GCP_PRIVATE_SERVICE_CONNECT":
+		return diag.Errorf(`changing "data" of a %s connection is not supported; recreate the connection instead`, t)
+	}
+
+	data := make(map[string]string)
+	for k, v := range d.Get("data").(map[string]interface{}) {
+		data[k] = v.(string)
+	}
+
+	r, err := c.RecreateClusterConnection(ctx, clusterID, connID, &model.ClusterConnectionRecreateRequest{
+		Name:     d.Get("name").(string),
+		CIDRList: cidrlist,
+		Data:     data,
+		Status:   d.Get("status").(string),
+	})
+	if err != nil {
+		return diag.Errorf("error updating cluster connection data: %s", err)
+	}
+	if err := c.AwaitClusterRequest(ctx, r.ID); err != nil {
+		return diag.Errorf("error updating cluster connection data: %s", err)
+	}
 	return nil
 }
 
