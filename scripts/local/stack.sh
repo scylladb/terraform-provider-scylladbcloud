@@ -109,10 +109,14 @@ frontend_up() {
 		die "siren-frontend build failed, see ${STATE_DIR}/build.log"
 
 	say "starting siren-frontend (public API) on :${FRONTEND_PORT}"
-	(cd "${SIREN_FRONTEND_DIR}/server" && NODE_ENV=development PUBLIC_API=true \
-		API_BACKEND_URL=http://127.0.0.1:8088/api/v0 API_WEBHOOK_URL=http://127.0.0.1:8088 \
-		SERVER_PORT="${FRONTEND_PORT}" nohup node build/server.js >"${FRONTEND_LOG}" 2>&1 </dev/null &
-		echo $! >"${FRONTEND_PID}")
+	(
+		cd "${SIREN_FRONTEND_DIR}/server" || exit 1
+		# Backgrounded on its own, not as part of a list, so $! is node.
+		NODE_ENV=development PUBLIC_API=true \
+			API_BACKEND_URL=http://127.0.0.1:8088/api/v0 API_WEBHOOK_URL=http://127.0.0.1:8088 \
+			SERVER_PORT="${FRONTEND_PORT}" nohup node build/server.js >"${FRONTEND_LOG}" 2>&1 </dev/null &
+		echo $! >"${FRONTEND_PID}"
+	)
 	local i
 	for i in $(seq 1 30); do
 		frontend_answers && return
@@ -188,11 +192,20 @@ status() {
 }
 
 frontend_down() {
-	if [[ -f "${FRONTEND_PID}" ]]; then
-		kill "$(cat "${FRONTEND_PID}")" 2>/dev/null || true
-		rm -f "${FRONTEND_PID}"
-		say "stopped siren-frontend"
-	fi
+	local pid i
+	[[ -f "${FRONTEND_PID}" ]] || return 0
+	pid="$(cat "${FRONTEND_PID}")"
+	rm -f "${FRONTEND_PID}"
+	# The pid may belong to another process by now.
+	[[ "${pid}" =~ ^[0-9]+$ ]] && ps -p "${pid}" -o command= 2>/dev/null | grep -q "build/server.js" || return 0
+	kill "${pid}" 2>/dev/null || true
+	# The server closes its port on TERM but does not always exit.
+	for i in $(seq 1 10); do
+		kill -0 "${pid}" 2>/dev/null || break
+		sleep 1
+	done
+	kill -9 "${pid}" 2>/dev/null || true
+	say "stopped siren-frontend"
 }
 
 mkdir -p "${STATE_DIR}"
