@@ -51,12 +51,16 @@ func (c *Client) AwaitClusterRequest(ctx context.Context, requestID int64) error
 	}
 }
 
+// genericFailure is the progress description of a failure the API gives no
+// reason for.
+const genericFailure = "Registered error during request processing"
+
 // clusterRequestFailed describes a failed request with what the API says
 // about it. The public API exposes only the progress description, not the
 // internal error behind the failure.
 func clusterRequestFailed(r model.ClusterRequest) error {
 	msg := fmt.Sprintf("cluster request ID %d failed (%s at %d%%)", r.ID, r.RequestType, r.ProgressPercent)
-	if d := strings.TrimSpace(r.ProgressDescription); d != "" {
+	if d := strings.TrimSpace(r.ProgressDescription); d != "" && d != genericFailure {
 		msg += ": " + d
 	}
 	return errors.New(msg)
