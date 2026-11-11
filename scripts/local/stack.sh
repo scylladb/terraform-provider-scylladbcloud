@@ -54,9 +54,14 @@ admin() {
 
 healthy() { curl -sf --max-time 3 "$1" >/dev/null 2>&1; }
 
-# The public API answers any request, with an error without a token.
+# The public API refuses a request without a token in its own words, which
+# tells it apart from another service on the same port.
 frontend_answers() {
-	[[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${FRONTEND_PORT}/account/default")" != 000 ]]
+	[[ "$(curl -s --max-time 3 "http://127.0.0.1:${FRONTEND_PORT}/account/default")" == *TOKEN_REQUIRED* ]]
+}
+
+port_answers() {
+	[[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${FRONTEND_PORT}/")" != 000 ]]
 }
 
 json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(sys.argv[1], (d.get("data") or {}).get(sys.argv[1], "")))' "$1"; }
@@ -98,6 +103,7 @@ frontend_up() {
 		say "siren-frontend already answers on :${FRONTEND_PORT}"
 		return
 	fi
+	port_answers && die "port ${FRONTEND_PORT} is taken by another service; stop it or set FRONTEND_PORT"
 	[[ -d "${SIREN_FRONTEND_DIR}/server" ]] || die "no siren-frontend at ${SIREN_FRONTEND_DIR}"
 	if [[ ! -d "${SIREN_FRONTEND_DIR}/node_modules" ]]; then
 		say "installing siren-frontend dependencies"
