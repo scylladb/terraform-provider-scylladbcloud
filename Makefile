@@ -44,12 +44,14 @@ testacc:
 	TF_ACC=1 $(if $(TF_ACC_LOG_PATH),TF_ACC_LOG_PATH=$(TF_ACC_LOG_PATH) TF_LOG=$(or $(TF_LOG),DEBUG)) \
 		go test -v -count=1 -timeout=$(timeout) -parallel=3 -race -run="$(value run)" $(pkgs)
 
-# Acceptance tests against the local stack (scripts/local/stack.sh up).
+# Acceptance tests against the local stack (scripts/local/stack.sh up). A
+# token from the environment is dropped: it belongs to another deployment,
+# and with one set dev mode does not log in to the local stack.
 testacc-local: run?=TestAccScyllaDBCloudCluster_encryptionAtRestDisabled
 testacc-local: pkgs?=./internal/provider/
 testacc-local:
 	scripts/local/stack.sh status >/dev/null
-	TF_ACC=1 SCYLLADB_CLOUD_DEV_MODE=1 SCYLLADB_CLOUD_ENDPOINT=http://localhost:3011 \
+	env -u SCYLLADB_CLOUD_TOKEN TF_ACC=1 SCYLLADB_CLOUD_DEV_MODE=1 SCYLLADB_CLOUD_ENDPOINT=http://localhost:3011 \
 		SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE=$${SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE:-$(if $(filter arm64,$(shell uname -m)),i8g.large,i3.large)} \
 		go test -tags dev -v -count=1 -timeout=60m -parallel=1 -run="$(value run)" $(pkgs)
 
