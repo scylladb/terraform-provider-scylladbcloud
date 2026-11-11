@@ -64,6 +64,9 @@ port_answers() {
 	[[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${FRONTEND_PORT}/")" != 000 ]]
 }
 
+# The email goes into SQL, so only a plain address is accepted.
+valid_email() { [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$ ]]; }
+
 json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(sys.argv[1], (d.get("data") or {}).get(sys.argv[1], "")))' "$1"; }
 
 # allow_dev_domain lets the dev user register: the generated minicloud
@@ -144,6 +147,7 @@ dev_user() {
 	local email password user_id account_id account_name status billing body
 	email="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["email"])' "${CREDENTIALS}")"
 	password="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["password"])' "${CREDENTIALS}")"
+	valid_email "${email}" || die "${CREDENTIALS} holds an email this script does not accept: ${email}"
 
 	user_id="$(sql "select id from user where email='${email}'")"
 	if [[ -z "${user_id}" ]]; then
@@ -155,6 +159,7 @@ dev_user() {
 		user_id="$(sql "select id from user where email='${email}'")"
 		[[ -n "${user_id}" ]] || die "siren did not create ${email}; see docker logs ${API_CONTAINER}"
 	fi
+	[[ "${user_id}" =~ ^[0-9]+$ ]] || die "unexpected user id for ${email}: ${user_id}"
 
 	status="$(sql "select status from user where id=${user_id}")"
 	if [[ "${status}" != ACTIVE ]]; then
@@ -163,6 +168,7 @@ dev_user() {
 	fi
 
 	account_id="$(sql "select default_account_id from user where id=${user_id}")"
+	[[ "${account_id}" =~ ^[0-9]+$ ]] || die "unexpected account id for ${email}: ${account_id}"
 	account_name="$(sql "select name from account where id=${account_id}")"
 	billing="$(sql "select status from account_billing_status where account_id=${account_id}")"
 	if [[ "${billing}" != VERIFIED ]]; then
@@ -219,6 +225,7 @@ mkdir -p "${STATE_DIR}"
 case "${1:-}" in
 up)
 	need docker go node pnpm python3 curl perl make
+	valid_email "${DEV_EMAIL}" || die "DEV_EMAIL is not an email this script accepts: ${DEV_EMAIL}"
 	siren_up
 	frontend_up
 	credentials
