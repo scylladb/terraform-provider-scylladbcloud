@@ -178,7 +178,7 @@ dev_user() {
 
 	body="$(python3 -c 'import json,sys; print(json.dumps({"Email": sys.argv[1], "Password": sys.argv[2]}))' "${email}" "${password}")"
 	[[ -n "$(curl -s --max-time 10 -X POST "${SIREN_API}/user/login" -H 'Content-Type: application/json' -d "${body}" | json_get Token)" ]] ||
-		die "dev user ${email} cannot log in; if siren's database was recreated, delete ${CREDENTIALS} and run up again"
+		die "dev user ${email} cannot log in: ${CREDENTIALS} does not hold the password siren has for it. Restore the file, or run \"$0 down\" and \"$0 up\" to start from a new database"
 	say "dev user ${email} (account ${account_id}) can log in"
 }
 
