@@ -196,6 +196,9 @@ func (l *Login) post(ctx context.Context, path, bearer string, body any) (string
 	if r.Error != nil && (r.Error.Code != "" || r.Error.Message != "") {
 		return "", fmt.Errorf("POST %s: status %d: %s (%s)", path, resp.StatusCode, r.Error.Message, r.Error.Code)
 	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return "", fmt.Errorf("POST %s: status %d", path, resp.StatusCode)
+	}
 	token := r.Token
 	if token == "" && r.Data != nil {
 		token = r.Data.Token

@@ -19,6 +19,8 @@ import (
 type fakeSiren struct {
 	logins, mints atomic.Int32
 	password      string
+	// mintStatus, when set, is the status of a mint that still carries a token.
+	mintStatus int
 }
 
 func (f *fakeSiren) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +39,9 @@ func (f *fakeSiren) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]any{"Error": map[string]string{"code": "020006", "message": "unauthorized"}})
 			return
+		}
+		if f.mintStatus != 0 {
+			w.WriteHeader(f.mintStatus)
 		}
 		n := f.mints.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]string{"Token": "access-" + string(rune('0'+n))})
@@ -99,6 +104,14 @@ func TestLoginError(t *testing.T) {
 	l := newLogin(t, f, time.Now())
 	_, err := l.Token(context.Background(), nil)
 	require.ErrorContains(t, err, "bad credentials")
+}
+
+func TestLoginRejectsTokenFromFailedResponse(t *testing.T) {
+	f := &fakeSiren{password: "pw", mintStatus: http.StatusBadGateway}
+	l := newLogin(t, f, time.Now())
+	_, err := l.Token(context.Background(), nil)
+	require.ErrorContains(t, err, "status 502")
+	require.NoFileExists(t, l.CachePath)
 }
 
 func TestLoadCredentials(t *testing.T) {
