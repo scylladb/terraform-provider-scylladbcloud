@@ -1,0 +1,18 @@
+# Acceptance test environment. Copy to .envrc (ignored by git) and fill in.
+# See "Running Tests" in CONTRIBUTING.md.
+
+export SCYLLADB_CLOUD_ENDPOINT=https://api.cloud.scylladb.com
+export SCYLLADB_CLOUD_TOKEN=
+
+# Optional: tests whose variables are unset are skipped.
+# export SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE=i8g.large
+# export TEST_SCYLLADB_CLOUD_GCP_BYOA_ID=
+# export TEST_SCYLLADB_CLOUD_EAR_KEY_ID=
+# export TEST_SCYLLADB_CLOUD_TGW_ID=
+# export TEST_SCYLLADB_CLOUD_TGW_RAM_ARN=
+# export TEST_SCYLLADB_CLOUD_PEER_VPC_ID=
+# export TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID=
+# export TEST_SCYLLADB_CLOUD_PEER_CIDR=
+
+# Optional: keep Terraform and provider debug logs.
+# export TF_ACC_LOG_PATH=testacc.log
