@@ -2,6 +2,7 @@ package cqlauth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -45,11 +46,15 @@ func dataSourceCQLAuthV0() *schema.Resource {
 }
 
 func dataSourceCQLAuthUpgradeFrom0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {
-	var (
-		c         = meta.(*scylla.Client)
-		clusterID = int64(rawState["cluster_id"].(int))
-		dcID      = rawState["datacenter_id"].(int)
-	)
+	c := meta.(*scylla.Client)
+	clusterID, err := stateInt(rawState, "cluster_id")
+	if err != nil {
+		return nil, err
+	}
+	dcID, err := stateInt(rawState, "datacenter_id")
+	if err != nil {
+		return nil, err
+	}
 
 	conn, err := c.Connect(ctx, clusterID)
 	if err != nil {
@@ -61,7 +66,7 @@ func dataSourceCQLAuthUpgradeFrom0(ctx context.Context, rawState map[string]inte
 		return nil, fmt.Errorf("error reading datacenters: %s", err)
 	}
 
-	dc, err := getConnectionDCByID(conn, datacenters, int64(dcID))
+	dc, err := getConnectionDCByID(conn, datacenters, dcID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,12 +81,27 @@ func dataSourceCQLAuthUpgradeFrom0(ctx context.Context, rawState map[string]inte
 	}, nil
 }
 
+// stateInt reads a number from raw JSON state, where the SDK decodes it as a
+// float64; an absent key reads as 0.
+func stateInt(rawState map[string]interface{}, key string) (int64, error) {
+	switch v := rawState[key].(type) {
+	case nil:
+		return 0, nil
+	case float64:
+		return int64(v), nil
+	case int:
+		return int64(v), nil
+	case json.Number:
+		return v.Int64()
+	default:
+		return 0, fmt.Errorf("unexpected %s %v of type %T in state", key, v, v)
+	}
+}
+
 func getConnectionDCByID(conn *model.ClusterConnectionInformation, datacenters []model.Datacenter, dcID int64) (*model.DatacenterConnection, error) {
 	if len(conn.Datacenters) == 0 {
 		return nil, fmt.Errorf("error reading datacenter connections: not found")
 	}
-
-	var dc *model.DatacenterConnection
 
 	if dcID == 0 {
 		return &conn.Datacenters[0], nil
@@ -95,7 +115,7 @@ func getConnectionDCByID(conn *model.ClusterConnectionInformation, datacenters [
 				rhs := &conn.Datacenters[j]
 
 				if strings.EqualFold(lhs.Name, rhs.Name) {
-					return dc, nil
+					return rhs, nil
 				}
 			}
 		}

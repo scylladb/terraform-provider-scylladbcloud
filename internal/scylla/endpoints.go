@@ -56,17 +56,29 @@ func (c *Client) ListCloudProviderInstancesPerRegion(ctx context.Context, provid
 	return result.Instances, nil
 }
 
-func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluster, error) {
+func (c *Client) clusterPath(clusterID int64, suffix string, args ...any) string {
+	return fmt.Sprintf("/account/%d/cluster/%d", c.AccountID, clusterID) + fmt.Sprintf(suffix, args...)
+}
+
+// GetClusterSummary returns the cluster as the API reports it, without the
+// datacenter details GetCluster adds; it works for multi-datacenter clusters.
+func (c *Client) GetClusterSummary(ctx context.Context, clusterID int64) (*model.Cluster, error) {
 	var result struct {
 		Cluster model.Cluster `json:"cluster"`
 	}
 
-	path := fmt.Sprintf("/account/%d/cluster/%d", c.AccountID, clusterID)
-	if err := c.get(ctx, path, &result, "enriched", "true"); err != nil {
+	if err := c.get(ctx, c.clusterPath(clusterID, ""), &result, "enriched", "true"); err != nil {
 		return nil, err
 	}
 
-	cluster := &result.Cluster
+	return &result.Cluster, nil
+}
+
+func (c *Client) GetCluster(ctx context.Context, clusterID int64) (*model.Cluster, error) {
+	cluster, err := c.GetClusterSummary(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
 
 	// Fetch datacenter topology if we have exactly one datacenter.
 	// The GetCluster API doesn't return the Topology field which contains
@@ -455,4 +467,15 @@ func nonempty(s []string) (f []string) {
 	}
 
 	return f
+}
+
+// ListVectorSearchInstances lists the instance types vector search nodes can
+// use in a region.
+func (c *Client) ListVectorSearchInstances(ctx context.Context, providerID, regionID int64) ([]model.CloudProviderInstance, error) {
+	var result model.CloudProviderInstances
+	path := fmt.Sprintf("/deployment/cloud-provider/%d/region/%d", providerID, regionID)
+	if err := c.get(ctx, path, &result, "target", "VECTOR_SEARCH"); err != nil {
+		return nil, err
+	}
+	return result.Instances, nil
 }

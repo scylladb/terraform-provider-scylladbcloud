@@ -62,6 +62,28 @@ type CloudProviderRegion struct {
 	TrafficInternetOutGBCost    json.Number `json:"trafficInternetOutGBCost"`
 }
 
+// FlexString is a string that also decodes from a JSON number. For a cluster
+// whose creation failed the API returns an empty instance with 0 in some
+// string fields, which would otherwise fail decoding the whole cluster list.
+type FlexString string
+
+func (s *FlexString) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		var v string
+		if err := json.Unmarshal(b, &v); err != nil {
+			return err
+		}
+		*s = FlexString(v)
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*s = FlexString(n)
+	return nil
+}
+
 type CloudProviderInstance struct {
 	ID                          int64       `json:"id"`
 	ExternalID                  string      `json:"externalId"`
@@ -75,7 +97,7 @@ type CloudProviderInstance struct {
 	NetworkSpeed                int64       `json:"networkSpeed"`
 	ExternalStorageNetworkSpeed int64       `json:"externalStorageNetworkSpeed"`
 	CostPerHour                 json.Number `json:"costPerHour"`
-	Environment                 string      `json:"environment"`
+	Environment                 FlexString  `json:"environment"`
 	LicenseCostOnDemandPerHour  json.Number `json:"licenseCostOnDemandPerHour"`
 	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
 	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
