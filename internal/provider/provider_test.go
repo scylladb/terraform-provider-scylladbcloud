@@ -128,7 +128,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				ConfigDirectory: config.StaticDirectory("testdata/cluster_scaling"),
-				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName), "cidr_block": config.StringVariable(testAccCIDR(resourceName))},
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -451,6 +451,7 @@ var testAccGCPVariables = config.Variables{
 func testAccClusterVariables(name string, overrides ...config.Variables) config.Variables {
 	v := config.Variables{
 		"name":                       config.StringVariable(name),
+		"cidr_block":                 config.StringVariable(testAccCIDR(name)),
 		"backup_retention_days":      config.IntegerVariable(0),
 		"encryption_at_rest_enabled": config.BoolVariable(false),
 	}
@@ -805,7 +806,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 				// testdata/cluster_v1_12 pins 1.12, the last version released
 				// without encryption at rest.
 				ConfigDirectory: config.StaticDirectory("testdata/cluster_v1_12"),
-				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName), "cidr_block": config.StringVariable(testAccCIDR(resourceName))},
 				ConfigStateChecks: []statecheck.StateCheck{
 					clusterIDCompare.AddStateValue(
 						"scylladbcloud_cluster.test",
@@ -859,7 +860,7 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 				// testdata/cluster_v1 pins 1.9, the last version with the v1
 				// schema (node_count instead of min_nodes).
 				ConfigDirectory: config.StaticDirectory("testdata/cluster_v1"),
-				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName), "cidr_block": config.StringVariable(testAccCIDR(resourceName))},
 				ConfigStateChecks: []statecheck.StateCheck{
 					nodeCountCompare.AddStateValue(
 						"scylladbcloud_cluster.test",
