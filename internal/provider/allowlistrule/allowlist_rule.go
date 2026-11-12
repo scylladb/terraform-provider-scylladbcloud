@@ -135,6 +135,7 @@ lookup:
 
 	_ = d.Set("cidr_block", rule.Address)
 	_ = d.Set("cluster_id", cluster.ID)
+	_ = d.Set("rule_id", rule.ID)
 
 	return nil
 }
