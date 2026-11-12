@@ -598,6 +598,11 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Default:     "only_rmw_uses_lwt",
+				// A CQL cluster does not use the value, so a change must not
+				// replace it. An imported CQL cluster has no value in state.
+				DiffSuppressFunc: func(_, _, _ string, d *schema.ResourceData) bool {
+					return d.Get("user_api_interface").(string) != "ALTERNATOR"
+				},
 			},
 			"node_type": {
 				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
