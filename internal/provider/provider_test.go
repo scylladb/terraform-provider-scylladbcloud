@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
@@ -51,17 +52,20 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 
 	var cluster model.Cluster
 
+	vars := testAccClusterVariables(resourceName, config.Variables{
+		"scylla_version":        config.StringVariable("2026.1.1"),
+		"availability_zone_ids": config.ListVariable(config.StringVariable("use1-az2"), config.StringVariable("use1-az4"), config.StringVariable("use1-az6")),
+	})
+
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
-		Steps: []resource.TestStep{
+		TerraformVersionChecks:   testAccImportBlockVersionChecks,
+		Steps: append([]resource.TestStep{
 			{
 				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: testAccClusterVariables(resourceName, config.Variables{
-					"scylla_version":        config.StringVariable("2026.1.1"),
-					"availability_zone_ids": config.ListVariable(config.StringVariable("use1-az2"), config.StringVariable("use1-az4"), config.StringVariable("use1-az6")),
-				}),
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -107,7 +111,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					},
 				),
 			},
-		},
+		}, testAccClusterImportSteps(vars)...),
 	})
 }
 
@@ -462,6 +466,38 @@ func testAccClusterVariables(name string, overrides ...config.Variables) config.
 	return v
 }
 
+// testAccClusterImportSteps imports the cluster the previous step created,
+// once with terraform import and once with an import block, and checks that
+// the import reproduces its state and plans no changes.
+func testAccClusterImportSteps(vars config.Variables) []resource.TestStep {
+	return []resource.TestStep{
+		{
+			ResourceName:      "scylladbcloud_cluster.test",
+			ImportState:       true,
+			ImportStateVerify: true,
+			ConfigDirectory:   testAccClusterDir,
+			ConfigVariables:   vars,
+			// backup_retention_days is sent only when the cluster is deleted
+			// and the API never returns it, so an import cannot read it back.
+			ImportStateVerifyIgnore: []string{"backup_retention_days"},
+		},
+		{
+			ResourceName:    "scylladbcloud_cluster.test",
+			ImportState:     true,
+			ImportStateKind: resource.ImportBlockWithID,
+			ConfigDirectory: testAccClusterDir,
+			ConfigVariables: vars,
+		},
+	}
+}
+
+// testAccImportBlockVersionChecks skips tests with an import block step on
+// Terraform older than 1.5, which has no import blocks. Version checks apply
+// to a whole test case, so such a test does not run there at all.
+var testAccImportBlockVersionChecks = []tfversion.TerraformVersionCheck{
+	tfversion.SkipBelow(tfversion.Version1_5_0),
+}
+
 // testAccEncryptionAtRestVariables returns cluster variables with the given
 // encryption at rest settings.
 func testAccEncryptionAtRestVariables(name, cloud, region, nodeType string, ear config.Variables) config.Variables {
@@ -548,14 +584,17 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 
 	var cluster model.Cluster
 
+	vars := testAccEncryptionAtRestVariables(resourceName, "AWS", "us-east-1", testAccAWSNodeType("i3.large"), earEnabled(false))
+
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
-		Steps: []resource.TestStep{
+		TerraformVersionChecks:   testAccImportBlockVersionChecks,
+		Steps: append([]resource.TestStep{
 			{
 				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: testAccEncryptionAtRestVariables(resourceName, "AWS", "us-east-1", testAccAWSNodeType("i3.large"), earEnabled(false)),
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -577,7 +616,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
-		},
+		}, testAccClusterImportSteps(vars)...),
 	})
 }
 
