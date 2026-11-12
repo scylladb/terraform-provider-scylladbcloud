@@ -1101,14 +1101,27 @@ func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestC
 				return err
 			}
 
-			_, err = client.GetCluster(ctx, clusterID)
-			if err == nil {
-				return errors.Errorf("cluster %d still exists", clusterID)
+			if err := clusterDestroyed(ctx, client, clusterID); err != nil {
+				return err
 			}
 		}
 
 		return nil
 	}
+}
+
+// clusterDestroyed returns nil only when the API confirms the cluster is gone;
+// any other error is returned so an expired token or a 5xx cannot pass for a
+// destroyed cluster.
+func clusterDestroyed(ctx context.Context, c *scylla.Client, clusterID int64) error {
+	_, err := c.GetClusterSummary(ctx, clusterID)
+	switch {
+	case err == nil:
+		return errors.Errorf("cluster %d still exists", clusterID)
+	case scylla.IsNotFound(err), scylla.IsDeletedErr(err), scylla.IsClusterDeletedErr(err):
+		return nil
+	}
+	return errors.Wrapf(err, "checking that cluster %d was destroyed", clusterID)
 }
 
 func envGCPBYOAID() string {
