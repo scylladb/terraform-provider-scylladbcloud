@@ -7,14 +7,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	sdkterraform "github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -26,13 +23,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	acc "github.com/scylladb/terraform-provider-scylladbcloud/internal/acctest"
 	providercluster "github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
 )
-
-var provider *schema.Provider = New(context.Background())
 
 var protoV5ProviderFactories map[string]func() (tfprotov5.ProviderServer, error) = protoV5ProviderFactoriesInit(context.Background())
 
@@ -55,7 +51,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -132,7 +128,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -204,7 +200,7 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -260,7 +256,7 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 	clusterIDCompare := statecheck.CompareValue(compare.ValuesSame())
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -348,7 +344,7 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		Steps: []resource.TestStep{
@@ -385,7 +381,7 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 			},
 			{
 				PreConfig: func() {
-					client := getClientFromProvider(provider)
+					client := acc.Client(t)
 
 					err := providercluster.WaitForNoInProgressRequests(ctx, client, cluster.ID)
 					require.NoError(t, err)
@@ -414,7 +410,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -465,7 +461,7 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -512,7 +508,7 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -598,7 +594,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -653,7 +649,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -693,7 +689,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -728,7 +724,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -766,7 +762,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -810,7 +806,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acc.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
@@ -859,7 +855,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 	config := testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large")
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck:     func() { acc.PreCheck(t) },
 		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
@@ -916,7 +912,7 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 	nodeCountCompare := statecheck.CompareValue(compare.ValuesSame())
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
+		PreCheck:     func() { acc.PreCheck(t) },
 		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
 		Steps: []resource.TestStep{
 			{
@@ -1029,33 +1025,8 @@ func TestProviderTraceValidation(t *testing.T) {
 	require.Equal(t, "invalid trace value", diags[0].Summary)
 }
 
-var configureProviderOnce sync.Once
-
-// testAccAWSNodeType lets a local stack swap the node type, e.g. for ARM64
-// instances on Apple Silicon.
 func testAccAWSNodeType(def string) string {
 	return nonempty(os.Getenv("SCYLLADB_CLOUD_TEST_AWS_NODE_TYPE"), def)
-}
-
-func testAccPreCheck(t *testing.T) {
-	// Validate that required environment variables are set; dev builds log
-	// in by themselves.
-	if devMode, _ := strconv.ParseBool(os.Getenv("SCYLLADB_CLOUD_DEV_MODE")); envToken() == "" && !devMode {
-		t.Fatal("SCYLLADB_CLOUD_TOKEN must be set for acceptance tests")
-	}
-	if v := envEndpoint(); v == "" {
-		t.Fatal("SCYLLADB_CLOUD_ENDPOINT must be set for acceptance tests")
-	}
-
-	configureProviderOnce.Do(func() {
-		diags := provider.Configure(context.Background(), sdkterraform.NewResourceConfigRaw(nil))
-
-		for _, d := range diags {
-			if d.Severity == diag.Error {
-				panic(d.Summary)
-			}
-		}
-	})
 }
 
 func testAccCheckScyllaDBCloudClusterExists(
@@ -1064,7 +1035,10 @@ func testAccCheckScyllaDBCloudClusterExists(
 	cluster *model.Cluster,
 ) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		client := getClientFromProvider(provider)
+		client, err := acc.NewClient()
+		if err != nil {
+			return err
+		}
 
 		rs, ok := s.RootModule().Resources[resourceName]
 		if !ok {
@@ -1089,7 +1063,10 @@ func testAccCheckScyllaDBCloudClusterExists(
 
 func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
-		client := getClientFromProvider(provider)
+		client, err := acc.NewClient()
+		if err != nil {
+			return err
+		}
 
 		for _, rs := range s.RootModule().Resources {
 			if rs.Type != "scylladbcloud_cluster" {
@@ -1130,10 +1107,6 @@ func envGCPBYOAID() string {
 
 func envEARKeyID() string {
 	return os.Getenv("TEST_SCYLLADB_CLOUD_EAR_KEY_ID")
-}
-
-func getClientFromProvider(provider *schema.Provider) *scylla.Client {
-	return provider.Meta().(*scylla.Client)
 }
 
 func parseClusterIDFromResourceID(resourceID string) (int64, error) {
