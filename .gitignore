@@ -46,3 +46,6 @@ docs/resources/stack.md
 
 # local dev workspace (state, CLI configs)
 /dev/
+
+# per-user config of the terraform-provider-qa skill
+/.claude/terraform-provider-qa/
