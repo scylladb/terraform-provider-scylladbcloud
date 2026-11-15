@@ -505,6 +505,13 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		return err
 	}
 
+	// The CA certificate follows the client encryption mode.
+	if d.Id() != "" && d.HasChange("client_encryption_mode") {
+		if err := d.SetNewComputed("ca_certificate"); err != nil {
+			return err
+		}
+	}
+
 	return validateEncryptionKeyIDNotRemoved(d)
 }
 
@@ -1321,7 +1328,9 @@ func resourceClusterUpdateClientEncryptionMode(ctx context.Context, d *schema.Re
 		return diag.Errorf("failed to set client encryption mode of cluster %d to %q: %s", clusterID, mode, err)
 	}
 
-	return nil
+	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
+	_ = d.Set("ca_certificate", caCert)
+	return warns
 }
 
 // ensureClientEncryptionMode switches the cluster to mode unless it already

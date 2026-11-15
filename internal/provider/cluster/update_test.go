@@ -18,18 +18,8 @@ import (
 func updateData(t *testing.T) *schema.ResourceData {
 	t.Helper()
 	r := ResourceCluster()
-	state := &terraform.InstanceState{ID: "3", Meta: map[string]interface{}{"schema_version": "3"}, Attributes: map[string]string{
-		"id": "3", "cluster_id": "3", "name": "old-name", "cloud": "AWS", "region": "us-east-1",
-		"node_type": "i8g.large", "min_nodes": "3", "cidr_block": "172.31.0.0/16",
-		"enable_dns": "true", "enable_vpc_peering": "true", "user_api_interface": "CQL",
-		"alternator_write_isolation": "only_rmw_uses_lwt", "client_encryption_mode": "both", "replication_factor": "3",
-		"availability_zone_ids.#": "1", "availability_zone_ids.0": "use1-az1",
-		"encryption_at_rest.#": "1", "encryption_at_rest.0.enabled": "true", "encryption_at_rest.0.provider": "scylla-aws",
-	}}
-	cfg := map[string]interface{}{
-		"name": "new-name", "cloud": "AWS", "region": "us-east-1", "client_encryption_mode": "encrypted",
-		"node_type": "i8g.large", "min_nodes": 3, "cidr_block": "172.31.0.0/16",
-	}
+	state := updateState()
+	cfg := updateConfig()
 	diff, err := r.Diff(context.Background(), state, terraform.NewResourceConfigRaw(cfg), nil)
 	require.NoError(t, err)
 	require.False(t, diff.RequiresNew())
@@ -38,6 +28,24 @@ func updateData(t *testing.T) *schema.ResourceData {
 	require.True(t, d.HasChange("name"))
 	require.True(t, d.HasChange("client_encryption_mode"))
 	return d
+}
+
+func updateState() *terraform.InstanceState {
+	return &terraform.InstanceState{ID: "3", Meta: map[string]interface{}{"schema_version": "3"}, Attributes: map[string]string{
+		"id": "3", "cluster_id": "3", "name": "old-name", "cloud": "AWS", "region": "us-east-1",
+		"node_type": "i8g.large", "min_nodes": "3", "cidr_block": "172.31.0.0/16",
+		"enable_dns": "true", "enable_vpc_peering": "true", "user_api_interface": "CQL",
+		"alternator_write_isolation": "only_rmw_uses_lwt", "client_encryption_mode": "both", "replication_factor": "3",
+		"availability_zone_ids.#": "1", "availability_zone_ids.0": "use1-az1",
+		"encryption_at_rest.#": "1", "encryption_at_rest.0.enabled": "true", "encryption_at_rest.0.provider": "scylla-aws",
+	}}
+}
+
+func updateConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"name": "new-name", "cloud": "AWS", "region": "us-east-1", "client_encryption_mode": "encrypted",
+		"node_type": "i8g.large", "min_nodes": 3, "cidr_block": "172.31.0.0/16",
+	}
 }
 
 func updateServer(t *testing.T, renameStatus string) *scyllatest.Server {
@@ -51,15 +59,18 @@ func updateServer(t *testing.T, renameStatus string) *scyllatest.Server {
 	srv.Reply(http.MethodGet, "/account/1/cluster/request/50", model.ClusterRequest{ID: 50, Status: renameStatus})
 	srv.Reply(http.MethodPut, "/account/1/cluster/3/encryption/mode", model.ClusterRequest{ID: 60, Status: "QUEUED"})
 	srv.Reply(http.MethodGet, "/account/1/cluster/request/60", model.ClusterRequest{ID: 60, Status: "COMPLETED"})
+	srv.Reply(http.MethodGet, "/account/1/cluster/3/certificate", model.ClusterCertificate{Format: "pem", Content: "NEW-CA"})
 	return srv
 }
 
 func TestResourceClusterUpdateAppliesEveryChange(t *testing.T) {
 	t.Parallel()
 	srv := updateServer(t, "COMPLETED")
+	d := updateData(t)
 
-	diags := resourceClusterUpdate(context.Background(), updateData(t), srv.Client(t))
-	require.False(t, diags.HasError(), "%v", diags)
+	diags := resourceClusterUpdate(context.Background(), d, srv.Client(t))
+	require.Empty(t, diags)
+	require.Equal(t, "NEW-CA", d.Get("ca_certificate"))
 
 	var order []string
 	for _, c := range srv.Calls() {
@@ -85,4 +96,20 @@ func TestResourceClusterUpdateStopsAtFirstError(t *testing.T) {
 func TestBackupRetentionDaysDescribesDeleteOnly(t *testing.T) {
 	t.Parallel()
 	require.Contains(t, ResourceCluster().Schema["backup_retention_days"].Description, "only when the cluster is deleted")
+}
+
+func TestCustomizeDiffRecomputesCACertificateOnModeChange(t *testing.T) {
+	t.Parallel()
+	r := ResourceCluster()
+	state := updateState()
+	state.Attributes["ca_certificate"] = "OLD-CA"
+	for mode, recomputed := range map[string]bool{"both": false, "encrypted": true} {
+		cfg := updateConfig()
+		cfg["client_encryption_mode"] = mode
+		diff, err := r.Diff(context.Background(), state, terraform.NewResourceConfigRaw(cfg), nil)
+		require.NoError(t, err)
+		require.False(t, diff.RequiresNew(), "mode %q", mode)
+		a, ok := diff.Attributes["ca_certificate"]
+		require.Equal(t, recomputed, ok && a.NewComputed, "mode %q", mode)
+	}
 }
