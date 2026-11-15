@@ -1,0 +1,229 @@
+['edit', 'text']
+['text']
+<meta name="dash-one-writer">
+<style>
+  .pg { display: flex; flex-direction: column; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); }
+  .pg-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .pg-lede { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); }
+  .pg .pg-lede b { font-weight: 600; color: var(--color-fg); font-variant-numeric: tabular-nums; }
+  .pg-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--cds-gap-md); }
+  .pg-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+  .pg-k { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-xs); }
+  .pg-n { font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin: 0; }
+  .pg-h { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0 0 var(--cds-gap-xs); }
+  .pg-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-md); }
+  .pg-live { display: grid; grid-template-columns: max-content 1fr; gap: var(--cds-gap-xs) var(--cds-gap-md); margin: 0; font-size: var(--cds-font-size-body); }
+  .pg-live dt { color: var(--color-fg-muted); }
+  .pg-live dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .pg-scroll { overflow-x: auto; }
+  .pg-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-body); }
+  .pg-table th { text-align: left; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .pg-table td { padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .pg-table td:nth-child(5) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pg-table td:first-child { font-variant-numeric: tabular-nums; color: var(--color-fg-muted); white-space: nowrap; }
+  .pg-pill { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; font-size: var(--cds-font-size-caption); }
+  .pg-pill::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--cds-chart-muted); }
+  .pg-pill.is-done::before { background: var(--color-ok); }
+  .pg-pill.is-running::before { background: var(--color-warn); }
+  .pg-pill.is-failed::before, .pg-pill.is-gated::before { background: var(--color-bad); }
+  .pg-pill.is-pending { color: var(--color-fg-muted); }
+  .pg-pill.is-passing::before, .pg-pill.is-merged::before { background: var(--color-ok); }
+  .pg-pill.is-failing::before { background: var(--color-bad); }
+  .pg-pr { display: inline-flex; align-items: center; gap: .3rem; margin-right: .5rem; white-space: nowrap; }
+  .pg-pr::after { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: var(--cds-chart-muted); }
+  .pg-pr.is-passing::after { background: var(--color-ok); }
+  .pg-pr.is-running::after { background: var(--color-warn); }
+  .pg-pr.is-failing::after { background: var(--color-bad); }
+  .pg-cur td { background: color-mix(in srgb, var(--color-warn) 8%, transparent); }
+  .pg-hide-narrow { }
+  @media (max-width: 40rem) { .pg-hide-narrow { display: none; } }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+</style>
+<div class="pg">
+  <header>
+    <h1 class="pg-title" id="top">@TITLE@</h1>
+    <p class="pg-lede"><b data-draw="done" data-source="summary" data-field="done" data-row="0">—</b> of <b data-draw="total" data-source="summary" data-field="total" data-row="0">—</b> plan rows done. Each row ships only after unit tests and a full local regression against Siren on minicloud, including an upgrade from the latest release.</p>
+  </header>
+
+  <div class="pg-tiles">
+    <div class="pg-card"><p class="pg-k">Done</p><p class="pg-n" data-draw="t-done" data-source="summary" data-field="done" data-row="0">—</p></div>
+    <div class="pg-card"><p class="pg-k">In progress</p><p class="pg-n" data-draw="t-running" data-source="summary" data-field="running" data-row="0">—</p></div>
+    <div class="pg-card"><p class="pg-k">Pending</p><p class="pg-n" data-draw="t-pending" data-source="summary" data-field="pending" data-row="0">—</p></div>
+    <div class="pg-card"><p class="pg-k">Gated or failed</p><p class="pg-n" data-draw="t-blocked" data-source="summary" data-field="blocked" data-row="0">—</p></div>
+  </div>
+
+  <section class="pg-card" id="live">
+    <h2 class="pg-h">Latest check</h2>
+    <p class="pg-note">Updated by Claude while a regression runs.</p>
+    <dl class="pg-live">
+      <dt>Checked</dt><dd data-draw="l-checked" data-source="live" data-field="checked" data-row="0">—</dd>
+      <dt>Phase</dt><dd data-draw="l-phase" data-source="live" data-field="phase" data-row="0">—</dd>
+      <dt>Step</dt><dd data-draw="l-step" data-source="live" data-field="step" data-row="0">—</dd>
+      <dt>Siren request</dt><dd data-draw="l-request" data-source="live" data-field="request" data-row="0">—</dd>
+      <dt>Minicloud VMs</dt><dd data-draw="l-vms" data-source="live" data-field="vms" data-row="0">—</dd>
+    </dl>
+  </section>
+
+  <section class="pg-card" id="prs">
+    <h2 class="pg-h">Pull requests</h2>
+    <p class="pg-note">GitHub Actions results for each PR's latest commit (lint, CodeQL, test-and-build on Linux, macOS and Windows), and the open findings from the Qodo and CodeRabbit review bots. Changes: lines added and removed, and files touched. Jira link: the issues the PR description closes. Jira state: where those issues stand in Jira. Refreshed by Claude.</p>
+    <div class="pg-scroll">
+      <table class="pg-table" data-source="prs" data-row-key="pr">
+        <thead><tr>
+          <th data-field="pr">PR</th>
+          <th data-field="title">Title</th>
+          <th data-field="state">State</th>
+          <th data-field="jira_state">Jira state</th>
+          <th data-field="size">Changes</th>
+          <th data-field="jira" class="pg-hide-narrow">Jira link</th>
+          <th data-field="base" class="pg-hide-narrow">Base</th>
+          <th data-field="rows">Plan rows</th>
+          <th data-field="ci">CI</th>
+          <th data-field="checks" class="pg-hide-narrow">Checks</th>
+          <th data-field="reviews">Reviews</th>
+          <th data-field="top" class="pg-hide-narrow">Top finding</th>
+        </tr></thead>
+        <tbody data-draw="pr-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pg-card" id="plan">
+    <h2 class="pg-h">Plan rows</h2>
+    <p class="pg-note">Status: the local work on the row. Jira state: where the row's issue stands in Jira. Unit: make test, make test-dev, check-release. Local regression: latest release apply, upgrade plan with no changes, apply, plan, destroy. PR: the pull request that carries the row.</p>
+    <div class="pg-scroll">
+      <table class="pg-table" data-source="plan" data-row-key="row">
+        <thead><tr>
+          <th data-field="row">#</th>
+          <th data-field="step">Step</th>
+          <th data-field="area" class="pg-hide-narrow">Area</th>
+          <th data-field="status">Status</th>
+          <th data-field="jira_state">Jira state</th>
+          <th data-field="prs">PR</th>
+          <th data-field="unit">Unit</th>
+          <th data-field="regression">Local regression</th>
+          <th data-field="note" class="pg-hide-narrow">Note</th>
+        </tr></thead>
+        <tbody data-draw="plan-rows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script>
+  dash.calc('summary', {
+    title: 'Plan rows by status',
+    description: 'Counts the plan rows in each status.',
+    inputs: ['plan'],
+    fn: (plan) => {
+      const n = (s) => plan.filter((r) => s.includes(r.status)).length;
+      return [{done: n(['done']), running: n(['running']), pending: n(['pending']), blocked: n(['gated', 'failed']), total: plan.length}];
+    },
+  });
+
+  const one = (id, field) => (el) => {
+    const d = dash.data(id);
+    const row = d.status === 'ok' ? d.data[0] : null;
+    let v = row ? row[field] : null;
+    if (v != null && field === 'checked') v = d3.utcFormat('%b %-d, %H:%M:%S UTC')(new Date(v));
+    el.textContent = v == null || v === '' ? '—' : String(v);
+  };
+  for (const [name, field] of [['done', 'done'], ['total', 'total'], ['t-done', 'done'], ['t-running', 'running'], ['t-pending', 'pending'], ['t-blocked', 'blocked']]) {
+    dash.draw(name, one('summary', field));
+  }
+  for (const f of ['checked', 'phase', 'step', 'request', 'vms']) dash.draw('l-' + f, one('live', f));
+
+  const cols = ['row', 'step', 'area', 'status', 'jira_state', 'prs', 'unit', 'regression', 'note'];
+  const prBase = 'https://github.com/@REPO@/pull/';
+  const ciOf = () => {
+    const d = dash.data('prs');
+    const m = new Map();
+    if (d.status === 'ok') for (const p of d.data) m.set(p.pr, p);
+    return m;
+  };
+  const prLink = (n, p) => {
+    const a = document.createElement('a');
+    a.href = prBase + n;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = '#' + n;
+    if (p) {
+      a.className = 'pg-pr is-' + String(p.ci);
+      a.title = 'CI ' + p.ci + ': ' + p.checks + (p.failed ? ' (failed: ' + p.failed + ')' : '');
+    }
+    return a;
+  };
+  const prLinks = (td, prs) => {
+    const ci = ciOf();
+    for (const s of String(prs ?? '').match(/\d+/g) ?? []) {
+      const n = Number(s);
+      td.append(prLink(n, ci.get(n)));
+    }
+  };
+  const pill = (v) => {
+    const s = document.createElement('span');
+    s.className = 'pg-pill is-' + String(v);
+    s.textContent = v;
+    return s;
+  };
+  dash.draw('pr-rows', (tbody) => {
+    const d = dash.data('prs');
+    tbody.replaceChildren();
+    if (d.status !== 'ok') return;
+    for (const p of d.data) {
+      const tr = document.createElement('tr');
+      const cell = (content, narrow) => {
+        const td = document.createElement('td');
+        if (narrow) td.className = 'pg-hide-narrow';
+        td.append(content);
+        tr.append(td);
+      };
+      cell(prLink(p.pr, null));
+      cell(String(p.title));
+      cell(pill(p.state));
+      cell(String(p.jira_state ?? ''));
+      cell(String(p.size ?? ''));
+      cell(String(p.jira ?? ''), true);
+      cell(String(p.base), true);
+      cell(String(p.rows));
+      cell(pill(p.ci));
+      cell(String(p.checks) + (p.failed ? ' — failed: ' + p.failed : ''), true);
+      cell(String(p.reviews ?? ''));
+      cell(String(p.top ?? ''), true);
+      tbody.append(tr);
+    }
+  });
+  dash.draw('plan-rows', (tbody) => {
+    const d = dash.data('plan');
+    tbody.replaceChildren();
+    if (d.status !== 'ok') return;
+    for (const r of d.data) {
+      const tr = document.createElement('tr');
+      if (r.status === 'running') tr.className = 'pg-cur';
+      for (const c of cols) {
+        const td = document.createElement('td');
+        if (c === 'area' || c === 'note') td.className = 'pg-hide-narrow';
+        if (c === 'status') {
+          const s = document.createElement('span');
+          s.className = 'pg-pill is-' + String(r.status);
+          s.textContent = r.status;
+          td.append(s);
+        } else if (c === 'prs') {
+          td.style.whiteSpace = 'nowrap';
+          prLinks(td, r.prs);
+        } else if (c === 'step' && /^https:\/\/scylladb\.atlassian\.net\/browse\/[A-Z]+-\d+$/.test(String(r.jira || ''))) {
+          const a = document.createElement('a');
+          a.href = r.jira;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = String(r.step);
+          td.append(a);
+        } else {
+          td.textContent = r[c] == null ? '' : String(r[c]);
+        }
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+  });
+</script>
+

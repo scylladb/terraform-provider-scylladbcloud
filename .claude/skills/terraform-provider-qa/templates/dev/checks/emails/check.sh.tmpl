@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Live check of scylladbcloud_notification_emails. Local build only.
+set -uo pipefail
+cd "$(dirname "$0")"
+export SCYLLADB_CLOUD_ENDPOINT="${SCYLLADB_CLOUD_ENDPOINT:-http://localhost:3011}" SCYLLADB_CLOUD_DEV_MODE=1
+export TF_CLI_CONFIG_FILE="$PWD/../../local.tfrc" TF_IN_AUTOMATION=1 TF_CLI_ARGS="-no-color"
+unset SCYLLADB_CLOUD_TOKEN
+LOG="../../logs/$(date +%Y%m%d-%H%M%S)-emails"
+mkdir -p "$LOG"
+fail() { echo "FAIL  emails $1 (see $LOG)"; exit 1; }
+
+token=$(python3 -c 'import json,os;d=json.load(open(os.path.expanduser("~/.cache/terraform-provider-scylladbcloud/dev-token.json")));print(list(d.values())[0]["token"])')
+account=$(curl -s -m10 "$SCYLLADB_CLOUD_ENDPOINT/account/default" -H "Authorization: Bearer $token" | python3 -c 'import json,sys;print(json.load(sys.stdin)["data"]["accountId"])') ||
+	fail "could not read the account"
+rm -f terraform.tfstate*
+terraform init -input=false >"$LOG/init.log" 2>&1 || fail init
+i=0
+for list in '["@DEV_EMAIL@"]' '["@DEV_EMAIL@","ops@local.test"]'; do
+	i=$((i + 1))
+	terraform apply -input=false -auto-approve -var "emails=$list" >"$LOG/apply-$i.log" 2>&1 || fail "apply-$i"
+	terraform plan -input=false -detailed-exitcode -var "emails=$list" >"$LOG/plan-$i.log" 2>&1 || fail "plan-$i"
+	got=$(curl -s -m10 "$SCYLLADB_CLOUD_ENDPOINT/account/$account/notifications/email" -H "Authorization: Bearer $token" | python3 -c 'import json,sys;print(json.dumps(sorted(json.load(sys.stdin)["data"]["emails"]),separators=(",",":")))')
+	want=$(python3 -c "import json,sys;print(json.dumps(sorted(json.loads(sys.argv[1])),separators=(',',':')))" "$list")
+	[[ "$got" == "$want" ]] || fail "api has $got, want $want"
+	echo "PASS  emails-$i (exit 0)"
+done
+terraform destroy -input=false -auto-approve -var 'emails=["@DEV_EMAIL@"]' >"$LOG/destroy.log" 2>&1 || fail destroy
+grep -q "Notification emails were kept" "$LOG/destroy.log" || fail "destroy did not warn"
+echo "PASS  emails-destroy (exit 0)"

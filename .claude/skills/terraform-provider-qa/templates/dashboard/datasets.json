@@ -1,0 +1,5 @@
+{
+ "prs": {"title": "Pull requests and CI", "name": "pr-status.json", "description": "One row per pull request under review: draft or ready, size, the Jira issues its description closes and their Jira state, base branch, the plan rows it carries, the result of its GitHub Actions checks, and the open review-bot findings."},
+ "plan": {"title": "Plan row status", "name": "plan-status.json", "description": "One row per step of the plan, with its unit and local regression results and the Jira state of its issue. Written by Claude after each check."},
+ "live": {"title": "Latest regression check", "name": "live-check.json", "description": "The most recent check of the running regression: phase, Terraform step, Siren cluster request and minicloud VM count."}
+}
