@@ -113,3 +113,22 @@ func TestCustomizeDiffRecomputesCACertificateOnModeChange(t *testing.T) {
 		require.Equal(t, recomputed, ok && a.NewComputed, "mode %q", mode)
 	}
 }
+
+func TestResourceClusterUpdateKeepsCACertificateWhenFetchFails(t *testing.T) {
+	t.Parallel()
+	srv := updateServer(t, "COMPLETED")
+	srv.Fail(http.MethodGet, "/account/1/cluster/3/certificate", http.StatusBadRequest, "000001")
+
+	r := ResourceCluster()
+	state := updateState()
+	state.Attributes["ca_certificate"] = "OLD-CA"
+	diff, err := r.Diff(context.Background(), state, terraform.NewResourceConfigRaw(updateConfig()), nil)
+	require.NoError(t, err)
+	d, err := schema.InternalMap(r.Schema).Data(state, diff)
+	require.NoError(t, err)
+
+	diags := resourceClusterUpdate(context.Background(), d, srv.Client(t))
+	require.False(t, diags.HasError())
+	require.Len(t, diags, 1)
+	require.Equal(t, "OLD-CA", d.Get("ca_certificate"))
+}

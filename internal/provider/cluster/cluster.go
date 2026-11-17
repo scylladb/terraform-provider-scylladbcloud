@@ -1142,13 +1142,20 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		}
 		instanceExternalID = i.ExternalID
 	}
-	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
+	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, priorCACertificate(d))
 	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, caCert, instances, p)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
 	return warns
+}
+
+// priorCACertificate is the certificate in state. During an update that
+// changes client_encryption_mode the planned value is unknown and reads as "".
+func priorCACertificate(d *schema.ResourceData) string {
+	old, _ := d.GetChange("ca_certificate")
+	return old.(string)
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without
@@ -1338,7 +1345,7 @@ func resourceClusterUpdateClientEncryptionMode(ctx context.Context, d *schema.Re
 		return diag.Errorf("failed to set client encryption mode of cluster %d to %q: %s", clusterID, mode, err)
 	}
 
-	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
+	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, priorCACertificate(d))
 	_ = d.Set("ca_certificate", caCert)
 	return warns
 }
