@@ -17,10 +17,10 @@ resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
 	datacenter = "AWS_US_EAST_1"
 
-	peer_vpc_id     = "vpc-1234"
-	peer_cidr_block = "192.168.0.0/16"
-	peer_region     = "us-east-1"
-	peer_account_id = "123"
+	peer_vpc_id      = "vpc-1234"
+	peer_cidr_blocks = ["192.168.0.0/16"]
+	peer_region      = "us-east-1"
+	peer_account_id  = "123"
 
 	allow_cql = true
 }
@@ -44,10 +44,10 @@ resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
 	datacenter = "AWS_EAST_1"
 
-	peer_vpc_id     = aws_vpc.app.id
-	peer_cidr_block = aws_vpc.app.cidr_block
-	peer_region     = "us-east-1"
-	peer_account_id = data.aws_caller_identity.current.account_id
+	peer_vpc_id      = aws_vpc.app.id
+	peer_cidr_blocks = [aws_vpc.app.cidr_block]
+	peer_region      = "us-east-1"
+	peer_account_id  = data.aws_caller_identity.current.account_id
 
 	allow_cql = true
 }
@@ -102,13 +102,13 @@ resource "google_compute_network_peering" "app" {
 - `cluster_id` (Number) Cluster ID
 - `datacenter` (String) Cluster datacenter name
 - `peer_account_id` (String) Peer Account ID
-- `peer_region` (String) Peer VPC region
+- `peer_region` (String) Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`.
 - `peer_vpc_id` (String) Peer VPC ID
 
 ### Optional
 
 - `allow_cql` (Boolean) Whether to allow CQL traffic
-- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list
+- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

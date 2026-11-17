@@ -1029,6 +1029,96 @@ func TestProviderTraceValidation(t *testing.T) {
 	require.Equal(t, "invalid trace value", diags[0].Summary)
 }
 
+// TestAccScyllaDBCloudVPCPeering_awsPeerRegion peers a cluster with a VPC in
+// another AWS account and region. The region can be one where ScyllaDB Cloud
+// does not deploy clusters, like eu-central-2. Nobody accepts the peering,
+// which is enough to create, refresh, import and delete it.
+func TestAccScyllaDBCloudVPCPeering_awsPeerRegion(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("vpc-peering-region")
+
+	var (
+		vpcID     = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_VPC_ID")
+		accountID = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID")
+		cidr      = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_CIDR")
+		region    = strings.ToLower(os.Getenv("TEST_SCYLLADB_CLOUD_PEER_REGION"))
+	)
+	if vpcID == "" || accountID == "" || cidr == "" || region == "" {
+		t.Skip("TEST_SCYLLADB_CLOUD_PEER_VPC_ID, TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID, " +
+			"TEST_SCYLLADB_CLOUD_PEER_CIDR and TEST_SCYLLADB_CLOUD_PEER_REGION must be set for this test")
+	}
+
+	config := func(peerRegion string) string {
+		return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name                  = %[1]q
+  cloud                 = "AWS"
+  region                = "us-east-1"
+  node_type             = "i3.large"
+  min_nodes             = 3
+  cidr_block            = "10.0.1.0/24"
+  enable_dns            = true
+  backup_retention_days = 0
+
+  encryption_at_rest {
+    enabled = false
+  }
+}
+
+resource "scylladbcloud_vpc_peering" "test" {
+  cluster_id       = scylladbcloud_cluster.test.cluster_id
+  datacenter       = scylladbcloud_cluster.test.datacenter
+  peer_vpc_id      = %[2]q
+  peer_cidr_blocks = [%[3]q]
+  peer_region      = %[4]q
+  peer_account_id  = %[5]q
+  allow_cql        = true
+}`, resourceName, vpcID, cidr, peerRegion, accountID)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+
+			// A region where ScyllaDB Cloud deploys clusters has a region ID,
+			// so it does not test a peering by region name only.
+			if getClientFromProvider(provider).Meta.ProviderByName("AWS").RegionByName(region) != nil {
+				t.Fatalf("%q is a ScyllaDB Cloud region, set TEST_SCYLLADB_CLOUD_PEER_REGION to an AWS region without clusters", region)
+			}
+		},
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				// After the apply, the test refreshes and fails on a non-empty plan.
+				Config: config(region),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_vpc_peering.test",
+						tfjsonpath.New("peer_region"),
+						knownvalue.StringExact(region),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_vpc_peering.test",
+						tfjsonpath.New("connection_id"),
+						knownvalue.StringRegexp(regexp.MustCompile(`^pcx-`)),
+					),
+				},
+			},
+			{
+				Config:            config(region),
+				ResourceName:      "scylladbcloud_vpc_peering.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				// The letter case of the region name is not a change.
+				Config:   config(strings.ToUpper(region)),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 var configureProviderOnce sync.Once
 
 func testAccPreCheck(t *testing.T) {

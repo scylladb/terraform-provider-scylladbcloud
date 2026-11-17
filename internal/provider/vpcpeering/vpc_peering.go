@@ -66,7 +66,7 @@ func ResourceVPCPeering() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"peer_cidr_blocks": {
-				Description: "Peer VPC CIDR block list",
+				Description: "Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.",
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeList,
@@ -75,10 +75,11 @@ func ResourceVPCPeering() *schema.Resource {
 				},
 			},
 			"peer_region": {
-				Description: "Peer VPC region",
-				Required:    true,
-				ForceNew:    true,
-				Type:        schema.TypeString,
+				Description:      "Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`.",
+				Required:         true,
+				ForceNew:         true,
+				Type:             schema.TypeString,
+				DiffSuppressFunc: suppressRegionCaseDiff,
 			},
 			"peer_account_id": {
 				Description: "Peer Account ID",
@@ -120,7 +121,7 @@ func ResourceVPCPeering() *schema.Resource {
 func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c                        = meta.(*scylla.Client)
-		pr                       = d.Get("peer_region").(string)
+		pr                       = strings.ToLower(d.Get("peer_region").(string))
 		dcName                   = d.Get("datacenter").(string)
 		cidrBlocks, cidrBlocksOK = d.GetOk("peer_cidr_blocks")
 		r                        = &model.VPCPeeringRequest{
@@ -156,34 +157,24 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 	}
 
-	region := p.RegionByName(pr)
-	if region == nil {
-		return diag.Errorf("unrecognized region %q", pr)
+	// GCP networks are global: the API ignores the region of a GCP peering,
+	// and the provider uses it only to pick the default CIDR block.
+	isGCP := strings.EqualFold(p.CloudProvider.Name, "GCP")
+	if !isGCP {
+		r.Region, r.RegionID = awsPeerRegion(p, pr)
 	}
 
-	r.RegionID = region.ID
 	if !cidrBlocksOK {
-		if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
+		if !isGCP {
 			return diag.Errorf(`"peer_cidr_blocks" is required for %q cloud`, p.CloudProvider.Name)
 		}
 
 		cidr, ok := c.Meta.GCPBlocks[pr]
 		if !ok {
-			return diag.Errorf("no default peer CIDR block found for %q region", pr)
+			return diag.Errorf(`no default peer CIDR block for %q region, set "peer_cidr_blocks"`, pr)
 		}
 
 		cidrBlocks = []any{cidr}
-	} else if strings.EqualFold(p.CloudProvider.Name, "GCP") {
-		cidr, ok := c.Meta.GCPBlocks[pr]
-		if !ok {
-			return diag.Errorf("no default peer CIDR block found for %q region", pr)
-		}
-
-		if blocks := cidrBlocks.([]any); len(blocks) > 1 {
-			if blocks[0].(string) == cidr {
-				return diag.Errorf(`omit "peer_cidr_blocks" attribute for default GCP cidr blocks`)
-			}
-		}
 	}
 
 	if len(cidrBlocks.([]any)) == 0 {
@@ -265,11 +256,9 @@ lookup:
 		return diag.Errorf("unable to find cloud provider with id=%d", cluster.CloudProviderID)
 	}
 
-	// RegionID is always 0 for GCP peering
-	if vpcPeering.RegionID != 0 {
-		if r := p.RegionByID(vpcPeering.RegionID); r != nil {
-			_ = d.Set("peer_region", r.ExternalID)
-		}
+	// Keep the configured region when the API returns none, as for a GCP peering.
+	if region := peerRegionName(p, vpcPeering); region != "" {
+		_ = d.Set("peer_region", region)
 	}
 
 	_ = d.Set("datacenter", cluster.Datacenter.Name)
@@ -320,6 +309,42 @@ func resourceVPCPeeringUpgradeV0(ctx context.Context, rawState map[string]interf
 	}
 
 	return rawState, nil
+}
+
+// awsPeerRegion returns the region name and ID to send for an AWS peering.
+// The ID is set only for a region where ScyllaDB Cloud deploys clusters, so
+// an API that does not read the name yet still gets the region. The API
+// validates any other name.
+func awsPeerRegion(p *scylla.CloudProvider, name string) (string, int64) {
+	r := p.RegionByName(name)
+	if r == nil {
+		return name, 0
+	}
+
+	return r.ExternalID, r.ID
+}
+
+// peerRegionName returns the peer region of a peering read from the API: its
+// name, or the region of its ID from an API that does not return the name.
+// It is empty when the API returns neither.
+func peerRegionName(p *scylla.CloudProvider, vp *model.VPCPeering) string {
+	if vp.Region != "" {
+		return vp.Region
+	}
+	if vp.RegionID == 0 {
+		return ""
+	}
+
+	if r := p.RegionByID(vp.RegionID); r != nil {
+		return r.ExternalID
+	}
+	return ""
+}
+
+// suppressRegionCaseDiff ignores a peer_region change in letter case only.
+// The API keeps region names in lowercase.
+func suppressRegionCaseDiff(_, oldValue, newValue string, _ *schema.ResourceData) bool {
+	return strings.EqualFold(oldValue, newValue)
 }
 
 func split(s, sep string) (x []any) {
