@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"testing"
 
 	"github.com/eapache/go-resiliency/retrier"
+	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/go-cty/cty/msgpack"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
@@ -22,6 +25,11 @@ import (
 const (
 	testCloudAWS = 1
 	testCloudGCP = 2
+
+	testResourceType = "scylladbcloud_vpc_peering"
+
+	// testAPICIDR is the CIDR block of the peering in the fake API.
+	testAPICIDR = "192.168.0.0/16"
 )
 
 // newTestClient returns a client of the fake API at srv. AWS deploys clusters
@@ -146,7 +154,7 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 			name:    "GCP region without a default CIDR block needs explicit CIDR blocks",
 			cloud:   testCloudGCP,
 			region:  "me-central2",
-			wantErr: `no default peer CIDR block for "me-central2" region, set "peer_cidr_blocks"`,
+			wantErr: `"peer_cidr_blocks" is required: "me-central2" has no default CIDR block`,
 		},
 	}
 
@@ -205,6 +213,14 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 				}
 			}
 			require.Equal(t, tt.wantSent, got)
+
+			// The state has the CIDR blocks that were sent, as a list. A GCP
+			// default is one CIDR block.
+			wantCIDRs := tt.cidrs
+			if wantCIDRs == nil {
+				wantCIDRs = []any{tt.wantSent["cidrBlock"]}
+			}
+			require.Equal(t, wantCIDRs, d.Get("peer_cidr_blocks"))
 		})
 	}
 }
@@ -254,30 +270,14 @@ func TestResourceVPCPeeringRead(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			peering := `{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","cidrList":["192.168.0.0/16"]`
-			if tt.regionFields != "" {
-				peering += "," + tt.regionFields
-			}
-			peering += "}"
-
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.Method + " " + r.URL.Path {
-				case "GET /account/7/clusters":
-					_, _ = w.Write([]byte(`{"data":{"clusters":[{"id":42}]}}`))
-				case "GET /account/7/cluster/42":
-					_, _ = fmt.Fprintf(w, `{"data":{"cluster":{"id":42,"cloudProviderId":%d,"dc":{"id":5,"Name":"DC1"},`+
-						`"dataCenters":[{"id":5,"Name":"DC1"}],"vpcPeeringList":[%s]}}}`, tt.cloud, peering)
-				case "GET /account/7/cluster/42/dc/5":
-					_, _ = w.Write([]byte(`{"data":{"id":5,"Name":"DC1"}}`))
-				default:
-					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-				}
-			}))
-			defer srv.Close()
+			srv := newReadAPI(t, tt.cloud, tt.regionFields)
 
 			raw := map[string]any{}
 			if tt.prevRegion != "" {
+				// The CIDR blocks are not the ones of the API, so the read
+				// must replace them.
 				raw["peer_region"] = tt.prevRegion
+				raw["peer_cidr_blocks"] = []any{"10.0.0.0/8"}
 			}
 			d := schema.TestResourceDataRaw(t, ResourceVPCPeering().Schema, raw)
 			d.SetId("pcx-1")
@@ -287,86 +287,441 @@ func TestResourceVPCPeeringRead(t *testing.T) {
 			require.False(t, diags.HasError(), "diags: %v", diags)
 			require.Equal(t, "pcx-1", d.Id())
 			require.Equal(t, tt.wantRegion, d.Get("peer_region"))
+			require.Equal(t, []any{testAPICIDR}, d.Get("peer_cidr_blocks"))
 		})
 	}
 }
 
+// newReadAPI returns a fake API with cluster 42 of cloud and its peering
+// pcx-1, with regionFields in the peering.
+func newReadAPI(t *testing.T, cloud int, regionFields string) *httptest.Server {
+	t.Helper()
+
+	peering := fmt.Sprintf(`{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","cidrList":[%q]`, testAPICIDR)
+	if regionFields != "" {
+		peering += "," + regionFields
+	}
+	peering += "}"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /account/7/clusters":
+			_, _ = w.Write([]byte(`{"data":{"clusters":[{"id":42,"dcCount":1}]}}`))
+		case "GET /account/7/cluster/42":
+			_, _ = fmt.Fprintf(w, `{"data":{"cluster":{"id":42,"cloudProviderId":%d,"dc":{"id":5,"Name":"DC1"},`+
+				`"dataCenters":[{"id":5,"Name":"DC1"}],"vpcPeeringList":[%s]}}}`, cloud, peering)
+		case "GET /account/7/cluster/42/dc/5":
+			_, _ = w.Write([]byte(`{"data":{"id":5,"Name":"DC1"}}`))
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+// testProviderServer returns the provider server that Terraform talks to,
+// with the peering resource only.
+func testProviderServer(client *scylla.Client) tfprotov5.ProviderServer {
+	p := &schema.Provider{
+		ResourcesMap: map[string]*schema.Resource{testResourceType: ResourceVPCPeering()},
+	}
+	p.SetMeta(client)
+
+	return schema.NewGRPCProviderServer(p)
+}
+
+// newNoAPI returns a fake API that fails the test on any request.
+func newNoAPI(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv
+}
+
+func peeringType() cty.Type {
+	return ResourceVPCPeering().CoreConfigSchema().ImpliedType()
+}
+
+// testPeering returns a peering object with attrs, and null for the other
+// attributes.
+func testPeering(attrs map[string]cty.Value) cty.Value {
+	all := make(map[string]cty.Value)
+	for name, typ := range peeringType().AttributeTypes() {
+		all[name] = cty.NullVal(typ)
+	}
+	maps.Copy(all, attrs)
+
+	return cty.ObjectVal(all)
+}
+
+// testConfig returns the configuration of a peering in region. A null cidrs
+// is a configuration without peer_cidr_blocks: Terraform sends the same null
+// for an omitted argument and for an explicit null.
+func testConfig(region, cidrs cty.Value) map[string]cty.Value {
+	return map[string]cty.Value{
+		"cluster_id":       cty.NumberIntVal(42),
+		"datacenter":       cty.StringVal("DC1"),
+		"peer_vpc_id":      cty.StringVal("vpc-1"),
+		"peer_cidr_blocks": cidrs,
+		"peer_region":      region,
+		"peer_account_id":  cty.StringVal("123"),
+		"allow_cql":        cty.True,
+	}
+}
+
 // testState returns the state of a peering in region with cidrs.
-func testState(region string, cidrs ...string) *terraform.InstanceState {
-	attrs := map[string]string{
-		"id":                 "pcx-1",
-		"cluster_id":         "42",
-		"datacenter":         "DC1",
-		"peer_vpc_id":        "vpc-1",
-		"peer_cidr_blocks.#": strconv.Itoa(len(cidrs)),
-		"peer_region":        region,
-		"peer_account_id":    "123",
-		"allow_cql":          "true",
-		"vpc_peering_id":     "9",
-		"connection_id":      "pcx-1",
-		"network_link":       "projects//global/networks/",
-	}
+func testState(region string, cidrs ...string) map[string]cty.Value {
+	attrs := testConfig(cty.StringVal(region), cidrList(cidrs...))
+	attrs["id"] = cty.StringVal("pcx-1")
+	attrs["vpc_peering_id"] = cty.NumberIntVal(9)
+	attrs["connection_id"] = cty.StringVal("pcx-1")
+	attrs["network_link"] = cty.StringVal("")
+
+	return attrs
+}
+
+func cidrList(cidrs ...string) cty.Value {
+	values := make([]cty.Value, len(cidrs))
 	for i, cidr := range cidrs {
-		attrs["peer_cidr_blocks."+strconv.Itoa(i)] = cidr
+		values[i] = cty.StringVal(cidr)
 	}
 
-	return &terraform.InstanceState{ID: "pcx-1", Attributes: attrs}
+	return cty.ListVal(values)
 }
 
-// testConfig returns the configuration of a peering in region. With nil
-// cidrs, the configuration does not set peer_cidr_blocks.
-func testConfig(region string, cidrs []any) *terraform.ResourceConfig {
-	raw := map[string]any{
-		"cluster_id":      42,
-		"datacenter":      "DC1",
-		"peer_vpc_id":     "vpc-1",
-		"peer_region":     region,
-		"peer_account_id": "123",
-		"allow_cql":       true,
-	}
-	if cidrs != nil {
-		raw["peer_cidr_blocks"] = cidrs
-	}
+// with returns a copy of attrs with name set to v.
+func with(attrs map[string]cty.Value, name string, v cty.Value) map[string]cty.Value {
+	out := maps.Clone(attrs)
+	out[name] = v
 
-	return terraform.NewResourceConfigRaw(raw)
+	return out
 }
 
-func TestResourceVPCPeeringPeerRegionDiff(t *testing.T) {
+func encode(t *testing.T, v cty.Value) *tfprotov5.DynamicValue {
+	t.Helper()
+
+	b, err := msgpack.Marshal(v, peeringType())
+	require.NoError(t, err)
+
+	return &tfprotov5.DynamicValue{MsgPack: b}
+}
+
+func decode(t *testing.T, v *tfprotov5.DynamicValue) cty.Value {
+	t.Helper()
+
+	got, err := msgpack.Unmarshal(v.MsgPack, peeringType())
+	require.NoError(t, err)
+
+	return got
+}
+
+// proposedNewState merges prior into config as Terraform does for this flat
+// schema: a computed attribute that the configuration does not set keeps its
+// prior value.
+func proposedNewState(prior, config cty.Value) cty.Value {
+	if prior.IsNull() {
+		return config
+	}
+
+	attrs := config.AsValueMap()
+	for name, attr := range ResourceVPCPeering().CoreConfigSchema().Attributes {
+		if attr.Computed && attrs[name].IsNull() {
+			attrs[name] = prior.GetAttr(name)
+		}
+	}
+
+	return cty.ObjectVal(attrs)
+}
+
+// planPeering plans a peering through the provider server as Terraform does.
+// A replacement is planned again from a null prior, as Terraform plans the
+// new object, and so is forceReplace, as terraform plan -replace does.
+func planPeering(t *testing.T, prior, config cty.Value, forceReplace bool) (planned cty.Value, replace bool, diags []*tfprotov5.Diagnostic) {
+	t.Helper()
+
+	server := testProviderServer(newTestClient(t, newNoAPI(t)))
+
+	plan := func(prior cty.Value) *tfprotov5.PlanResourceChangeResponse {
+		resp, err := server.PlanResourceChange(context.Background(), &tfprotov5.PlanResourceChangeRequest{
+			TypeName:         testResourceType,
+			PriorState:       encode(t, prior),
+			ProposedNewState: encode(t, proposedNewState(prior, config)),
+			Config:           encode(t, config),
+		})
+		require.NoError(t, err)
+
+		return resp
+	}
+
+	resp := plan(prior)
+	if len(resp.Diagnostics) > 0 {
+		return cty.NilVal, false, resp.Diagnostics
+	}
+
+	replace = !prior.IsNull() && (len(resp.RequiresReplace) > 0 || forceReplace)
+	if replace {
+		resp = plan(cty.NullVal(peeringType()))
+		if len(resp.Diagnostics) > 0 {
+			return cty.NilVal, true, resp.Diagnostics
+		}
+	}
+
+	return decode(t, resp.PlannedState), replace, nil
+}
+
+func TestResourceVPCPeeringPlan(t *testing.T) {
 	t.Parallel()
 
-	const cidr = "192.168.0.0/16"
+	var (
+		noCIDRs   = cty.NullVal(cty.List(cty.String))
+		gcpState  = testState("us-central1", "10.128.0.0/20")
+		gcpConfig = testConfig(cty.StringVal("us-central1"), noCIDRs)
+		awsState  = testState("us-east-1", "192.168.0.0/16")
+		awsConfig = testConfig(cty.StringVal("us-east-1"), cidrList("192.168.0.0/16"))
+
+		unknownRegionErr = `"peer_cidr_blocks" is required when "peer_region" is known only at apply time`
+	)
 
 	tests := []struct {
-		name         string
-		stateRegion  string
-		configRegion string
+		name string
+		// prior is nil for a new peering.
+		prior  map[string]cty.Value
+		config map[string]cty.Value
+		// forceReplace replaces the peering as terraform plan -replace does.
+		forceReplace bool
 		wantReplace  bool
+		wantCIDRs    cty.Value
+		wantErr      string
 	}{
-		{name: "same region", stateRegion: "us-east-1", configRegion: "us-east-1"},
-		{name: "same region in uppercase", stateRegion: "us-east-1", configRegion: "US-EAST-1"},
-		{name: "region without clusters in uppercase", stateRegion: "eu-central-2", configRegion: "EU-CENTRAL-2"},
-		{name: "other region", stateRegion: "us-east-1", configRegion: "eu-central-2", wantReplace: true},
-		{name: "other region in uppercase", stateRegion: "us-east-1", configRegion: "EU-CENTRAL-2", wantReplace: true},
+		{
+			// The bug this plan fixes: the read stores the default, which
+			// the configuration does not set.
+			name:      "GCP default CIDR block not set in the configuration",
+			prior:     gcpState,
+			config:    gcpConfig,
+			wantCIDRs: cidrList("10.128.0.0/20"),
+		},
+		{
+			name:      "GCP default CIDR block with the region in uppercase",
+			prior:     gcpState,
+			config:    with(gcpConfig, "peer_region", cty.StringVal("US-CENTRAL1")),
+			wantCIDRs: cidrList("10.128.0.0/20"),
+		},
+		{
+			name:        "custom GCP CIDR blocks removed from the configuration",
+			prior:       testState("us-central1", "10.10.0.0/16"),
+			config:      gcpConfig,
+			wantReplace: true,
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+		},
+		{
+			name:    "AWS CIDR blocks removed from the configuration",
+			prior:   awsState,
+			config:  with(awsConfig, "peer_cidr_blocks", noCIDRs),
+			wantErr: `"peer_cidr_blocks" is required: "us-east-1" has no default CIDR block`,
+		},
+		{
+			name:    "GCP CIDR blocks removed in a region without a default",
+			prior:   testState("me-central2", "10.10.0.0/16"),
+			config:  testConfig(cty.StringVal("me-central2"), noCIDRs),
+			wantErr: `"peer_cidr_blocks" is required: "me-central2" has no default CIDR block`,
+		},
+		{
+			// The new peering must not keep the default of the old region.
+			name:        "GCP region change without CIDR blocks",
+			prior:       gcpState,
+			config:      with(gcpConfig, "peer_region", cty.StringVal("europe-west1")),
+			wantReplace: true,
+			wantCIDRs:   cidrList("10.132.0.0/20"),
+		},
+		{
+			name:        "GCP region change with CIDR blocks",
+			prior:       testState("us-central1", "10.10.0.0/16"),
+			config:      testConfig(cty.StringVal("europe-west1"), cidrList("10.10.0.0/16")),
+			wantReplace: true,
+			wantCIDRs:   cidrList("10.10.0.0/16"),
+		},
+		{
+			name:      "same CIDR blocks",
+			prior:     awsState,
+			config:    awsConfig,
+			wantCIDRs: cidrList("192.168.0.0/16"),
+		},
+		{
+			name:        "other CIDR blocks",
+			prior:       awsState,
+			config:      with(awsConfig, "peer_cidr_blocks", cidrList("192.168.1.0/24")),
+			wantReplace: true,
+			wantCIDRs:   cidrList("192.168.1.0/24"),
+		},
+		{
+			// An explicit unknown list stays unknown, it takes neither the
+			// default nor the prior CIDR blocks.
+			name:        "CIDR blocks known after apply",
+			prior:       gcpState,
+			config:      with(gcpConfig, "peer_cidr_blocks", cty.UnknownVal(cty.List(cty.String))),
+			wantReplace: true,
+			wantCIDRs:   cty.UnknownVal(cty.List(cty.String)),
+		},
+		{
+			name:        "region and CIDR blocks known after apply",
+			prior:       gcpState,
+			config:      testConfig(cty.UnknownVal(cty.String), cty.UnknownVal(cty.List(cty.String))),
+			wantReplace: true,
+			wantCIDRs:   cty.UnknownVal(cty.List(cty.String)),
+		},
+		{
+			// The unknown region replaces the peering, and the create
+			// would fail after the delete.
+			name:    "AWS CIDR blocks removed in a region known after apply",
+			prior:   awsState,
+			config:  testConfig(cty.UnknownVal(cty.String), noCIDRs),
+			wantErr: unknownRegionErr,
+		},
+		{
+			name:      "AWS region in uppercase",
+			prior:     awsState,
+			config:    with(awsConfig, "peer_region", cty.StringVal("US-EAST-1")),
+			wantCIDRs: cidrList("192.168.0.0/16"),
+		},
+		{
+			name:      "AWS region without clusters in uppercase",
+			prior:     testState("eu-central-2", "192.168.0.0/16"),
+			config:    with(awsConfig, "peer_region", cty.StringVal("EU-CENTRAL-2")),
+			wantCIDRs: cidrList("192.168.0.0/16"),
+		},
+		{
+			name:        "other AWS region",
+			prior:       awsState,
+			config:      with(awsConfig, "peer_region", cty.StringVal("eu-central-2")),
+			wantReplace: true,
+			wantCIDRs:   cidrList("192.168.0.0/16"),
+		},
+		{
+			name:         "forced replacement keeps the CIDR blocks",
+			prior:        awsState,
+			config:       awsConfig,
+			forceReplace: true,
+			wantReplace:  true,
+			wantCIDRs:    cidrList("192.168.0.0/16"),
+		},
+		{
+			name:         "forced replacement plans the GCP default CIDR block",
+			prior:        gcpState,
+			config:       gcpConfig,
+			forceReplace: true,
+			wantReplace:  true,
+			wantCIDRs:    cidrList("10.128.0.0/20"),
+		},
+		{
+			name:      "new GCP peering without CIDR blocks",
+			config:    gcpConfig,
+			wantCIDRs: cidrList("10.128.0.0/20"),
+		},
+		{
+			name:    "new AWS peering without CIDR blocks",
+			config:  with(awsConfig, "peer_cidr_blocks", noCIDRs),
+			wantErr: `"peer_cidr_blocks" is required: "us-east-1" has no default CIDR block`,
+		},
+		{
+			name:      "new peering with CIDR blocks known after apply",
+			config:    with(gcpConfig, "peer_cidr_blocks", cty.UnknownVal(cty.List(cty.String))),
+			wantCIDRs: cty.UnknownVal(cty.List(cty.String)),
+		},
+		{
+			// The SDK plans a list with an unknown element as unknown.
+			name:      "new peering with a CIDR block known after apply",
+			config:    with(gcpConfig, "peer_cidr_blocks", cty.ListVal([]cty.Value{cty.UnknownVal(cty.String)})),
+			wantCIDRs: cty.UnknownVal(cty.List(cty.String)),
+		},
+		{
+			name:    "new peering in a region known after apply without CIDR blocks",
+			config:  with(gcpConfig, "peer_region", cty.UnknownVal(cty.String)),
+			wantErr: unknownRegionErr,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			state := testState(tt.stateRegion, cidr)
-			config := testConfig(tt.configRegion, []any{cidr})
+			prior := cty.NullVal(peeringType())
+			if tt.prior != nil {
+				prior = testPeering(tt.prior)
+			}
 
-			diff, err := ResourceVPCPeering().Diff(context.Background(), state, config, nil)
-			require.NoError(t, err)
+			planned, replace, diags := planPeering(t, prior, testPeering(tt.config), tt.forceReplace)
 
-			if !tt.wantReplace {
-				require.True(t, diff.Empty(), "unexpected diff: %v", diff)
+			if tt.wantErr != "" {
+				require.Len(t, diags, 1)
+				require.Equal(t, tfprotov5.DiagnosticSeverityError, diags[0].Severity)
+				require.Equal(t, tt.wantErr, diags[0].Summary)
 				return
 			}
 
-			require.NotNil(t, diff)
-			require.True(t, diff.RequiresNew())
-			require.Contains(t, diff.Attributes, "peer_region")
+			require.Empty(t, diags)
+			require.Equal(t, tt.wantReplace, replace)
+
+			got := planned.GetAttr("peer_cidr_blocks")
+			require.True(t, tt.wantCIDRs.RawEquals(got), "peer_cidr_blocks: want %#v, got %#v", tt.wantCIDRs, got)
+
+			// An existing peering that is not replaced has no change at all.
+			if tt.prior != nil && !tt.wantReplace {
+				require.True(t, prior.RawEquals(planned), "unexpected change:\nprior   %#v\nplanned %#v", prior, planned)
+			}
+		})
+	}
+}
+
+func TestResourceVPCPeeringValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cidrs   cty.Value
+		wantErr bool
+	}{
+		// Terraform sends a missing argument as null.
+		{name: "CIDR blocks not set", cidrs: cty.NullVal(cty.List(cty.String))},
+		{name: "CIDR blocks known after apply", cidrs: cty.UnknownVal(cty.List(cty.String))},
+		{name: "CIDR blocks", cidrs: cty.ListVal([]cty.Value{cty.StringVal("192.168.0.0/16")})},
+		{name: "empty CIDR block list", cidrs: cty.ListValEmpty(cty.String), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := ResourceVPCPeering()
+			block := r.CoreConfigSchema()
+
+			attrs := make(map[string]cty.Value)
+			for name, typ := range block.ImpliedType().AttributeTypes() {
+				attrs[name] = cty.NullVal(typ)
+			}
+			attrs["cluster_id"] = cty.NumberIntVal(42)
+			attrs["datacenter"] = cty.StringVal("DC1")
+			attrs["peer_vpc_id"] = cty.StringVal("vpc-1")
+			attrs["peer_region"] = cty.StringVal("us-east-1")
+			attrs["peer_account_id"] = cty.StringVal("123")
+			attrs["peer_cidr_blocks"] = tt.cidrs
+
+			diags := r.Validate(terraform.NewResourceConfigShimmed(cty.ObjectVal(attrs), block))
+
+			if !tt.wantErr {
+				require.Empty(t, diags)
+				return
+			}
+
+			require.Len(t, diags, 1)
+			require.Equal(t, "Not enough list items", diags[0].Summary)
+			require.Equal(t, cty.GetAttrPath("peer_cidr_blocks"), diags[0].AttributePath)
 		})
 	}
 }
