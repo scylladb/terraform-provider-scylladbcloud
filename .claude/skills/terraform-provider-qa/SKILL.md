@@ -154,16 +154,15 @@ export GOTOOLCHAIN=auto REAL_AWS_PROFILE=$(cfg aws_profile) FETCH_GCP_IMAGES=0 \
 make -C "${SIREN_DIR}" all-local-preflight MINICLOUD_RESTART=1 > $S/preflight.out 2>&1   # ~4 min with a cached image
 scripts/local/stack.sh up > $S/stack-up.out 2>&1 </dev/null                                # ~1 min
 scripts/local/stack.sh status
-docker exec siren-scylla-cloud-api-1 scylla-cloud cluster vectorstore generate-ca --config /scylla-dbaas.yml   # every start: Vault is fresh, dev/checks/vectorcreate needs it
 ```
 - Laptops: keep the lid open for the whole run. `caffeinate` stops idle sleep, not a lid-close sleep, and emulated VMs that sleep through a create can hang it (Siren retries SSH forever at 30% "Creating instances"). A create stuck at 30% for over 20 minutes: stop the run, `stack.sh down`, start again, rerun what is left.
 - **Send `stack.sh up` to a file, never into a pipe**: siren-frontend keeps the pipe open and the command never returns. Stopping the Bash task that ran it also kills siren-frontend; run `stack.sh up` again.
 - `GOTOOLCHAIN=auto`: the host Go may be older than siren's go.mod asks for.
 - `MINICLOUD_DOCKER=1` builds minicloud from its Dockerfile and runs container `siren-minicloud`. Keep the exports for every later `stack.sh` call (`stack.sh down` reads `MINICLOUD_DOCKER`).
 - The preflight prints PASS/WARN/FAIL; FAIL lines must be fixed. WARN about GCP or upgrade images doesn't matter (the provider tests use AWS only). Run it in the background; a first image build takes several minutes.
-- `stack.sh up` builds and starts siren-frontend (`PUBLIC_API=true`, `:3011`), creates and verifies the dev user and billing, and checks it can log in. Its warning "siren's fake BYOK lacks the ProgrammaticAccessKeys fix" is a false alarm on current siren branches.
+- `stack.sh up` builds and starts siren-frontend (`PUBLIC_API=true`, `:3011`), creates the vector search CA in Vault (reusing an existing one), creates and verifies the dev user and billing, and checks it can log in. Its warning "siren's fake BYOK lacks the ProgrammaticAccessKeys fix" is a false alarm on current siren branches.
 - `stack.sh status` must show minicloud (`:5050`), siren api (`:8080`), siren public (`:8088`), siren-frontend (`:3011`) and credentials up.
-- `curl -s localhost:5050/minicloud/status`: `flags.services` `ec2_images`, `secretsmanager`, `sts` all `local`; `flags.guest_ca_trust` and `flags.intercept_s3` true; `running_vms` 0.
+- `curl -s localhost:5050/minicloud/status`: `flags.services` `ec2_images`, `secretsmanager`, `sts` all `simulated` (`local` on older minicloud builds); `flags.guest_ca_trust` and `flags.intercept_s3` true; `running_vms` 0.
 - Every start after `stack.sh down` has a **new database**: the dev user is recreated, its account id may differ, old tokens are rejected (`020006`).
 
 ### 6.2 Connect the provider in dev mode
@@ -218,7 +217,7 @@ done; echo "FAIL: no result after 3h, last: $prev"; exit 1'
 ### 6.4 Known traps
 
 - **Stale service locks** after a Siren restart while workers run: stop the workers, `docker exec siren-scylla-cloud-api-1 scylla-cloud service lock release --service-lock-id N --config /scylla-dbaas.yml`, restart them.
-- **Vector search CA**: `all-local-down` wipes Vault. Before a vector search test: `docker exec siren-scylla-cloud-api-1 scylla-cloud cluster vectorstore generate-ca --config /scylla-dbaas.yml`, or INSTALL_VECTOR_SEARCH fails at 30%.
+- **Vector search CA**: `all-local-down` wipes Vault, and INSTALL_VECTOR_SEARCH fails at 30% without the CA. `stack.sh up` creates it; if its output has no `==> vector search CA` line (an older `stack.sh`), run `docker exec siren-scylla-cloud-api-1 scylla-cloud cluster vectorstore generate-ca --config /scylla-dbaas.yml` (idempotent) before a vector search test.
 - **Missing AMIs**: `AWS_PROFILE=$(cfg aws_profile) minicloud --cache-dir ~/.cache/minicloud cache-image aws us-east-1/ami-…` (or `FETCH_AMIS=1` on the preflight).
 - **No KVM in Docker on macOS**: a 3-node cluster takes ~17 min, a vector install ~13 min. minicloud fits one cluster at a time; a stuck delete starves the next create: `stack.sh down`, start again.
 - **Dev user cannot log in**: delete `dev-credentials.json`, run `stack.sh up` again.
