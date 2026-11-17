@@ -220,7 +220,7 @@ done; echo "FAIL: no result after 3h, last: $prev"; exit 1'
 - **Vector search CA**: `all-local-down` wipes Vault, and INSTALL_VECTOR_SEARCH fails at 30% without the CA. `stack.sh up` creates it; if its output has no `==> vector search CA` line (an older `stack.sh`), run `docker exec siren-scylla-cloud-api-1 scylla-cloud cluster vectorstore generate-ca --config /scylla-dbaas.yml` (idempotent) before a vector search test.
 - **Missing AMIs**: `AWS_PROFILE=$(cfg aws_profile) minicloud --cache-dir ~/.cache/minicloud cache-image aws us-east-1/ami-…` (or `FETCH_AMIS=1` on the preflight).
 - **No KVM in Docker on macOS**: a 3-node cluster takes ~17 min, a vector install ~13 min. minicloud fits one cluster at a time; a stuck delete starves the next create: `stack.sh down`, start again.
-- **Dev user cannot log in**: delete `dev-credentials.json`, run `stack.sh up` again.
+- **Dev user cannot log in**: the credentials file no longer holds the password Siren has for the user. Restore it, or `stack.sh down` then `up` (a new database; the user is created again from the file). Deleting the file alone does not help while the database keeps the user.
 - **Release phase fails with `020006`**: the plain `dev-token` is from an older database; refresh it (6.2).
 - **Account id** changes with the database: local checks read it from `/account/default`, never hardcode it.
 - **Gated locally** (say so, not "passed"): encryption at rest (fake BYOK has no KMS config; runs use `enabled = false`), VPC peering and cluster connections (no real peer VPC or transit gateway), the `cql_auth` data source (`/cluster/connect` is not public).
