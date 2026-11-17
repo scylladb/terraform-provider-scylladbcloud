@@ -2,6 +2,8 @@ package vpcpeering
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -37,6 +39,8 @@ func ResourceVPCPeering() *schema.Resource {
 			Delete: schema.DefaultTimeout(vpcPeeringDeleteTimeout),
 		},
 
+		CustomizeDiff: resourceVPCPeeringCustomizeDiff,
+
 		SchemaVersion: 1,
 
 		StateUpgraders: []schema.StateUpgrader{
@@ -68,14 +72,16 @@ func ResourceVPCPeering() *schema.Resource {
 			"peer_cidr_blocks": {
 				Description: "Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.",
 				Optional:    true,
+				Computed:    true,
 				ForceNew:    true,
+				MinItems:    1,
 				Type:        schema.TypeList,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
 			},
 			"peer_region": {
-				Description:      "Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`.",
+				Description:      "Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.",
 				Required:         true,
 				ForceNew:         true,
 				Type:             schema.TypeString,
@@ -171,14 +177,10 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 		cidr, ok := c.Meta.GCPBlocks[pr]
 		if !ok {
-			return diag.Errorf(`no default peer CIDR block for %q region, set "peer_cidr_blocks"`, pr)
+			return diag.FromErr(noDefaultCIDRError(pr))
 		}
 
 		cidrBlocks = []any{cidr}
-	}
-
-	if len(cidrBlocks.([]any)) == 0 {
-		return diag.Errorf(`"peer_cidr_blocks" cannot be empty`)
 	}
 
 	cidrList, err := schemautils.ConvertListToConcrete[string](cidrBlocks)
@@ -204,6 +206,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	_ = d.Set("vpc_peering_id", vp.ID)
 	_ = d.Set("connection_id", vp.ExternalID)
 	_ = d.Set("network_link", vp.NetworkLink())
+	_ = d.Set("peer_cidr_blocks", cidrList)
 
 	return nil
 }
@@ -300,6 +303,39 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	return nil
+}
+
+// resourceVPCPeeringCustomizeDiff plans the default CIDR block of peer_region
+// when the configuration does not set peer_cidr_blocks. The plan then shows
+// the CIDR blocks of a replacement, and removing custom ones replaces the
+// peering. A region without a default, as any AWS region, or a region known
+// only at apply time fails the plan before anything is deleted.
+func resourceVPCPeeringCustomizeDiff(_ context.Context, d *schema.ResourceDiff, meta any) error {
+	// The state keeps the CIDR blocks of a removed list, so only the raw
+	// configuration tells whether it sets them. An unknown list is set.
+	config := d.GetRawConfig()
+	if config.IsNull() || !config.GetAttr("peer_cidr_blocks").IsNull() {
+		return nil
+	}
+
+	// An unknown region replaces the peering, and a create without a
+	// default would fail only after the delete.
+	if !d.NewValueKnown("peer_region") {
+		return errors.New(`"peer_cidr_blocks" is required when "peer_region" is known only at apply time`)
+	}
+
+	region := strings.ToLower(d.Get("peer_region").(string))
+
+	cidr, ok := meta.(*scylla.Client).Meta.GCPBlocks[region]
+	if !ok {
+		return noDefaultCIDRError(region)
+	}
+
+	return d.SetNew("peer_cidr_blocks", []string{cidr})
+}
+
+func noDefaultCIDRError(region string) error {
+	return fmt.Errorf(`"peer_cidr_blocks" is required: %q has no default CIDR block`, region)
 }
 
 func resourceVPCPeeringUpgradeV0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {

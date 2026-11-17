@@ -102,7 +102,7 @@ resource "google_compute_network_peering" "app" {
 - `cluster_id` (Number) Cluster ID
 - `datacenter` (String) Cluster datacenter name
 - `peer_account_id` (String) Peer Account ID
-- `peer_region` (String) Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`.
+- `peer_region` (String) Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.
 - `peer_vpc_id` (String) Peer VPC ID
 
 ### Optional
