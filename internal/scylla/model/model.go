@@ -341,7 +341,11 @@ type VPCPeeringRequest struct {
 	VPC          string `json:"vpcId"`
 	CidrBlock    string `json:"cidrBlock"`
 	Owner        string `json:"ownerId"`
-	RegionID     int64  `json:"regionId"`
+
+	// Region is the AWS region name of the peer VPC. RegionID is set only
+	// for a region where ScyllaDB Cloud deploys clusters.
+	Region   string `json:"region,omitempty"`
+	RegionID int64  `json:"regionId,omitempty"`
 }
 
 type VPCPeering struct {
@@ -352,7 +356,8 @@ type VPCPeering struct {
 	VPCID            string   `json:"vpcId"`
 	CIDRList         []string `json:"cidrList"`
 	CIDRListVerified []string `json:"cidrBlockVerified"`
-	RegionID         int64    `json:"regionId"`
+	Region           string   `json:"region"`   // AWS region name, empty for GCP
+	RegionID         int64    `json:"regionId"` // 0 for an AWS region without clusters
 	ProjectID        string   `json:"projectID"`
 	Status           string   `json:"status"`
 	ExpiresAt        string   `json:"expiresAt"`
