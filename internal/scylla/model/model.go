@@ -75,7 +75,6 @@ type CloudProviderInstance struct {
 	NetworkSpeed                int64       `json:"networkSpeed"`
 	ExternalStorageNetworkSpeed int64       `json:"externalStorageNetworkSpeed"`
 	CostPerHour                 json.Number `json:"costPerHour"`
-	Environment                 string      `json:"environment"`
 	LicenseCostOnDemandPerHour  json.Number `json:"licenseCostOnDemandPerHour"`
 	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
 	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
