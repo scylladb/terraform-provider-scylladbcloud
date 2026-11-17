@@ -101,6 +101,14 @@ siren_up() {
 	fi
 }
 
+# all-local-down wipes Vault, and vector search installs fail at 30% without
+# this CA. The command reuses an existing CA.
+vector_ca() {
+	say "vector search CA"
+	admin cluster vectorstore generate-ca ||
+		echo "warning: could not create the vector search CA; vector search installs will fail" >&2
+}
+
 frontend_up() {
 	if frontend_answers; then
 		say "siren-frontend already answers on :${FRONTEND_PORT}"
@@ -227,6 +235,7 @@ up)
 	need docker go node pnpm python3 curl perl make
 	valid_email "${DEV_EMAIL}" || die "DEV_EMAIL is not an email this script accepts: ${DEV_EMAIL}"
 	siren_up
+	vector_ca
 	frontend_up
 	credentials
 	dev_user

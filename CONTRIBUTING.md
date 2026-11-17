@@ -42,8 +42,9 @@ stack instead of ScyllaDB Cloud. Release builds never contain it;
 
 1. Start the stack with `scripts/local/stack.sh up`. It needs the `siren`
    and `siren-frontend` repositories next to this one (override with
-   `SIREN_DIR` and `SIREN_FRONTEND_DIR`) and creates a verified dev user whose
-   credentials it saves under `~/.config/terraform-provider-scylladbcloud`.
+   `SIREN_DIR` and `SIREN_FRONTEND_DIR`), creates the vector search CA in
+   Siren's Vault and a verified dev user whose credentials it saves under
+   `~/.config/terraform-provider-scylladbcloud`.
 2. Install the dev build with `make build-dev`. It goes to `$GOPATH/bin`;
    point Terraform at it with a `dev_overrides` block in your CLI config.
 3. Point the provider at the stack's public API and turn dev mode on:
