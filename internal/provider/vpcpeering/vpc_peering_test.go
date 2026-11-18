@@ -604,6 +604,13 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			wantCIDRs:   cidrList("192.168.0.0/16"),
 		},
 		{
+			name:        "other cluster",
+			prior:       awsState,
+			config:      with(awsConfig, "cluster_id", cty.NumberIntVal(43)),
+			wantReplace: true,
+			wantCIDRs:   cidrList("192.168.0.0/16"),
+		},
+		{
 			name:         "forced replacement keeps the CIDR blocks",
 			prior:        awsState,
 			config:       awsConfig,

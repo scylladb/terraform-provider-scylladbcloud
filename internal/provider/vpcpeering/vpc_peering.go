@@ -55,6 +55,7 @@ func ResourceVPCPeering() *schema.Resource {
 			"cluster_id": {
 				Description: "Cluster ID",
 				Required:    true,
+				ForceNew:    true,
 				Type:        schema.TypeInt,
 			},
 			"datacenter": {
