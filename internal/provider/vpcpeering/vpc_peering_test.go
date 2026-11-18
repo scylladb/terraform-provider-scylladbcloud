@@ -679,6 +679,53 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 	}
 }
 
+// TestResourceVPCPeeringRefresh refreshes through the provider server, which
+// applies DiffSuppressOnRefresh.
+func TestResourceVPCPeeringRefresh(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		stateRegion string
+		apiRegion   string
+		wantRegion  string
+	}{
+		{
+			// The value of the configuration stays, so nothing that reads
+			// it sees a change.
+			name:        "region in another letter case",
+			stateRegion: "US-EAST-1",
+			apiRegion:   "us-east-1",
+			wantRegion:  "US-EAST-1",
+		},
+		{
+			name:        "other region",
+			stateRegion: "us-east-1",
+			apiRegion:   "eu-central-2",
+			wantRegion:  "eu-central-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := newReadAPI(t, testCloudAWS, fmt.Sprintf(`"region":%q`, tt.apiRegion))
+			server := testProviderServer(newTestClient(t, srv))
+
+			resp, err := server.ReadResource(context.Background(), &tfprotov5.ReadResourceRequest{
+				TypeName:     testResourceType,
+				CurrentState: encode(t, testPeering(testState(tt.stateRegion, testAPICIDR))),
+			})
+			require.NoError(t, err)
+			require.Empty(t, resp.Diagnostics)
+
+			got := decode(t, resp.NewState).GetAttr("peer_region")
+			require.Equal(t, cty.StringVal(tt.wantRegion), got)
+		})
+	}
+}
+
 func TestResourceVPCPeeringValidate(t *testing.T) {
 	t.Parallel()
 

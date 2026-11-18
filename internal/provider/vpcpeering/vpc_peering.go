@@ -81,11 +81,12 @@ func ResourceVPCPeering() *schema.Resource {
 				},
 			},
 			"peer_region": {
-				Description:      "Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.",
-				Required:         true,
-				ForceNew:         true,
-				Type:             schema.TypeString,
-				DiffSuppressFunc: suppressRegionCaseDiff,
+				Description:           "Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.",
+				Required:              true,
+				ForceNew:              true,
+				Type:                  schema.TypeString,
+				DiffSuppressFunc:      suppressRegionCaseDiff,
+				DiffSuppressOnRefresh: true,
 			},
 			"peer_account_id": {
 				Description: "Peer Account ID",
