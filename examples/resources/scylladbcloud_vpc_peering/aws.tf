@@ -7,7 +7,7 @@ data "aws_caller_identity" "current" {}
 
 resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
-	datacenter = "AWS_EAST_1"
+	datacenter = "AWS_US_EAST_1"
 
 	peer_vpc_id      = aws_vpc.app.id
 	peer_cidr_blocks = [aws_vpc.app.cidr_block]

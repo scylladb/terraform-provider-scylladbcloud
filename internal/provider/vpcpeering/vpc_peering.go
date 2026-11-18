@@ -148,11 +148,8 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	for i := range dcs {
-		dc = &dcs[i]
-
-		if strings.EqualFold(dc.Name, dcName) {
-			r.DatacenterID = dc.ID
-			p = c.Meta.ProviderByID(dc.CloudProviderID)
+		if strings.EqualFold(dcs[i].Name, dcName) {
+			dc = &dcs[i]
 			break
 		}
 	}
@@ -161,7 +158,9 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("unable to find %q datacenter", dcName)
 	}
 
-	if p == nil {
+	r.DatacenterID = dc.ID
+
+	if p = c.Meta.ProviderByID(dc.CloudProviderID); p == nil {
 		return diag.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 	}
 
