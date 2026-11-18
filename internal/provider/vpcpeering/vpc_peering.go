@@ -30,7 +30,7 @@ func ResourceVPCPeering() *schema.Resource {
 		DeleteContext: resourceVPCPeeringDelete,
 
 		Importer: &schema.ResourceImporter{
-			StateContext: schema.ImportStatePassthroughContext,
+			StateContext: resourceVPCPeeringImport,
 		},
 
 		Timeouts: &schema.ResourceTimeout{
@@ -337,6 +337,40 @@ func resourceVPCPeeringCustomizeDiff(_ context.Context, d *schema.ResourceDiff, 
 
 func noDefaultCIDRError(region string) error {
 	return fmt.Errorf(`"peer_cidr_blocks" is required: %q has no default CIDR block`, region)
+}
+
+// resourceVPCPeeringImport imports a peering by its connection ID. The API
+// returns no region for a GCP peering, so a GCP import ID also takes the
+// peer region: "<connection_id>,<peer_region>".
+func resourceVPCPeeringImport(ctx context.Context, d *schema.ResourceData, meta any) ([]*schema.ResourceData, error) {
+	importID := d.Id()
+
+	// A space kept in peer_region would differ from the configured region
+	// and replace the peering on the next plan.
+	connID, region, hasRegion := strings.Cut(importID, ",")
+	connID, region = strings.TrimSpace(connID), strings.TrimSpace(region)
+	if connID == "" || (hasRegion && (region == "" || strings.Contains(region, ","))) {
+		return nil, fmt.Errorf(`invalid import ID %q, use "<connection_id>" or "<connection_id>,<peer_region>"`, importID)
+	}
+
+	d.SetId(connID)
+	if hasRegion {
+		_ = d.Set("peer_region", region)
+	}
+
+	if diags := resourceVPCPeeringRead(ctx, d, meta); diags.HasError() {
+		return nil, fmt.Errorf("%s", diags[0].Summary)
+	}
+
+	if d.Id() == "" {
+		return nil, fmt.Errorf("VPC peering %q not found", connID)
+	}
+
+	if d.Get("peer_region").(string) == "" {
+		return nil, fmt.Errorf(`the API returns no region for VPC peering %q, import it as "%s,<peer_region>"`, connID, connID)
+	}
+
+	return []*schema.ResourceData{d}, nil
 }
 
 func resourceVPCPeeringUpgradeV0(ctx context.Context, rawState map[string]interface{}, meta interface{}) (map[string]interface{}, error) {

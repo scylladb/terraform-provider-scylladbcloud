@@ -744,6 +744,99 @@ func TestResourceVPCPeeringRefresh(t *testing.T) {
 	}
 }
 
+func TestResourceVPCPeeringImport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		cloud        int
+		regionFields string
+		importID     string
+		wantRegion   string
+		wantErr      string
+	}{
+		{
+			name:         "AWS peering by its connection ID",
+			cloud:        testCloudAWS,
+			regionFields: `"region":"eu-central-2"`,
+			importID:     "pcx-1",
+			wantRegion:   "eu-central-2",
+		},
+		{
+			name:       "GCP peering with its region",
+			cloud:      testCloudGCP,
+			importID:   "pcx-1,us-west2",
+			wantRegion: "us-west2",
+		},
+		{
+			// The API returns no GCP region, so only the parser can trim it.
+			name:       "GCP peering with spaces around its parts",
+			cloud:      testCloudGCP,
+			importID:   " pcx-1 , us-west2 ",
+			wantRegion: "us-west2",
+		},
+		{
+			name:     "GCP peering without its region",
+			cloud:    testCloudGCP,
+			importID: "pcx-1",
+			wantErr:  `the API returns no region for VPC peering "pcx-1", import it as "pcx-1,<peer_region>"`,
+		},
+		{
+			name:     "unknown connection ID",
+			cloud:    testCloudGCP,
+			importID: "pcx-2,us-west2",
+			wantErr:  `VPC peering "pcx-2" not found`,
+		},
+		{
+			name:     "empty region",
+			importID: "pcx-1,",
+			wantErr:  `invalid import ID "pcx-1,", use "<connection_id>" or "<connection_id>,<peer_region>"`,
+		},
+		{
+			name:     "blank region",
+			importID: "pcx-1,  ",
+			wantErr:  `invalid import ID "pcx-1,  ", use "<connection_id>" or "<connection_id>,<peer_region>"`,
+		},
+		{
+			name:     "empty connection ID",
+			importID: ",us-west2",
+			wantErr:  `invalid import ID ",us-west2", use "<connection_id>" or "<connection_id>,<peer_region>"`,
+		},
+		{
+			name:     "extra field",
+			importID: "pcx-1,us-west2,x",
+			wantErr:  `invalid import ID "pcx-1,us-west2,x", use "<connection_id>" or "<connection_id>,<peer_region>"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := newNoAPI(t)
+			if tt.cloud != 0 {
+				srv = newReadAPI(t, tt.cloud, tt.regionFields)
+			}
+
+			d := schema.TestResourceDataRaw(t, ResourceVPCPeering().Schema, map[string]any{})
+			d.SetId(tt.importID)
+
+			got, err := resourceVPCPeeringImport(context.Background(), d, newTestClient(t, srv))
+
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			require.Equal(t, "pcx-1", got[0].Id())
+			require.Equal(t, tt.wantRegion, got[0].Get("peer_region"))
+			require.Equal(t, []any{testAPICIDR}, got[0].Get("peer_cidr_blocks"))
+		})
+	}
+}
+
 func TestResourceVPCPeeringValidate(t *testing.T) {
 	t.Parallel()
 

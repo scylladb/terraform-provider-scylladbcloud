@@ -1,0 +1,39 @@
+```release-note:bug
+resource/scylladbcloud_vpc_peering: `peer_region` accepts any AWS region, including regions where ScyllaDB Cloud does not deploy clusters. An opt-in region must be enabled in the peer AWS account
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: For GCP, `peer_region` no longer has to be a ScyllaDB Cloud region when `peer_cidr_blocks` is set, and a list that starts with the default CIDR block is accepted
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A GCP peering that uses the default CIDR block no longer plans a replacement on every run. To use the default CIDR block, omit `peer_cidr_blocks`: an empty list, `peer_cidr_blocks = []`, is now rejected
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A change to `cluster_id` plans a replacement instead of an update that always failed
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A `datacenter` that the cluster does not have fails with `unable to find "<name>" datacenter` instead of an error about the cloud provider
+```
+
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: `peer_region` is case-insensitive
+```
+
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, or a GCP peering in a region without a default CIDR block, fails at plan time instead of during apply
+```
+
+```release-note:note
+resource/scylladbcloud_vpc_peering: A GCP peering without `peer_cidr_blocks` whose `peer_region` is known only at apply time now fails at plan time. Set `peer_cidr_blocks` in such a configuration
+```
+
+```release-note:feature
+resource/scylladbcloud_vpc_peering: A GCP peering is imported with its region: `<connection_id>,<peer_region>`. Without the region, the import fails with a hint. A GCP peering imported with an earlier version has an empty `peer_region` in the state, and its next plan replaces it: remove it from the state and import it again with its region, as the import example shows
+```
+
+```release-note:note
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that plan. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the GCP region has a default CIDR block
+```
