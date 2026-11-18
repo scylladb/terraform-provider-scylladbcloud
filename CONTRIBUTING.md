@@ -34,6 +34,13 @@ We welcome contributions to this repository. Here are some guidelines to follow 
     - Try to avoid merging in main your branch instead of rebasing.
 - Merge your PR after getting at least one approval (two are preferable on larger PRs).
 
+## Generated-only resources
+
+`scylladbcloud_stack` exists only for the GCP BYOA and BYOK templates that
+`siren-byok` generates. It has no docs page, examples or acceptance tests on
+purpose. Do not remove it or change its schema, token format or provider
+arguments (`endpoint`, `metadata`, `trace`) without the Cloud BYOx squad.
+
 # Running Tests
 
 ## Unit Tests
