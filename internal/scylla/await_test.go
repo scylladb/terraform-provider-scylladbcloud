@@ -52,6 +52,18 @@ func TestAwaitClusterRequest(t *testing.T) {
 	}
 }
 
+func TestAwaitClusterRequestChecksBeforeWaiting(t *testing.T) {
+	t.Parallel()
+	srv := scyllatest.New(t)
+	srv.Sequence(http.MethodGet, requestPath, request("COMPLETED"))
+	c := srv.Client(t)
+	c.PollInterval = time.Hour
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, c.AwaitClusterRequest(ctx, 7))
+}
+
 func TestAwaitClusterRequestContextCanceled(t *testing.T) {
 	t.Parallel()
 	srv := scyllatest.New(t)
