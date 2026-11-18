@@ -1,6 +1,7 @@
 package vpcpeering
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -73,10 +74,12 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		cloud  int
-		region string
-		cidrs  []any
+		name  string
+		cloud int
+		// datacenter is DC1 when empty.
+		datacenter string
+		region     string
+		cidrs      []any
 		// wantSent holds the region and CIDR fields of the create request,
 		// a missing key means the field was not sent.
 		wantSent map[string]any
@@ -156,6 +159,14 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 			region:  "me-central2",
 			wantErr: `"peer_cidr_blocks" is required: "me-central2" has no default CIDR block`,
 		},
+		{
+			name:       "unknown datacenter",
+			cloud:      testCloudAWS,
+			datacenter: "DC2",
+			region:     "us-east-1",
+			cidrs:      []any{"192.168.0.0/16"},
+			wantErr:    `unable to find "DC2" datacenter`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -183,7 +194,7 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 
 			raw := map[string]any{
 				"cluster_id":      42,
-				"datacenter":      "DC1",
+				"datacenter":      cmp.Or(tt.datacenter, "DC1"),
 				"peer_vpc_id":     "vpc-1",
 				"peer_region":     tt.region,
 				"peer_account_id": "123",
