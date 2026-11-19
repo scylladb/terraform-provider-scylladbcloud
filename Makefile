@@ -32,6 +32,6 @@ list-testacc:
 # Pin to specific commit SHA aligned with the requested version.
 # The install.sh script performs checksum verification of the downloaded binary.
 $(GOPATH)/bin/golangci-lint:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/9f61b0f53f80672872fced07b6874397c3ed197b/install.sh | sh -s -- -b $(GOPATH)/bin v2.7.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/25c5369a93aacb8cccea0d46e1569ca4a194564d/install.sh | sh -s -- -b $(GOPATH)/bin v2.15.0
 
 .PHONY: build fmt generate lint test testacc
