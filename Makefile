@@ -1,4 +1,7 @@
 GOPATH?=$(shell go env GOPATH)
+GOLANGCI_LINT_VERSION:=v2.15.0
+GOLANGCI_LINT_INSTALL_SHA:=25c5369a93aacb8cccea0d46e1569ca4a194564d
+GOLANGCI_LINT:=$(GOPATH)/bin/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 build:
 	CGO_ENABLED=0 go build -o terraform-provider-scylladbcloud .
@@ -9,9 +12,9 @@ fmt:
 generate:
 	go generate ./...
 
-lint: $(GOPATH)/bin/golangci-lint
+lint: $(GOLANGCI_LINT)
 	go tool gofumpt -l -d -e .
-	$(GOPATH)/bin/golangci-lint run ./...
+	$(GOLANGCI_LINT) run ./...
 	go vet ./...
 
 test: run?=.*
@@ -31,7 +34,13 @@ list-testacc:
 # go tool is not recommended.
 # Pin to specific commit SHA aligned with the requested version.
 # The install.sh script performs checksum verification of the downloaded binary.
-$(GOPATH)/bin/golangci-lint:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/25c5369a93aacb8cccea0d46e1569ca4a194564d/install.sh | sh -s -- -b $(GOPATH)/bin v2.15.0
+# The version is in the file name, so a version change installs the new binary.
+# The temporary directory keeps any other golangci-lint in $(GOPATH)/bin as it is.
+$(GOLANGCI_LINT):
+	tmp=$$(mktemp -d) && \
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/$(GOLANGCI_LINT_INSTALL_SHA)/install.sh | sh -s -- -b $$tmp $(GOLANGCI_LINT_VERSION) && \
+	mkdir -p $(dir $@) && \
+	mv $$tmp/golangci-lint $@ && \
+	rmdir $$tmp
 
 .PHONY: build fmt generate lint test testacc
