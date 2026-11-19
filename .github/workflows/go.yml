@@ -32,6 +32,24 @@ jobs:
           version: v2.15
           install-only: true
       - run: make lint
+  docs:
+    runs-on: ubuntu-latest
+    name: docs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: make generate
+      - name: Fail if the generated files changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff
+            echo "::error::The generated docs are out of date. Run 'make generate' and commit the result."
+            exit 1
+          fi
   test-and-build:
     strategy:
       matrix:
