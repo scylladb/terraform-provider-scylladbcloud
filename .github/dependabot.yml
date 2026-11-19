@@ -9,8 +9,8 @@ updates:
       patterns:
       - "*"
   assignees:
-  - charconstpointer
-  - adambabik
+  - patrycja-ziemkiewicz
+  - evgeny-kirichuk
 - package-ecosystem: gomod
   directory: /
   schedule:
@@ -20,5 +20,5 @@ updates:
       patterns:
       - "*"
   assignees:
-  - charconstpointer
-  - adambabik
+  - patrycja-ziemkiewicz
+  - evgeny-kirichuk
