@@ -13,25 +13,52 @@ We welcome contributions to this repository. Here are some guidelines to follow 
 
 - Make sure your code follows the [Effective Go](https://golang.org/doc/effective_go.html).
 - Run the tests and make sure they pass before submitting your changes.
-- Use clear and descriptive commit messages.
 - Make sure you ran the formatter and the linters before submitting your code:
   - `make fmt`
   - `make lint`
 - Create a pull request, follow the PR template to fill the description.
 - The maintainers will review your pull request and may request changes or ask questions.
-    - <details><summary>The `git log` of you PR is also a subject of review, and you could be asked to fix it by squashing with a meaningful message or simply amending commits in the way that you see it fit.</summary>
-
-      Try to maintain a clean `git log` within your branch.
-      You may separate your changes into several commits to make the PR reviews easier.
-
-      If you push small commits addressing review comments to fix a small bug or typo, those should be squashed before merging.
-      It helps to think of you commits as something that will be easy to revert later, or bisect to identify bugs.
-      A commit for `some change` will be easier to handle than 3 commits about `some change` + `small fix` + `fix typo`.
-
-      </details>
     - Try to rebase your PR against main on a regular basis.
     - Try to avoid merging in main your branch instead of rebasing.
 - Merge your PR after getting at least one approval (two are preferable on larger PRs).
+
+## PR titles
+
+PRs are squash-merged. The PR title becomes the commit subject on `main`,
+and the PR description becomes the commit body. Commits inside the PR do
+not reach `main`, so you can push review fixes as separate commits.
+
+The PR title follows
+[Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+type(scope): subject
+```
+
+- **type** is one of:
+
+  | Type | Use it for | Version bump |
+  |------|------------|--------------|
+  | `feat` | A new resource, data source, field or behaviour | minor |
+  | `fix` | A bug fix | patch |
+  | `docs` | Docs, examples and templates only | none |
+  | `build` | Dependencies, Makefile, GoReleaser | none |
+  | `ci` | GitHub workflows | none |
+  | `test` | Tests only | none |
+  | `refactor` | A code change with no change in behaviour | none |
+  | `chore` | Other maintenance | none |
+  | `revert` | A revert of an earlier PR | depends |
+
+  Use `feat`, not `feature`.
+- **scope** is optional. Use the name of the package directory that
+  changes: `cluster`, `vpcpeering`, `allowlistrule`, `connection`,
+  `cqlauth`, `serverless`, `stack`, `scylla` (the API client) or
+  `provider`. Use `deps` for dependency updates.
+- **subject** is in the imperative mood ("add", not "added"). It starts
+  with a lowercase letter and has no period at the end. The full title has
+  50 characters or fewer.
+- A breaking change has `!` before the colon, for example
+  `feat(cluster)!: remove node_count`. See rule 11 below.
 
 ## Review rules
 
