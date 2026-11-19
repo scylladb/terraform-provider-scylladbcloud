@@ -1,0 +1,30 @@
+name: Bug report
+description: The provider does not do what the docs say.
+labels: ["bug"]
+body:
+  - type: input
+    id: provider-version
+    attributes:
+      label: Provider version
+      placeholder: "1.13.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Optional. The smallest configuration that shows the problem.
+      render: hcl
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Optional. The plan or apply output. Remove passwords and tokens first. TRACE and DEBUG logs can contain the CQL password.
+      render: shell
