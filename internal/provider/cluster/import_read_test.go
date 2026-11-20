@@ -24,6 +24,7 @@ func TestAlternatorWriteIsolationPlan(t *testing.T) {
 		{name: "imported CQL cluster", api: "CQL"},
 		{name: "CQL cluster, value set in config", api: "CQL", config: "always_use_lwt"},
 		{name: "imported Alternator cluster", api: "ALTERNATOR", isolation: "always_use_lwt", config: "always_use_lwt"},
+		{name: "imported Alternator cluster, API has no value", api: "ALTERNATOR"},
 		{name: "Alternator cluster, value changed", api: "ALTERNATOR", isolation: "only_rmw_uses_lwt", config: "always_use_lwt", wantDiff: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

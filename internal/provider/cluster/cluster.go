@@ -22,6 +22,8 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
+
+	defaultAlternatorWriteIsolation = "only_rmw_uses_lwt"
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -597,7 +599,7 @@ func ResourceCluster() *schema.Resource {
 				Optional:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
-				Default:     "only_rmw_uses_lwt",
+				Default:     defaultAlternatorWriteIsolation,
 				// A CQL cluster does not use the value, so a change must not
 				// replace it. An imported CQL cluster has no value in state.
 				DiffSuppressFunc: func(_, _, _ string, d *schema.ResourceData) bool {
@@ -1149,7 +1151,12 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	_ = d.Set("encryption_at_rest", flattenEncryptionAtRest(cluster.EncryptionAtRest))
 
 	if cluster.UserAPIInterface == "ALTERNATOR" {
-		_ = d.Set("alternator_write_isolation", cluster.AlternatorWriteIsolation)
+		isolation := cluster.AlternatorWriteIsolation
+		// The API has no value for clusters created before it stored one.
+		if isolation == "" {
+			isolation = defaultAlternatorWriteIsolation
+		}
+		_ = d.Set("alternator_write_isolation", isolation)
 	}
 
 	if id := cluster.Datacenter.AccountCloudProviderCredentialID; id >= 1000 {
