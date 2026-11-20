@@ -42,7 +42,7 @@ data "aws_caller_identity" "current" {}
 
 resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
-	datacenter = "AWS_EAST_1"
+	datacenter = "AWS_US_EAST_1"
 
 	peer_vpc_id      = aws_vpc.app.id
 	peer_cidr_blocks = [aws_vpc.app.cidr_block]
@@ -102,13 +102,13 @@ resource "google_compute_network_peering" "app" {
 - `cluster_id` (Number) Cluster ID
 - `datacenter` (String) Cluster datacenter name
 - `peer_account_id` (String) Peer Account ID
-- `peer_region` (String) Peer VPC region
+- `peer_region` (String) Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.
 - `peer_vpc_id` (String) Peer VPC ID
 
 ### Optional
 
 - `allow_cql` (Boolean) Whether to allow CQL traffic
-- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list
+- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -132,6 +132,26 @@ Optional:
 Import is supported using the following syntax:
 
 ```shell
-# A VPC peering connection can be imported by specifying the numeric identifier.
-terraform import scylladbcloud_vpc_peering.example 123
+# A VPC peering can be imported by its connection ID.
+terraform import scylladbcloud_vpc_peering.example pcx-0123456789abcdef0
+
+# The API does not return the region of a GCP peering, so the import ID of a
+# GCP peering also takes its peer region: <connection_id>,<peer_region>.
+terraform import scylladbcloud_vpc_peering.example np-1-0123abcd-peering-0123abcd,us-central1
+
+# A GCP peering imported with an earlier provider version has an empty
+# peer_region in its state. If the next plan replaces it because of
+# peer_region, note its connection_id, remove it from the state, and import
+# it again right away, at the same address and with its peer region. The
+# plan must then not replace it because of peer_region, but it can still
+# show other changes.
+terraform state show scylladbcloud_vpc_peering.example
+terraform state rm scylladbcloud_vpc_peering.example
+terraform import scylladbcloud_vpc_peering.example np-1-0123abcd-peering-0123abcd,us-central1
+terraform plan
+
+# Keep peer_cidr_blocks in the configuration of an AWS peering, and of a GCP
+# peering with custom CIDR blocks. Without the list, the next plan fails for
+# AWS, and replaces a GCP peering with one on the default CIDR block of its
+# region.
 ```
