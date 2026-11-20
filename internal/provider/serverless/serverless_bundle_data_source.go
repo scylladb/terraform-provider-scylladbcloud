@@ -21,7 +21,12 @@ func DataSourceServerlessBundle() *schema.Resource {
 			Read: schema.DefaultTimeout(20 * time.Minute),
 		},
 
-		DeprecationMessage: "This data source is deprecated and will be removed in one of the future releases of the provider.",
+		Description: "**Deprecated.** This data source will be removed in " + removalVersion + "." +
+			" For a `scylladbcloud_cluster`, read the connection details (seeds, username, password)" +
+			" from the `scylladbcloud_cql_auth` data source. No connection bundle file replaces it.",
+		DeprecationMessage: "scylladbcloud_serverless_bundle is deprecated and will be removed in " + removalVersion + "." +
+			" For a scylladbcloud_cluster, read the connection details (seeds, username, password)" +
+			" from the scylladbcloud_cql_auth data source. No connection bundle file replaces it.",
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {

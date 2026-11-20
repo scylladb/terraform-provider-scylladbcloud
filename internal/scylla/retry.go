@@ -65,7 +65,7 @@ func (rs *RetryStrategy) Classify(err error) retrier.Action {
 		Temporary() bool
 	}
 
-	if e := (temp)(nil); errors.As(err, &e) && e.Temporary() {
+	if e := temp(nil); errors.As(err, &e) && e.Temporary() {
 		return retrier.Retry
 	}
 
