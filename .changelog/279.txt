@@ -1,0 +1,3 @@
+```release-note:note
+resource/scylladbcloud_cluster: Creating an X Cloud cluster no longer sends the `tablets` field, which the ScyllaDB Cloud API has deprecated
+```
