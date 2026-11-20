@@ -1,0 +1,21 @@
+name: Sync Jira Based on PR Events
+
+# pull_request_target gives the job the Jira secret. No step checks out or runs
+# code from the PR.
+on:
+  pull_request_target:
+    types: [opened, edited, ready_for_review, review_requested, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  jira-sync:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: scylladb/github-automation/.github/workflows/main_pr_events_jira_sync.yml@f90b4ddaa7ad7b7dae0261bb08219fa6adea7b4a # main
+    with:
+      caller_action: ${{ github.event.action }}
+    secrets:
+      caller_jira_auth: ${{ secrets.USER_AND_KEY_FOR_JIRA_AUTOMATION }}
