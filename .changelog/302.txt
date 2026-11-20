@@ -1,0 +1,11 @@
+```release-note:bug
+resource/scylladbcloud_cluster: A CQL cluster ignores `alternator_write_isolation`, so the first plan after `terraform import` or a change to the value no longer replaces the cluster
+```
+
+```release-note:bug
+resource/scylladbcloud_allowlist_rule: Set `rule_id` on import
+```
+
+```release-note:bug
+provider: Reading allowlist rules, VPC peerings and cluster connections no longer fails when the account has a cluster whose creation failed
+```
