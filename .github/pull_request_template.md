@@ -28,6 +28,6 @@
 - [ ] I have adjusted `examples/` or `templates/` and ran `make generate`.
   - [ ] N/A (The PR doesn't need any docs changes)
 - [ ] I added a changelog entry in `.changelog/<PR number>.txt`.
-  - [ ] N/A (No user-visible change)
+  - [ ] N/A (No user-visible change. The PR has the `no-changelog` label)
 - [ ] I added appropriate `Fixes:` annotations to PR description.
   - [ ] N/A (The PR doesn't need an issue)

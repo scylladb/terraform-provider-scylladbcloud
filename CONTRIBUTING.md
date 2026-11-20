@@ -55,8 +55,8 @@ type(scope): subject
   `cqlauth`, `serverless`, `stack`, `scylla` (the API client) or
   `provider`. Use `deps` for dependency updates.
 - **subject** is in the imperative mood ("add", not "added"). It starts
-  with a lowercase letter and has no period at the end. The full title has
-  50 characters or fewer.
+  with a lowercase letter and has no period at the end. Aim for 50
+  characters or fewer for the full title. CI doesn't check the length.
 - A breaking change has `!` before the colon, for example
   `feat(cluster)!: remove node_count`. See rule 11 below.
 
@@ -106,7 +106,9 @@ checks each rule before asking for review. The reviewer checks them again.
 Each PR that changes what users see adds a changelog entry: a change to a
 resource, a data source, a field, the provider behaviour or a deprecation.
 The release notes of the next version are made from these entries. A PR
-that changes only tests, CI or internal code needs no entry.
+that changes only tests, CI or internal code needs no entry. Add the
+`no-changelog` label to it instead. CI checks for the entry or the label.
+Dependabot PRs are skipped.
 
 Put the entry in `.changelog/<PR number>.txt`. Open the PR first to get
 the number. Each entry is a fenced block. The type of the block is one of:
