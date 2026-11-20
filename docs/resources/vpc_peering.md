@@ -17,10 +17,10 @@ resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
 	datacenter = "AWS_US_EAST_1"
 
-	peer_vpc_id     = "vpc-1234"
-	peer_cidr_block = "192.168.0.0/16"
-	peer_region     = "us-east-1"
-	peer_account_id = "123"
+	peer_vpc_id      = "vpc-1234"
+	peer_cidr_blocks = ["192.168.0.0/16"]
+	peer_region      = "us-east-1"
+	peer_account_id  = "123"
 
 	allow_cql = true
 }
@@ -44,10 +44,10 @@ resource "scylladbcloud_vpc_peering" "example" {
 	cluster_id = 1337
 	datacenter = "AWS_EAST_1"
 
-	peer_vpc_id     = aws_vpc.app.id
-	peer_cidr_block = aws_vpc.app.cidr_block
-	peer_region     = "us-east-1"
-	peer_account_id = data.aws_caller_identity.current.account_id
+	peer_vpc_id      = aws_vpc.app.id
+	peer_cidr_blocks = [aws_vpc.app.cidr_block]
+	peer_region      = "us-east-1"
+	peer_account_id  = data.aws_caller_identity.current.account_id
 
 	allow_cql = true
 }

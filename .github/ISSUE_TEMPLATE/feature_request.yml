@@ -1,0 +1,11 @@
+name: Feature request
+description: Ask for a new resource, data source or field.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: What do you need
+      description: What you want to do with Terraform and cannot do today. An example configuration helps.
+    validations:
+      required: true

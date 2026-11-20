@@ -1,0 +1,90 @@
+name: PR checks
+
+# PRs are squash-merged: the PR title becomes the commit subject on main and
+# decides the version bump. The changelog entry becomes the release notes.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            build
+            ci
+            test
+            refactor
+            chore
+            revert
+          requireScope: false
+
+  changelog:
+    name: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for a skip
+        id: skip
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          NO_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+        run: |
+          if [ "$NO_CHANGELOG" = "true" ]; then
+            echo "The PR has the no-changelog label."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependency updates need no changelog entry."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.skip.outputs.skip != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .changelog
+      - name: Check the changelog entry
+        if: steps.skip.outputs.skip != 'true'
+        env:
+          FILE: .changelog/${{ github.event.pull_request.number }}.txt
+        run: |
+          if [ ! -f "$FILE" ]; then
+            echo "::error::Add $FILE with the release note, or add the no-changelog label if users see no change. See the Changelog section in CONTRIBUTING.md."
+            exit 1
+          fi
+          awk -v file="$FILE" '
+            /^```release-note:/ {
+              if (open) { printf "::error file=%s,line=%d::A block starts before the previous block ends.\n", file, NR; bad = 1 }
+              type = substr($0, 17)
+              if (type !~ /^(breaking-change|new-resource|new-data-source|feature|enhancement|bug|note)$/) {
+                printf "::error file=%s,line=%d::Unknown block type \"%s\".\n", file, NR, type; bad = 1
+              }
+              open = 1; text = 0; blocks++; start = NR; next
+            }
+            /^```$/ {
+              if (!open) { printf "::error file=%s,line=%d::A block ends without a start.\n", file, NR; bad = 1 }
+              else if (!text) { printf "::error file=%s,line=%d::The block is empty.\n", file, start; bad = 1 }
+              open = 0; next
+            }
+            open && NF { text = 1 }
+            END {
+              if (open) { printf "::error file=%s,line=%d::The block is not closed.\n", file, start; bad = 1 }
+              if (!blocks) { printf "::error file=%s::The file has no release-note block.\n", file; bad = 1 }
+              exit bad
+            }
+          ' "$FILE"
+          echo "$FILE is valid."
