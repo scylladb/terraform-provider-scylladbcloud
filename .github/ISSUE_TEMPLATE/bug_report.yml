@@ -20,7 +20,7 @@ body:
     id: config
     attributes:
       label: Configuration
-      description: Optional. The smallest configuration that shows the problem.
+      description: Optional. The smallest configuration that shows the problem. Remove the API token from the provider block first.
       render: hcl
   - type: textarea
     id: output
