@@ -1,8 +1,1 @@
-/internal/provider/scylla/         @charconstpointer
-/internal/provider/stack/          @charconstpointer
-/internal/provider/allowlistrule/  @charconstpointer
-/internal/provider/cluster/        @charconstpointer @ksinica
-/internal/provider/cqlauth/        @charconstpointer
-/internal/provider/serverless/     @charconstpointer
-/internal/provider/vpcpeering/     @charconstpointer
-/internal/provider/connection/     @charconstpointer
+* @patrycja-ziemkiewicz @evgeny-kirichuk
