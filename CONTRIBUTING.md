@@ -67,7 +67,9 @@ checks each rule before asking for review. The reviewer checks them again.
 
 1. **Upgrade plans "No changes".** A resource made by the last release
    must plan "No changes" with the new build. A new field on an existing
-   resource is Optional and Computed.
+   resource is Optional. Make it also Computed only when the API sets a
+   value the user did not set. A Computed field keeps its last value when
+   the user removes it from the configuration.
 2. **Old state keeps working.** If you rename a field or change its type,
    increase `SchemaVersion` by 1 and add a state upgrader that converts the
    old state.
