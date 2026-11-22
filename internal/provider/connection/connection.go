@@ -375,13 +375,13 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 	}
 
 	for i := range clusters {
-		cluster = &clusters[i]
-		connection, err = c.GetClusterConnection(ctx, cluster.ID, connectionID)
+		id := clusters[i].ID
+		connection, err = c.GetClusterConnection(ctx, id, connectionID)
 		if err == nil {
 			// Repopulate cluster with detailed information
-			cluster, err = c.GetCluster(ctx, cluster.ID)
+			cluster, err = c.GetCluster(ctx, id)
 			if err != nil {
-				return nil, nil, fmt.Errorf("error reading cluster %d: %s", clusterID, err)
+				return nil, nil, fmt.Errorf("error reading cluster %d: %s", id, err)
 			}
 			return cluster, connection, nil
 		}

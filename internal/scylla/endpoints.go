@@ -2,6 +2,7 @@ package scylla
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -192,8 +193,19 @@ func (c *Client) UpdateDcScalingPolicy(ctx context.Context, clusterID, dcID int6
 	return &result, nil
 }
 
-func (c *Client) ListClusters(ctx context.Context) ([]model.Cluster, error) {
-	var result model.Clusters
+// ListClusters lists the clusters of the account. A cluster the API could not
+// read fails the list: the callers look a resource up across all clusters,
+// and a missing cluster would make them remove the resource from the state.
+func (c *Client) ListClusters(ctx context.Context) ([]model.ClusterSummary, error) {
+	var result struct {
+		Clusters []struct {
+			model.ClusterSummary
+
+			// Error replaces the cluster fields for a cluster the API could
+			// not read.
+			Error json.RawMessage `json:"error"`
+		} `json:"clusters"`
+	}
 
 	path := fmt.Sprintf("/account/%d/clusters", c.AccountID)
 
@@ -201,7 +213,15 @@ func (c *Client) ListClusters(ctx context.Context) ([]model.Cluster, error) {
 		return nil, err
 	}
 
-	return result.Clusters, nil
+	clusters := make([]model.ClusterSummary, 0, len(result.Clusters))
+	for _, entry := range result.Clusters {
+		if len(entry.Error) > 0 {
+			return nil, fmt.Errorf("the API could not read a cluster of the account: %s", entry.Error)
+		}
+		clusters = append(clusters, entry.ClusterSummary)
+	}
+
+	return clusters, nil
 }
 
 type ListClusterRequestParams struct {

@@ -204,8 +204,15 @@ type ClusterCertificate struct {
 	Content string `json:"content"`
 }
 
-type Clusters struct {
-	Clusters []Cluster `json:"clusters"`
+// ClusterSummary is a cluster in the account cluster list. It holds only what
+// the provider reads from the list, so a change in another field of the list
+// cannot break it.
+type ClusterSummary struct {
+	ID int64 `json:"id"`
+
+	// DCCount is the number of datacenters. The API omits it for a cluster
+	// that has no datacenter yet.
+	DCCount int `json:"dcCount"`
 }
 
 type ExpirationTime struct {

@@ -94,7 +94,7 @@ func resourceAllowlistRuleCreate(ctx context.Context, d *schema.ResourceData, me
 func resourceAllowlistRuleRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
 		c       = meta.(*scylla.Client)
-		cluster *model.Cluster
+		cluster *model.ClusterSummary
 		rule    *model.AllowedIP
 	)
 
