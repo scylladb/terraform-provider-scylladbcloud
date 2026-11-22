@@ -375,6 +375,12 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 	}
 
 	for i := range clusters {
+		// A cluster without a datacenter has no connection. The API can fail
+		// the lookup for it instead of reporting that it found none.
+		if clusters[i].DCCount == 0 {
+			continue
+		}
+
 		id := clusters[i].ID
 		connection, err = c.GetClusterConnection(ctx, id, connectionID)
 		if err == nil {

@@ -9,3 +9,7 @@ resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while 
 ```release-note:bug
 resource/scylladbcloud_cluster: Reading a cluster no longer fails when the API cannot report its instance. If only the instance lookup of the API fails, the read and the import work as usual. While none of the nodes of a Standard cluster is ACTIVE, the read keeps `node_type`, `node_disk_size` and `min_nodes` from the state, and an import fails until a node is ACTIVE
 ```
+
+```release-note:bug
+resource/scylladbcloud_cluster_connection: Importing a cluster connection no longer fails while the account has a public cluster without a datacenter, for example right after it is created
+```
