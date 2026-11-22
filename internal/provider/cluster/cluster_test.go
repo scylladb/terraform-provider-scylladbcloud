@@ -345,9 +345,6 @@ func TestSetClusterKVsSetsScaling(t *testing.T) {
 		Status:           "ACTIVE",
 		Region:           &model.CloudProviderRegion{ExternalID: "us-east-1"},
 		ScyllaVersion:    &model.ScyllaVersion{Version: "2025.1"},
-		// The API reports the instance the cluster currently runs on even for
-		// X Cloud clusters; the provider must not track it.
-		Instance: &model.CloudProviderInstance{ID: 2, ExternalID: "i3.xlarge", TotalStorage: 468},
 		Datacenter: &model.Datacenter{
 			Name:       "AWS_US_EAST_1",
 			CIDRBlock:  "172.31.0.0/16",
@@ -372,9 +369,11 @@ func TestSetClusterKVsSetsScaling(t *testing.T) {
 			},
 		}},
 	}
-	instances := []model.CloudProviderInstance{{ID: 2, ExternalID: "i3.xlarge"}}
+	instances := []model.CloudProviderInstance{{ID: 2, ExternalID: "i3.xlarge", TotalStorage: 468}}
 
-	err := setClusterKVs(data, cluster, "AWS", "", "", instances, &scylla.CloudProvider{})
+	// The datacenter reports the instance the cluster currently runs on even
+	// for X Cloud clusters; the provider must not track it.
+	err := setClusterKVs(data, cluster, "AWS", &instances[0], "", instances, &scylla.CloudProvider{})
 	require.NoError(t, err)
 	require.Equal(t, []interface{}{map[string]interface{}{
 		"instance_families": []interface{}{},
@@ -409,7 +408,6 @@ func TestSetClusterKVsSetsInstanceForStandardCluster(t *testing.T) {
 		Status:           "ACTIVE",
 		Region:           &model.CloudProviderRegion{ExternalID: "us-east-1"},
 		ScyllaVersion:    &model.ScyllaVersion{Version: "2025.1"},
-		Instance:         &model.CloudProviderInstance{ID: 2, ExternalID: "i3.xlarge", TotalStorage: 468},
 		Datacenter: &model.Datacenter{
 			Name:       "AWS_US_EAST_1",
 			CIDRBlock:  "172.31.0.0/16",
@@ -417,8 +415,9 @@ func TestSetClusterKVsSetsInstanceForStandardCluster(t *testing.T) {
 		},
 		Datacenters: []model.Datacenter{{}},
 	}
+	instance := &model.CloudProviderInstance{ID: 2, ExternalID: "i3.xlarge", TotalStorage: 468}
 
-	require.NoError(t, setClusterKVs(data, cluster, "AWS", "i3.xlarge", "", nil, &scylla.CloudProvider{}))
+	require.NoError(t, setClusterKVs(data, cluster, "AWS", instance, "", nil, &scylla.CloudProvider{}))
 	require.Equal(t, "i3.xlarge", data.Get("node_type"))
 	require.Equal(t, 468, data.Get("node_disk_size"))
 	require.Empty(t, data.Get("scaling"))
@@ -739,7 +738,7 @@ func TestSetClusterKVsSetsCACertificate(t *testing.T) {
 		Datacenters: []model.Datacenter{{}},
 	}
 
-	err := setClusterKVs(data, cluster, "AWS", "", pem, nil, &scylla.CloudProvider{})
+	err := setClusterKVs(data, cluster, "AWS", nil, pem, nil, &scylla.CloudProvider{})
 	require.NoError(t, err)
 	require.Equal(t, pem, data.Get("ca_certificate"))
 }
@@ -943,7 +942,7 @@ func TestSetClusterKVsSetsEncryptionAtRest(t *testing.T) {
 		EncryptionAtRest: &model.EncryptionAtRest{Provider: "scylla-aws", KeyID: "key-T10FDq19E1b8Vukm"},
 	}
 
-	require.NoError(t, setClusterKVs(data, cluster, "AWS", "", "", nil, &scylla.CloudProvider{}))
+	require.NoError(t, setClusterKVs(data, cluster, "AWS", nil, "", nil, &scylla.CloudProvider{}))
 	require.Equal(t, []interface{}{map[string]interface{}{
 		"enabled":  true,
 		"key_id":   "key-T10FDq19E1b8Vukm",

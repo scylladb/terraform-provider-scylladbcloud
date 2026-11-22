@@ -154,25 +154,24 @@ type ClusterCreateRequest struct {
 }
 
 type Cluster struct {
-	ID                  int64                  `json:"id"`
-	AccountID           int64                  `json:"accountId"`
-	ClusterName         string                 `json:"clusterName"`
-	Status              string                 `json:"status"`
-	InstanceID          int64                  `json:"instanceId"`
-	CloudProviderID     int64                  `json:"cloudProviderId"`
-	ScyllaVersionID     int64                  `json:"scyllaVersionId"`
-	UserAPIInterface    string                 `json:"userApiInterface"`
-	PricingModel        int64                  `json:"pricingModel"`
-	MaxAllowedCIDRRange int64                  `json:"maxAllowedCidrRange"`
-	DNS                 bool                   `json:"dns"`
-	CloudProvider       *CloudProvider         `json:"cloudProvider"`
-	ScyllaVersion       *ScyllaVersion         `json:"scyllaVersion"`
-	Region              *CloudProviderRegion   `json:"region"`
-	Instance            *CloudProviderInstance `json:"instance"`
-	Datacenter          *Datacenter            `json:"dc"`
-	FreeTier            *ExpirationTime        `json:"freeTier"`
-	JumpStart           *ExpirationTime        `json:"jumpStart"`
-	Progress            *Progress              `json:"progress"`
+	ID                  int64                `json:"id"`
+	AccountID           int64                `json:"accountId"`
+	ClusterName         string               `json:"clusterName"`
+	Status              string               `json:"status"`
+	InstanceID          int64                `json:"instanceId"`
+	CloudProviderID     int64                `json:"cloudProviderId"`
+	ScyllaVersionID     int64                `json:"scyllaVersionId"`
+	UserAPIInterface    string               `json:"userApiInterface"`
+	PricingModel        int64                `json:"pricingModel"`
+	MaxAllowedCIDRRange int64                `json:"maxAllowedCidrRange"`
+	DNS                 bool                 `json:"dns"`
+	CloudProvider       *CloudProvider       `json:"cloudProvider"`
+	ScyllaVersion       *ScyllaVersion       `json:"scyllaVersion"`
+	Region              *CloudProviderRegion `json:"region"`
+	Datacenter          *Datacenter          `json:"dc"`
+	FreeTier            *ExpirationTime      `json:"freeTier"`
+	JumpStart           *ExpirationTime      `json:"jumpStart"`
+	Progress            *Progress            `json:"progress"`
 
 	ReplicationFactor        int64        `json:"replicationFactor,omitempty"`
 	BroadcastType            string       `json:"broadcastType,omitempty"`

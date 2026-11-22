@@ -44,7 +44,7 @@ func TestAlternatorWriteIsolationPlan(t *testing.T) {
 				Datacenter:               &model.Datacenter{Name: "AWS_US_EAST_1", CIDRBlock: "172.31.0.0/16"},
 				Datacenters:              []model.Datacenter{{}},
 			}
-			require.NoError(t, setClusterKVs(d, cluster, "AWS", "", "", nil, &scylla.CloudProvider{}))
+			require.NoError(t, setClusterKVs(d, cluster, "AWS", nil, "", nil, &scylla.CloudProvider{}))
 
 			config := map[string]any{"user_api_interface": tt.api, "node_type": "i8g.large", "min_nodes": 3}
 			if tt.config != "" {

@@ -974,22 +974,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	// The instance the cluster runs on is only tracked for Standard clusters.
-	// X Cloud picks it from the scaling policy and changes it as the cluster
-	// scales, so resolving it here would only produce a value setClusterKVs
-	// discards.
-	instanceExternalID := ""
-	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
-		i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
-		if i == nil {
-			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
-		}
-		instanceExternalID = i.ExternalID
+	instance, err := standardInstance(cluster, instances, cloudProvider)
+	if err != nil {
+		return diag.FromErr(err)
 	}
 	caCert, certWarns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
 	warns = append(warns, certWarns...)
 
-	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
+	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instance, caCert, instances, cloudProvider)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -1048,21 +1040,24 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	var instanceExternalID string
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
 	}
-	// Standard clusters only; see the matching comment in resourceClusterCreate.
-	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
-		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
-		if i == nil {
-			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
-		}
-		instanceExternalID = i.ExternalID
+
+	instance, err := standardInstance(cluster, instances, p)
+	if err != nil {
+		return diag.FromErr(err)
 	}
+
+	// Without the instance, the read keeps node_type from the state, and the
+	// state of an import has none.
+	if instance == nil && !hasScaling(cluster) && d.Get("node_type").(string) == "" {
+		return diag.Errorf("cluster %d has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes", cluster.ID)
+	}
+
 	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
-	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, caCert, instances, p)
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instance, caCert, instances, p)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -1107,7 +1102,26 @@ func fetchCACertificate(ctx context.Context, c *scylla.Client, clusterID int64, 
 	return cert.Content, nil
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
+// standardInstance returns the instance a Standard cluster runs on, from the
+// instances of its region. It returns nil for an X Cloud cluster, which picks
+// its instances from the scaling policy and changes them as it scales. It
+// also returns nil while the datacenter has no ACTIVE node: the API then
+// reports instance ID 0.
+func standardInstance(cluster *model.Cluster, instances []model.CloudProviderInstance, p *scylla.CloudProvider) (*model.CloudProviderInstance, error) {
+	if hasScaling(cluster) || cluster.Datacenter.InstanceID == 0 {
+		return nil, nil
+	}
+
+	i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
+	if i == nil {
+		return nil, fmt.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
+	}
+	return i, nil
+}
+
+// setClusterKVs sets the state from cluster. instance is the instance of a
+// Standard cluster, from standardInstance.
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName string, instance *model.CloudProviderInstance, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
@@ -1130,6 +1144,11 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 			return err
 		}
 		_ = d.Set("scaling", scaling)
+	} else if instance == nil {
+		// Without the instance, which the API cannot report while the
+		// datacenter has no ACTIVE node, keep min_nodes, node_type and
+		// node_disk_size: 0 and "" would plan a resize or a replacement.
+		_ = d.Set("scaling", []map[string]interface{}{})
 	} else if minNodes, ok := d.GetOk("min_nodes"); !ok {
 		_ = d.Set("scaling", []map[string]interface{}{})
 		_ = d.Set("min_nodes", nodeCount)
@@ -1152,8 +1171,8 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
 
-	if !hasScaling(cluster) {
-		_ = d.Set("node_type", instanceExternalID)
+	if !hasScaling(cluster) && instance != nil {
+		_ = d.Set("node_type", instance.ExternalID)
 	}
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	_ = d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
@@ -1174,8 +1193,8 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		_ = d.Set("byoa_id", id)
 	}
 
-	if !hasScaling(cluster) && cluster.Instance != nil {
-		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
+	if !hasScaling(cluster) && instance != nil {
+		_ = d.Set("node_disk_size", instance.TotalStorage)
 	}
 
 	azIDs := cluster.Datacenter.AvailabilityZoneIDs()
