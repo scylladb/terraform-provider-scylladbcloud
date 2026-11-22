@@ -233,6 +233,13 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 
 lookup:
 	for i := range clusters {
+		// A cluster gets its datacenter when its bootstrap starts, and one
+		// whose create failed early never gets one. Such a cluster has no
+		// peering, and reading it fails.
+		if clusters[i].DCCount == 0 {
+			continue
+		}
+
 		c, err := c.GetCluster(ctx, clusters[i].ID)
 		if err != nil {
 			return diag.Errorf("error reading cluster ID=%d: %s", clusters[i].ID, err)
