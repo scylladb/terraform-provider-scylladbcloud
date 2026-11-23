@@ -1062,6 +1062,16 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
+	// The plan shows no change for the values kept from the state, so say
+	// that they were not checked.
+	if instance == nil && !hasScaling(cluster) {
+		warns = append(warns, diag.Diagnostic{
+			Severity: diag.Warning,
+			Summary:  fmt.Sprintf("cluster %d has no ACTIVE node", cluster.ID),
+			Detail:   "The read keeps node_type, node_disk_size and min_nodes from the state, and does not check them for changes made outside Terraform.",
+		})
+	}
+
 	return append(warns, alternatorIsolationWarning(cluster)...)
 }
 

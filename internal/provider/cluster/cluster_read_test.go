@@ -52,7 +52,9 @@ func TestResourceClusterReadInstance(t *testing.T) {
 		instance   string
 		nodes      string
 		wantErr    string
-		wantCount  int
+		// wantWarn is the warning of the read, "" for none.
+		wantWarn  string
+		wantCount int
 	}{
 		{
 			name:       "refresh while no node is ACTIVE",
@@ -60,6 +62,7 @@ func TestResourceClusterReadInstance(t *testing.T) {
 			instanceID: 0,
 			instance:   placeholderInstance,
 			nodes:      `[]`,
+			wantWarn:   "cluster 42 has no ACTIVE node",
 			wantCount:  0,
 		},
 		{
@@ -143,6 +146,16 @@ func TestResourceClusterReadInstance(t *testing.T) {
 				return
 			}
 			require.False(t, diags.HasError(), "%v", diags)
+
+			var warns []string
+			for _, w := range diags {
+				warns = append(warns, w.Summary)
+			}
+			if tt.wantWarn == "" {
+				require.Empty(t, warns)
+			} else {
+				require.Equal(t, []string{tt.wantWarn}, warns)
+			}
 
 			for k, v := range managed {
 				require.Equal(t, v, d.Get(k), k)
