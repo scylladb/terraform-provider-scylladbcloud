@@ -1,0 +1,3 @@
+```release-note:bug
+resource/scylladbcloud_cluster: When a cluster create fails or times out, the cluster stays in state as tainted, and the next apply deletes it and creates a new one. Before, the cluster ran in ScyllaDB Cloud outside Terraform. Refresh no longer fails for a cluster whose create failed: it shows a warning with the reason and sets `status` to `CREATE_FAILED`
+```
