@@ -228,51 +228,30 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 		stateClusterID = int64(d.Get("cluster_id").(int))
 	)
 
-	clusters, unreadable, err := c.ListClusters(ctx)
+	l, err := listPeeringClusters(ctx, c, stateClusterID)
 	if err != nil {
-		return diag.Errorf("error reading cluster list: %s", err)
-	}
-
-	// All the clusters of a shared network list its peerings, so a refresh
-	// looks in the cluster of the state first. unchecked counts the clusters
-	// that may list the peering but cannot be read.
-	var (
-		stateCluster, others []model.ClusterSummary
-		unchecked            = unreadable
-	)
-	for _, cl := range clusters {
-		switch {
-		case cl.ID == stateClusterID:
-			stateCluster = append(stateCluster, cl)
-		case cl.DCCount == 0:
-			// The API counts only ACTIVE datacenters, and reading a cluster
-			// without one fails. A cluster whose create failed early never
-			// gets one.
-			unchecked++
-		default:
-			others = append(others, cl)
-		}
+		return diag.FromErr(err)
 	}
 
 	// The cluster of the peering can be listed without an ACTIVE datacenter
 	// too. Removing the peering from the state is safe only when its cluster
 	// was read or is gone.
-	if len(stateCluster) > 0 && stateCluster[0].DCCount == 0 {
+	if len(l.state) > 0 && l.state[0].DCCount == 0 {
 		return retryDiag(stateClusterID, "cluster %d of VPC peering %q is listed without a datacenter, so the peering cannot be read: "+
 			"try again when the cluster has an ACTIVE datacenter", stateClusterID, connID)
 	}
 
-	cluster, vpcPeering, err := findPeering(ctx, c, stateCluster, connID)
+	cluster, vpcPeering, err := findPeering(ctx, c, l.state, connID)
 	if err == nil && cluster == nil {
-		cluster, vpcPeering, err = findPeering(ctx, c, others, connID)
+		cluster, vpcPeering, err = findPeering(ctx, c, l.others, connID)
 	}
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	if cluster == nil && unchecked > 0 {
+	if cluster == nil && l.unchecked > 0 {
 		return retryDiag(stateClusterID, "VPC peering %q was not found, but %d of the clusters of the account could not be read, "+
-			"and they may list it: try again later", connID, unchecked)
+			"and they may list it: try again later", connID, l.unchecked)
 	}
 
 	if cluster == nil {
@@ -287,18 +266,13 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 	if stateClusterID != 0 && cluster.ID != stateClusterID {
 		// The list has no ID for a cluster the API could not read, so such a
 		// cluster can be the cluster of the state, and still list the peering.
-		if len(stateCluster) == 0 && unreadable > 0 {
+		if len(l.state) == 0 && l.unreadable > 0 {
 			return retryDiag(stateClusterID, "VPC peering %q is listed by cluster %d, but cluster %d of the state is not listed, "+
-				"and the API could not read %d of the clusters of the account: try again later", connID, cluster.ID, stateClusterID, unreadable)
+				"and the API could not read %d of the clusters of the account: try again later", connID, cluster.ID, stateClusterID, l.unreadable)
 		}
 
-		return diag.Diagnostics{{
-			Severity: diag.Error,
-			Summary: fmt.Sprintf("VPC peering %q is not listed by cluster %d of the state but by cluster %d: "+
-				"to manage it through that cluster, remove it from the state and import it again", connID, stateClusterID, cluster.ID),
-			Detail: "An import takes the first cluster that lists the peering. Check the `cluster_id` that it stores, " +
-				"and the next plan, before applying.",
-		}}
+		return importDiag("VPC peering %q is not listed by cluster %d of the state but by cluster %d: "+
+			"to manage it through that cluster, remove it from the state and import it again", connID, stateClusterID, cluster.ID)
 	}
 
 	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
@@ -323,6 +297,49 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 	_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
 
 	return nil
+}
+
+// peeringClusters is the cluster list of the account, as a peering lookup
+// sees it.
+type peeringClusters struct {
+	// state holds the cluster in cluster_id, when the list has it.
+	state []model.ClusterSummary
+	// others holds the other clusters that can be read.
+	others []model.ClusterSummary
+	// unreadable counts the entries the API could not read. The list has no
+	// ID for them.
+	unreadable int
+	// unchecked counts the clusters that may list the peering but cannot be
+	// read: the unreadable entries, and the clusters without an ACTIVE
+	// datacenter.
+	unchecked int
+}
+
+// listPeeringClusters lists the clusters of the account. All the clusters of
+// a shared network list its peerings, so a lookup looks in the cluster in
+// cluster_id first. stateClusterID is 0 on import.
+func listPeeringClusters(ctx context.Context, c *scylla.Client, stateClusterID int64) (*peeringClusters, error) {
+	clusters, unreadable, err := c.ListClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error reading cluster list: %w", err)
+	}
+
+	l := &peeringClusters{unreadable: unreadable, unchecked: unreadable}
+	for _, cl := range clusters {
+		switch {
+		case cl.ID == stateClusterID:
+			l.state = append(l.state, cl)
+		case cl.DCCount == 0:
+			// The API counts only ACTIVE datacenters, and reading a cluster
+			// without one fails. A cluster whose create failed early never
+			// gets one.
+			l.unchecked++
+		default:
+			l.others = append(l.others, cl)
+		}
+	}
+
+	return l, nil
 }
 
 // findPeering returns the first of clusters that lists the peering connID, and
@@ -361,6 +378,17 @@ func retryDiag(stateClusterID int64, format string, a ...any) diag.Diagnostics {
 	return diag.Diagnostics{d}
 }
 
+// importDiag returns an error that asks to import the peering again, with a
+// detail on how an import picks its cluster.
+func importDiag(format string, a ...any) diag.Diagnostics {
+	return diag.Diagnostics{{
+		Severity: diag.Error,
+		Summary:  fmt.Sprintf(format, a...),
+		Detail: "An import takes the first cluster that lists the peering. Check the `cluster_id` that it stores, " +
+			"and the next plan, before applying.",
+	}}
+}
+
 func resourceVPCPeeringUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return diag.Errorf(`updating "scylla_vpc_peering" resource is not supported`)
 }
@@ -378,12 +406,43 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("unable to read cluster ID from state file")
 	}
 
-	if err := c.DeleteClusterVPCPeering(ctx, int64(clusterID.(int)), int64(peerID.(int))); err != nil {
-		if scylla.IsDeletedErr(err) {
-			return nil // cluster was already deleted
-		}
-
+	err := c.DeleteClusterVPCPeering(ctx, int64(clusterID.(int)), int64(peerID.(int)))
+	switch {
+	case err == nil:
+		return nil
+	case scylla.IsDeletedErr(err):
+		// The cluster was deleted. A network outlives a deleted cluster
+		// while other clusters use it, and so do its peerings.
+		return checkPeeringGone(ctx, c, d.Id(), int64(clusterID.(int)))
+	default:
 		return diag.Errorf("error deleting vpc peering: %s", err)
+	}
+}
+
+// checkPeeringGone returns an error unless a complete search finds that no
+// cluster lists the peering connID, whose cluster stateClusterID was
+// deleted. After a delete that succeeds, the peering leaves the state.
+func checkPeeringGone(ctx context.Context, c *scylla.Client, connID string, stateClusterID int64) diag.Diagnostics {
+	l, err := listPeeringClusters(ctx, c, stateClusterID)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	// The list leaves out a deleted cluster. Should it still have the cluster,
+	// the search reads it too, and fails when it has no datacenter.
+	cluster, _, err := findPeering(ctx, c, append(l.state, l.others...), connID)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	if cluster != nil {
+		return importDiag("cluster %d of VPC peering %q was deleted, but cluster %d still lists the peering: "+
+			"to delete it through that cluster, remove it from the state, import it again and destroy it", stateClusterID, connID, cluster.ID)
+	}
+
+	if l.unchecked > 0 {
+		return retryDiag(stateClusterID, "cluster %d of VPC peering %q was deleted, but %d of the clusters of the account could not be read, "+
+			"and they may list the peering: try again later", stateClusterID, connID, l.unchecked)
 	}
 
 	return nil
