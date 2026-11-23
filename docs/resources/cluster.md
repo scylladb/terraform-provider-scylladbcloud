@@ -88,7 +88,7 @@ output "scylladbcloud_cluster_encryption_key_provider" {
 - `node_dns_names` (Set of String) The cluster nodes DNS names.
 - `node_private_ips` (Set of String) The cluster nodes private IP addresses.
 - `request_id` (Number) The cluster creation request ID.
-- `status` (String) The cluster status.
+- `status` (String) The cluster status from the API, for example `ACTIVE`. The provider sets two values itself: `DELETED` when the cluster was deleted outside Terraform, and `CREATE_FAILED` when the create request of the cluster failed. Destroy or replace a cluster with status `CREATE_FAILED`.
 
 <a id="nestedblock--encryption_at_rest"></a>
 ### Nested Schema for `encryption_at_rest`
