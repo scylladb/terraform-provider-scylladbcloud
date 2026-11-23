@@ -224,6 +224,10 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 		cluster    *model.Cluster
 		vpcPeering *model.VPCPeering
 		p          *scylla.CloudProvider
+
+		// stateClusterID is 0 on import.
+		stateClusterID     = int64(d.Get("cluster_id").(int))
+		stateClusterHidden bool
 	)
 
 	clusters, err := c.ListClusters(ctx)
@@ -234,9 +238,15 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 lookup:
 	for i := range clusters {
 		// A cluster gets its datacenter when its bootstrap starts, and one
-		// whose create failed early never gets one. Such a cluster has no
-		// peering, and reading it fails.
+		// whose create failed early never gets one. Reading such a cluster
+		// fails. The API counts only ACTIVE datacenters, so a listed cluster
+		// that has this peering but no ACTIVE datacenter at that time is
+		// skipped too.
 		if clusters[i].DCCount == 0 {
+			if clusters[i].ID == stateClusterID {
+				stateClusterHidden = true
+			}
+
 			continue
 		}
 
@@ -254,6 +264,12 @@ lookup:
 				break lookup
 			}
 		}
+	}
+
+	// Removing the peering from the state is safe only when its cluster was
+	// read or is gone.
+	if cluster == nil && stateClusterHidden {
+		return diag.Errorf("cluster %d of VPC peering %q is listed without a datacenter, so the peering cannot be read: try again later", stateClusterID, connID)
 	}
 
 	if cluster == nil {
