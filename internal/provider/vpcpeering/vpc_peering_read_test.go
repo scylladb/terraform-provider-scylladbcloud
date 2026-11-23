@@ -16,10 +16,11 @@ import (
 )
 
 // TestVPCPeeringReadClusterWithoutDatacenter reads a peering while the API
-// lists cluster 42 without a datacenter. Reading such a cluster fails, so the
-// read must find the peering without reading it, and must not remove a
-// peering of that cluster from the state. A refresh looks in the cluster of
-// the state first, and fails when only another cluster lists the peering.
+// lists cluster 42 without a datacenter, or sends an error for a cluster it
+// could not read. Reading cluster 42 fails, so the read must find the peering
+// without reading it. It must not remove the peering from the state while one
+// of these clusters may list it. A refresh looks in the cluster of the state
+// first, and fails when only another cluster lists the peering.
 func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 	t.Parallel()
 
@@ -32,6 +33,17 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 		cluster44 = `{"id":44,"status":"ACTIVE","dcCount":1}`
 		// cluster45 has no peering.
 		cluster45 = `{"id":45,"status":"ACTIVE","dcCount":1}`
+		// unreadable is what the API sends for a cluster it could not read.
+		unreadable = `{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}}`
+
+		errStateClusterWithoutDC = `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: ` +
+			`try again when the cluster has an ACTIVE datacenter`
+		errUnchecked = `VPC peering "pcx-1" was not found, but 1 of the clusters of the account could not be read, ` +
+			`and they may list it: try again later`
+
+		// stateRm and checkImport are parts of the error details.
+		stateRm     = "terraform state rm"
+		checkImport = "An import takes the first cluster that lists the peering."
 	)
 
 	tests := []struct {
@@ -43,6 +55,8 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 		// read removes the peering from the state.
 		wantClusterID int
 		wantErr       string
+		// wantDetail is a part of the detail of the error, "" for none.
+		wantDetail string
 	}{
 		{
 			name:          "import",
@@ -50,8 +64,23 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			wantClusterID: 43,
 		},
 		{
-			name:     "import of a peering that is gone",
-			clusters: []string{cluster42},
+			name:          "import while the API could not read a cluster",
+			clusters:      []string{unreadable, cluster43},
+			wantClusterID: 43,
+		},
+		{
+			name:     "import of a peering that no cluster lists",
+			clusters: []string{cluster45},
+		},
+		{
+			name:     "import while only a cluster without a datacenter could list the peering",
+			clusters: []string{cluster42, cluster45},
+			wantErr:  errUnchecked,
+		},
+		{
+			name:     "import while only a cluster the API could not read could list the peering",
+			clusters: []string{unreadable, cluster45},
+			wantErr:  errUnchecked,
 		},
 		{
 			name:           "refresh",
@@ -60,15 +89,17 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			wantClusterID:  43,
 		},
 		{
-			name:           "refresh of a peering whose cluster is gone",
+			name:           "refresh while the API could not read a cluster",
 			stateClusterID: 43,
-			clusters:       []string{cluster42},
+			clusters:       []string{unreadable, cluster43},
+			wantClusterID:  43,
 		},
 		{
 			name:           "refresh while the cluster of the state has no datacenter",
 			stateClusterID: 42,
 			clusters:       []string{cluster42},
-			wantErr:        `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: try again later`,
+			wantErr:        errStateClusterWithoutDC,
+			wantDetail:     stateRm,
 		},
 		{
 			// The clusters of a shared network list the same peering, but
@@ -76,7 +107,8 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			name:           "refresh while the cluster of the state has no datacenter and another cluster lists the peering",
 			stateClusterID: 42,
 			clusters:       []string{cluster42, cluster43},
-			wantErr:        `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: try again later`,
+			wantErr:        errStateClusterWithoutDC,
+			wantDetail:     stateRm,
 		},
 		{
 			name:           "refresh of a peering that a cluster listed first also has",
@@ -91,17 +123,50 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			stateClusterID: 43,
 			clusters:       []string{cluster44},
 			wantErr:        `VPC peering "pcx-1" is not listed by cluster 43 of the state but by cluster 44: to manage it through that cluster, remove it from the state and import it again`,
+			wantDetail:     checkImport,
 		},
 		{
 			name:           "refresh while the cluster of the state lists no peering and another cluster lists it",
 			stateClusterID: 45,
 			clusters:       []string{cluster45, cluster44},
 			wantErr:        `VPC peering "pcx-1" is not listed by cluster 45 of the state but by cluster 44: to manage it through that cluster, remove it from the state and import it again`,
+			wantDetail:     checkImport,
+		},
+		{
+			// The list has no ID for a cluster the API could not read, and
+			// that cluster can be cluster 43.
+			name:           "refresh while the cluster of the state is not listed, the API could not read a cluster and another cluster lists the peering",
+			stateClusterID: 43,
+			clusters:       []string{unreadable, cluster44},
+			wantErr: `VPC peering "pcx-1" is listed by cluster 44, but cluster 43 of the state is not listed, ` +
+				`and the API could not read 1 of the clusters of the account: try again later`,
+			wantDetail: stateRm,
+		},
+		{
+			name:           "refresh while the cluster of the state lists no peering, the API could not read a cluster and another cluster lists it",
+			stateClusterID: 45,
+			clusters:       []string{unreadable, cluster45, cluster44},
+			wantErr:        `VPC peering "pcx-1" is not listed by cluster 45 of the state but by cluster 44: to manage it through that cluster, remove it from the state and import it again`,
+			wantDetail:     checkImport,
 		},
 		{
 			name:           "refresh while the cluster of the state is gone and no cluster lists the peering",
 			stateClusterID: 43,
 			clusters:       []string{cluster45},
+		},
+		{
+			name:           "refresh while the cluster of the state is gone and only a cluster without a datacenter could list the peering",
+			stateClusterID: 43,
+			clusters:       []string{cluster42, cluster45},
+			wantErr:        errUnchecked,
+			wantDetail:     stateRm,
+		},
+		{
+			name:           "refresh while the cluster of the state is gone and only a cluster the API could not read could list the peering",
+			stateClusterID: 43,
+			clusters:       []string{unreadable, cluster45},
+			wantErr:        errUnchecked,
+			wantDetail:     stateRm,
 		},
 	}
 
@@ -165,6 +230,11 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			if tt.wantErr != "" {
 				require.True(t, diags.HasError())
 				require.Equal(t, tt.wantErr, diags[0].Summary)
+				if tt.wantDetail == "" {
+					require.Empty(t, diags[0].Detail)
+				} else {
+					require.Contains(t, diags[0].Detail, tt.wantDetail)
+				}
 				require.Equal(t, "pcx-1", d.Id(), "the peering must stay in the state")
 				require.Equal(t, tt.stateClusterID, d.Get("cluster_id"), "the peering must keep its cluster_id")
 				return

@@ -103,11 +103,13 @@ func resourceAllowlistRuleRead(ctx context.Context, d *schema.ResourceData, meta
 		return diag.Errorf("error reading id=%q: %s", d.Id(), err)
 	}
 
-	clusters, err := c.ListClusters(ctx)
+	clusters, unreadable, err := c.ListClusters(ctx)
 	if err != nil {
 		return diag.Errorf("error reading cluster list: %s", err)
 	}
 
+	// The rules of a cluster are read by its ID, also while it has no
+	// datacenter, so only the clusters the API could not read are unchecked.
 lookup:
 	for i := range clusters {
 		cl := &clusters[i]
@@ -126,6 +128,11 @@ lookup:
 				break lookup
 			}
 		}
+	}
+
+	if rule == nil && unreadable > 0 {
+		return diag.Errorf("allowlist rule %d was not found, but %d of the clusters of the account could not be read, "+
+			"and they may have it: try again later", ruleID, unreadable)
 	}
 
 	if rule == nil || cluster == nil {

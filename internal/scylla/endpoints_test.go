@@ -26,8 +26,11 @@ func TestListClusters(t *testing.T) {
 	tests := []struct {
 		name     string
 		clusters string
-		want     []model.ClusterSummary
-		wantErr  string
+		// status answers the list request when not 200.
+		status         int
+		want           []model.ClusterSummary
+		wantUnreadable int
+		wantErr        string
 	}{
 		{
 			// The API omits dcCount for a cluster without a datacenter.
@@ -37,11 +40,17 @@ func TestListClusters(t *testing.T) {
 			want: []model.ClusterSummary{{ID: 42}, {ID: 43, DCCount: 1}},
 		},
 		{
+			// The API sends an error instead of the cluster fields, and no ID.
 			name: "a cluster the API could not read",
-			clusters: `[{"id":43,"dcCount":1},` +
-				`{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}}]`,
-			wantErr: `the API could not read a cluster of the account: ` +
-				`{"code":"040023","message":"General Request Error","trace_id":"t1"}`,
+			clusters: `[{"id":42},{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}},` +
+				`{"id":43,"dcCount":1}]`,
+			want:           []model.ClusterSummary{{ID: 42}, {ID: 43, DCCount: 1}},
+			wantUnreadable: 1,
+		},
+		{
+			name:    "the list fails",
+			status:  http.StatusInternalServerError,
+			wantErr: "040601",
 		},
 	}
 
@@ -56,6 +65,11 @@ func TestListClusters(t *testing.T) {
 				}
 				if got := r.URL.Query().Get("enriched"); got != "true" {
 					t.Errorf(`enriched = %q, want "true"`, got)
+				}
+				if tt.status != 0 {
+					w.WriteHeader(tt.status)
+					_, _ = w.Write([]byte(`{"error":"040601"}`))
+					return
 				}
 				_, _ = w.Write([]byte(`{"data":{"clusters":` + tt.clusters + `}}`))
 			}))
@@ -72,15 +86,16 @@ func TestListClusters(t *testing.T) {
 				AccountID:  7,
 			}
 
-			clusters, err := c.ListClusters(t.Context())
+			clusters, unreadable, err := c.ListClusters(t.Context())
 			if tt.wantErr != "" {
-				require.EqualError(t, err, tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				require.Nil(t, clusters)
 				return
 			}
 
 			require.NoError(t, err)
 			require.Equal(t, tt.want, clusters)
+			require.Equal(t, tt.wantUnreadable, unreadable)
 		})
 	}
 }

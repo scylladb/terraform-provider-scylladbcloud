@@ -193,10 +193,10 @@ func (c *Client) UpdateDcScalingPolicy(ctx context.Context, clusterID, dcID int6
 	return &result, nil
 }
 
-// ListClusters lists the clusters of the account. A cluster the API could not
-// read fails the list: the callers look a resource up across all clusters,
-// and a missing cluster would make them remove the resource from the state.
-func (c *Client) ListClusters(ctx context.Context) ([]model.ClusterSummary, error) {
+// ListClusters lists the clusters of the account, and counts the clusters the
+// API could not read. The list has no ID for those: a caller that does not
+// find a resource in clusters cannot tell whether one of them has it.
+func (c *Client) ListClusters(ctx context.Context) (clusters []model.ClusterSummary, unreadable int, err error) {
 	var result struct {
 		Clusters []struct {
 			model.ClusterSummary
@@ -210,18 +210,19 @@ func (c *Client) ListClusters(ctx context.Context) ([]model.ClusterSummary, erro
 	path := fmt.Sprintf("/account/%d/clusters", c.AccountID)
 
 	if err := c.get(ctx, path, &result, "enriched", "true"); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	clusters := make([]model.ClusterSummary, 0, len(result.Clusters))
+	clusters = make([]model.ClusterSummary, 0, len(result.Clusters))
 	for _, entry := range result.Clusters {
 		if len(entry.Error) > 0 {
-			return nil, fmt.Errorf("the API could not read a cluster of the account: %s", entry.Error)
+			unreadable++
+			continue
 		}
 		clusters = append(clusters, entry.ClusterSummary)
 	}
 
-	return clusters, nil
+	return clusters, unreadable, nil
 }
 
 type ListClusterRequestParams struct {

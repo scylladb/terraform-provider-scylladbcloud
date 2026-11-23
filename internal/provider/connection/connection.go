@@ -369,15 +369,19 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 			return nil, nil, fmt.Errorf("error reading cluster connection %d: %s", connectionID, err)
 		}
 	}
-	clusters, err := c.ListClusters(ctx)
+	clusters, unreadable, err := c.ListClusters(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading cluster list: %s", err)
 	}
 
+	// unchecked counts the clusters that may have the connection but cannot
+	// be read.
+	unchecked := unreadable
 	for i := range clusters {
-		// A cluster without a datacenter has no connection. The API can fail
-		// the lookup for it instead of reporting that it found none.
+		// The API counts only ACTIVE datacenters, and it can fail the lookup
+		// in a cluster without one instead of reporting that it found none.
 		if clusters[i].DCCount == 0 {
+			unchecked++
 			continue
 		}
 
@@ -395,5 +399,12 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 			return nil, nil, fmt.Errorf("error reading cluster connection %d: %s", connectionID, err)
 		}
 	}
+
+	// Not errNotFound: that removes the connection from the state.
+	if unchecked > 0 {
+		return nil, nil, fmt.Errorf("cluster connection %d was not found, but %d of the clusters of the account could not be read, "+
+			"and they may have it: try again later", connectionID, unchecked)
+	}
+
 	return nil, nil, errNotFound
 }

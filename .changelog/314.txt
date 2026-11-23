@@ -1,9 +1,9 @@
 ```release-note:bug
-provider: Reading VPC peerings, allowlist rules and cluster connections no longer fails while the account has a cluster whose instance the API cannot report, for example while none of its nodes is ACTIVE
+provider: Reading VPC peerings, allowlist rules and cluster connections no longer fails while the account has a cluster whose instance the API cannot report, for example while none of its nodes is ACTIVE. A cluster that the API cannot read at all no longer fails an allowlist rule read or an import that finds its resource, or a VPC peering refresh that finds the peering in the cluster in `cluster_id`. A VPC peering refresh that finds the peering only in another cluster fails and keeps the peering in the state. A lookup that does not find its resource while such a cluster may have it still fails and asks to try again, and a refresh keeps the resource in the state
 ```
 
 ```release-note:bug
-resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while another cluster of the account has no datacenter, for example right after it is created or after its creation failed. While the cluster of the peering itself is listed without a datacenter, its refresh, also the one before `terraform destroy`, still fails, and asks to try again
+resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while another cluster of the account has no datacenter, for example right after it is created or after its creation failed, when the cluster in `cluster_id` lists the peering, or for an import, any cluster that can be read. When no cluster that can be read lists it, the read still fails and asks to try again, as a cluster without a datacenter could list it. While the cluster of the peering itself is listed without a datacenter, its refresh, also the one before `terraform destroy`, still fails, and asks to try again when that cluster has an ACTIVE datacenter. If the peering was deleted, or Terraform should stop managing it, `terraform state rm` removes it from the state and leaves a peering that still exists in place
 ```
 
 ```release-note:bug

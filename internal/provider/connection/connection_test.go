@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,9 +17,20 @@ import (
 
 // TestFindConnectionWithoutClusterID searches the clusters of the account for
 // a connection, as an import does. The API fails the lookup in a public
-// cluster, and a cluster without a datacenter can be public.
+// cluster, and a cluster without a datacenter can be public. A miss is not
+// errNotFound while a cluster that was not read may have the connection.
 func TestFindConnectionWithoutClusterID(t *testing.T) {
 	t.Parallel()
+
+	const (
+		// The API omits dcCount for a cluster without a datacenter.
+		cluster42 = `{"id":42,"status":"QUEUED"},`
+		// unreadable is what the API sends for a cluster it could not read.
+		unreadable = `{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}},`
+
+		errUnchecked = "cluster connection 77 was not found, but 1 of the clusters of the account could not be read, " +
+			"and they may have it: try again later"
+	)
 
 	tests := []struct {
 		name string
@@ -27,15 +39,38 @@ func TestFindConnectionWithoutClusterID(t *testing.T) {
 		// lookupStatus answers the lookup in cluster 43 when not 200.
 		lookupStatus int
 		wantErr      string
+		wantNotFound bool
 	}{
 		{
 			name:     "a cluster without a datacenter comes first",
-			clusters: `{"id":42,"status":"QUEUED"},`,
+			clusters: cluster42,
+		},
+		{
+			name:     "the API could not read a cluster",
+			clusters: unreadable,
 		},
 		{
 			name:         "the lookup fails",
 			lookupStatus: http.StatusInternalServerError,
 			wantErr:      "error reading cluster connection 77",
+		},
+		{
+			name:         "no cluster has the connection",
+			lookupStatus: http.StatusNotFound,
+			wantErr:      "not found",
+			wantNotFound: true,
+		},
+		{
+			name:         "a cluster without a datacenter may have the connection",
+			clusters:     cluster42,
+			lookupStatus: http.StatusNotFound,
+			wantErr:      errUnchecked,
+		},
+		{
+			name:         "a cluster the API could not read may have the connection",
+			clusters:     unreadable,
+			lookupStatus: http.StatusNotFound,
+			wantErr:      errUnchecked,
 		},
 	}
 
@@ -99,6 +134,7 @@ func TestFindConnectionWithoutClusterID(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+				require.Equal(t, tt.wantNotFound, errors.Is(err, errNotFound), "errNotFound removes the connection from the state")
 				require.Nil(t, cluster)
 				require.Nil(t, connection)
 				return
