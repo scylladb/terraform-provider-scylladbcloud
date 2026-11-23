@@ -134,7 +134,7 @@ func TestFindConnectionWithoutClusterID(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
-				require.Equal(t, tt.wantNotFound, errors.Is(err, errNotFound), "errNotFound removes the connection from the state")
+				require.Equal(t, tt.wantNotFound, errors.Is(err, errNotFound), "errNotFound reports a missing connection")
 				require.Nil(t, cluster)
 				require.Nil(t, connection)
 				return

@@ -400,7 +400,8 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 		}
 	}
 
-	// Not errNotFound: that removes the connection from the state.
+	// Not errNotFound: the import would report a missing connection after an
+	// incomplete search.
 	if unchecked > 0 {
 		return nil, nil, fmt.Errorf("cluster connection %d was not found, but %d of the clusters of the account could not be read, "+
 			"and they may have it: try again later", connectionID, unchecked)

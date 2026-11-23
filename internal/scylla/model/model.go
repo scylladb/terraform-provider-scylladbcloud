@@ -209,8 +209,8 @@ type ClusterCertificate struct {
 type ClusterSummary struct {
 	ID int64 `json:"id"`
 
-	// DCCount is the number of datacenters. The API omits it for a cluster
-	// that has no datacenter yet.
+	// DCCount is the number of ACTIVE datacenters. The API omits it when
+	// there is none.
 	DCCount int `json:"dcCount"`
 }
 
