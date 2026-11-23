@@ -878,17 +878,22 @@ func TestResourceVPCPeeringRefresh(t *testing.T) {
 }
 
 // TestResourceVPCPeeringRefreshSharedPeering refreshes and plans a peering
-// of cluster 43 that cluster 42 lists too, as the clusters of a shared
-// network do.
+// that clusters 42 and 43 both list, as the clusters of a shared network do.
+// Cluster 44 lists no peering.
 func TestResourceVPCPeeringRefreshSharedPeering(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		// clusters is the cluster list of the API, in its order.
-		clusters      string
+		clusters string
+		// stateCluster is the cluster_id in the state, 43 when 0.
+		stateCluster  int64
 		configCluster int64
 		wantReplace   bool
+		wantErr       string
+		// wantGone is true when the refresh removes the peering.
+		wantGone bool
 	}{
 		{
 			name:          "cluster of the state listed first",
@@ -906,6 +911,24 @@ func TestResourceVPCPeeringRefreshSharedPeering(t *testing.T) {
 			configCluster: 42,
 			wantReplace:   true,
 		},
+		{
+			// The network outlives a deleted cluster while other clusters
+			// use it, and so does the peering.
+			name:     "cluster of the state gone while another cluster lists the peering",
+			clusters: `{"id":42,"dcCount":1}`,
+			wantErr:  `VPC peering "pcx-1" is not listed by cluster 43 of the state but by cluster 42: to manage it through that cluster, remove it from the state and import it again`,
+		},
+		{
+			name:         "cluster of the state without the peering while another cluster lists it",
+			clusters:     `{"id":44,"dcCount":1},{"id":42,"dcCount":1}`,
+			stateCluster: 44,
+			wantErr:      `VPC peering "pcx-1" is not listed by cluster 44 of the state but by cluster 42: to manage it through that cluster, remove it from the state and import it again`,
+		},
+		{
+			name:     "cluster of the state gone and no cluster lists the peering",
+			clusters: `{"id":44,"dcCount":1}`,
+			wantGone: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -914,16 +937,28 @@ func TestResourceVPCPeeringRefreshSharedPeering(t *testing.T) {
 
 			server := testProviderServer(newTestClient(t, newSharedPeeringAPI(t, tt.clusters)))
 
-			state := with(testState("us-east-1", testAPICIDR), "cluster_id", cty.NumberIntVal(43))
+			stateCluster := cty.NumberIntVal(cmp.Or(tt.stateCluster, 43))
+			state := with(testState("us-east-1", testAPICIDR), "cluster_id", stateCluster)
 			resp, err := server.ReadResource(t.Context(), &tfprotov5.ReadResourceRequest{
 				TypeName:     testResourceType,
 				CurrentState: encode(t, testPeering(state)),
 			})
 			require.NoError(t, err)
+
+			// On an error, Terraform keeps the state it had.
+			if tt.wantErr != "" {
+				require.Len(t, resp.Diagnostics, 1)
+				require.Equal(t, tt.wantErr, resp.Diagnostics[0].Summary)
+				return
+			}
 			require.Empty(t, resp.Diagnostics)
 
 			refreshed := decode(t, resp.NewState)
-			require.Equal(t, cty.NumberIntVal(43), refreshed.GetAttr("cluster_id"))
+			if tt.wantGone {
+				require.True(t, refreshed.IsNull(), "the peering must be removed from the state")
+				return
+			}
+			require.Equal(t, stateCluster, refreshed.GetAttr("cluster_id"))
 
 			config := with(testConfig(cty.StringVal("us-east-1"), cidrList(testAPICIDR)), "cluster_id", cty.NumberIntVal(tt.configCluster))
 			planned, replace, _, diags := planPeering(t, testCloudAWS, refreshed, testPeering(config), false)
@@ -938,16 +973,17 @@ func TestResourceVPCPeeringRefreshSharedPeering(t *testing.T) {
 }
 
 // newSharedPeeringAPI returns a fake API with AWS clusters 42 and 43 that
-// both list peering pcx-1. clusters is the cluster list, in its order.
+// both list peering pcx-1, and cluster 44 that lists none. clusters is the
+// cluster list, in its order.
 func newSharedPeeringAPI(t *testing.T, clusters string) *httptest.Server {
 	t.Helper()
 
 	peering := fmt.Sprintf(`{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","ownerId":"123",`+
 		`"cidrList":[%q],"region":"us-east-1","allowCql":true}`, testAPICIDR)
 
-	writeCluster := func(w http.ResponseWriter, id int) {
+	writeCluster := func(w http.ResponseWriter, id int, peerings string) {
 		_, _ = fmt.Fprintf(w, `{"data":{"cluster":{"id":%d,"cloudProviderId":%d,"dc":{"id":%d,"Name":"DC1"},`+
-			`"dataCenters":[{"id":%d,"Name":"DC1"}],"vpcPeeringList":[%s]}}}`, id, testCloudAWS, id, id, peering)
+			`"dataCenters":[{"id":%d,"Name":"DC1"}],"vpcPeeringList":[%s]}}}`, id, testCloudAWS, id, id, peerings)
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -955,10 +991,12 @@ func newSharedPeeringAPI(t *testing.T, clusters string) *httptest.Server {
 		case "GET /account/7/clusters":
 			_, _ = fmt.Fprintf(w, `{"data":{"clusters":[%s]}}`, clusters)
 		case "GET /account/7/cluster/42":
-			writeCluster(w, 42)
+			writeCluster(w, 42, peering)
 		case "GET /account/7/cluster/43":
-			writeCluster(w, 43)
-		case "GET /account/7/cluster/42/dc/42", "GET /account/7/cluster/43/dc/43":
+			writeCluster(w, 43, peering)
+		case "GET /account/7/cluster/44":
+			writeCluster(w, 44, "")
+		case "GET /account/7/cluster/42/dc/42", "GET /account/7/cluster/43/dc/43", "GET /account/7/cluster/44/dc/44":
 			_, _ = w.Write([]byte(`{"data":{"Name":"DC1"}}`))
 		default:
 			t.Errorf("unexpected request %s", req)

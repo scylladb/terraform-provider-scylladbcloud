@@ -15,7 +15,7 @@ resource/scylladbcloud_vpc_peering: A change to `cluster_id` plans a replacement
 ```
 
 ```release-note:bug
-resource/scylladbcloud_vpc_peering: A refresh reads the peering only from the cluster in `cluster_id`. A peering that another cluster also lists, as clusters that share a network do, could get the ID of that cluster on refresh, and the next plan showed a `cluster_id` change
+resource/scylladbcloud_vpc_peering: A refresh checks the cluster in `cluster_id` first. A peering that another cluster also lists, as clusters that share a network do, could get the ID of that cluster on refresh, and the next plan showed a `cluster_id` change. If the cluster in `cluster_id` is gone or no longer lists the peering, but another cluster does, the refresh fails and names that cluster, instead of removing the peering from the state. To manage the peering through that cluster, remove it from the state and import it again. An import takes the first cluster that lists the peering, so when several clusters list it, check the imported `cluster_id` and the next plan before applying
 ```
 
 ```release-note:bug
@@ -43,5 +43,5 @@ resource/scylladbcloud_vpc_peering: A GCP peering is imported with its region: `
 ```
 
 ```release-note:note
-resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that plan. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the GCP region has a default CIDR block
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that refresh. Terraform still plans the destroy. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the GCP region has a default CIDR block
 ```

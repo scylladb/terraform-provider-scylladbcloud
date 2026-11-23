@@ -208,11 +208,9 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 
 func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	var (
-		c          = meta.(*scylla.Client)
-		connID     = d.Id()
-		cluster    *model.Cluster
-		vpcPeering *model.VPCPeering
-		p          *scylla.CloudProvider
+		c      = meta.(*scylla.Client)
+		connID = d.Id()
+		p      *scylla.CloudProvider
 
 		// stateClusterID is 0 on import.
 		stateClusterID = int64(d.Get("cluster_id").(int))
@@ -224,42 +222,36 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 	}
 
 	// All the clusters of a shared network list its peerings, so a refresh
-	// reads only the cluster of the state. Finding the peering through
-	// another cluster would change cluster_id, which replaces the peering.
-	if stateClusterID != 0 {
-		clusters = slices.DeleteFunc(clusters, func(cl model.Cluster) bool {
-			return cl.ID != stateClusterID
-		})
+	// looks in the cluster of the state first.
+	var stateCluster, others []model.Cluster
+	for _, cl := range clusters {
+		if cl.ID == stateClusterID {
+			stateCluster = append(stateCluster, cl)
+		} else {
+			others = append(others, cl)
+		}
 	}
 
-lookup:
-	for i := range clusters {
-		c, err := c.GetCluster(ctx, clusters[i].ID)
-		if err != nil {
-			return diag.Errorf("error reading cluster ID=%d: %s", clusters[i].ID, err)
-		}
-
-		for j := range c.VPCPeeringList {
-			vp := &c.VPCPeeringList[j]
-
-			if strings.EqualFold(vp.ExternalID, connID) {
-				cluster = c
-				vpcPeering = vp
-				break lookup
-			}
-		}
+	cluster, vpcPeering, err := findPeering(ctx, c, stateCluster, connID)
+	if err == nil && cluster == nil {
+		cluster, vpcPeering, err = findPeering(ctx, c, others, connID)
+	}
+	if err != nil {
+		return diag.FromErr(err)
 	}
 
 	if cluster == nil {
-		// cluster was deleted manually
+		// The peering or its cluster was deleted.
 		d.SetId("")
 		return nil
 	}
 
-	if vpcPeering == nil {
-		// vpc peering was deleted manually
-		d.SetId("")
-		return nil
+	// Taking the peering from another cluster would change cluster_id, which
+	// replaces the peering, and removing it from the state would leave it in
+	// the cloud.
+	if stateClusterID != 0 && cluster.ID != stateClusterID {
+		return diag.Errorf("VPC peering %q is not listed by cluster %d of the state but by cluster %d: "+
+			"to manage it through that cluster, remove it from the state and import it again", connID, stateClusterID, cluster.ID)
 	}
 
 	if p = c.Meta.ProviderByID(cluster.CloudProviderID); p == nil {
@@ -282,6 +274,25 @@ lookup:
 	_ = d.Set("peer_cidr_blocks", vpcPeering.CIDRList)
 
 	return nil
+}
+
+// findPeering returns the first of clusters that lists the peering connID, and
+// that peering, or nil when none does.
+func findPeering(ctx context.Context, c *scylla.Client, clusters []model.Cluster, connID string) (*model.Cluster, *model.VPCPeering, error) {
+	for i := range clusters {
+		cluster, err := c.GetCluster(ctx, clusters[i].ID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error reading cluster ID=%d: %w", clusters[i].ID, err)
+		}
+
+		for j := range cluster.VPCPeeringList {
+			if strings.EqualFold(cluster.VPCPeeringList[j].ExternalID, connID) {
+				return cluster, &cluster.VPCPeeringList[j], nil
+			}
+		}
+	}
+
+	return nil, nil, nil
 }
 
 func resourceVPCPeeringUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
