@@ -27,7 +27,7 @@ resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, 
 ```
 
 ```release-note:note
-resource/scylladbcloud_vpc_peering: A GCP peering without `peer_cidr_blocks` whose `peer_region` is known only at apply time now fails at plan time. Set `peer_cidr_blocks` in such a configuration
+resource/scylladbcloud_vpc_peering: A GCP peering without `peer_cidr_blocks` whose `peer_region` or `cluster_id` is known only at apply time, as for a peering on a cluster made in the same apply, now fails at plan time. Set `peer_cidr_blocks` in such a configuration
 ```
 
 ```release-note:feature

@@ -99,7 +99,7 @@ resource "google_compute_network_peering" "app" {
 
 ### Required
 
-- `cluster_id` (Number) Cluster ID
+- `cluster_id` (Number) Cluster ID. Changing it replaces the peering.
 - `datacenter` (String) Cluster datacenter name
 - `peer_account_id` (String) Peer Account ID
 - `peer_region` (String) Peer VPC region, in any letter case. For AWS, any AWS region, including regions where ScyllaDB Cloud does not deploy clusters; an opt-in region must be enabled in the peer AWS account. For GCP, it is used only to pick the default `peer_cidr_blocks`, but a change still replaces the peering.
@@ -108,7 +108,7 @@ resource "google_compute_network_peering" "app" {
 ### Optional
 
 - `allow_cql` (Boolean) Whether to allow CQL traffic
-- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.
+- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list, not empty. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region` when the plan knows `peer_region` and `cluster_id` and the region has such a range, and it is required otherwise. Without it, a configuration that fails this check also fails `terraform destroy`, which then needs `-refresh=false`. Changing it replaces the peering.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

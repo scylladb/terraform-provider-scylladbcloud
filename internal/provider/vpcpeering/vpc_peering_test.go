@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/eapache/go-resiliency/retrier"
@@ -64,6 +65,7 @@ func newTestClient(t *testing.T, srv *httptest.Server) *scylla.Client {
 			},
 			GCPBlocks: map[string]string{
 				"us-central1":  "10.128.0.0/20",
+				"us-east1":     "10.142.0.0/20",
 				"europe-west1": "10.132.0.0/20",
 			},
 		},
@@ -453,10 +455,34 @@ func proposedNewState(prior, config cty.Value) cty.Value {
 // planPeering plans a peering through the provider server as Terraform does.
 // A replacement is planned again from a null prior, as Terraform plans the
 // new object, and so is forceReplace, as terraform plan -replace does.
-func planPeering(t *testing.T, prior, config cty.Value, forceReplace bool) (planned cty.Value, replace bool, diags []*tfprotov5.Diagnostic) {
+// newDatacentersAPI returns a fake API with the datacenters of clusters 42
+// and 43 on cloud, and the number of requests for them.
+func newDatacentersAPI(t *testing.T, cloud int) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 
-	server := testProviderServer(newTestClient(t, newNoAPI(t)))
+	var lookups atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /account/7/cluster/42/dcs", "GET /account/7/cluster/43/dcs":
+			lookups.Add(1)
+			_, _ = fmt.Fprintf(w, `{"data":{"dataCenters":[{"id":5,"Name":"DC1","CloudProviderID":%d}]}}`, cloud)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, &lookups
+}
+
+// planPeering plans the peering of a cluster on cloud, and counts the reads
+// of its datacenters.
+func planPeering(t *testing.T, cloud int, prior, config cty.Value, forceReplace bool) (planned cty.Value, replace bool, lookups int, diags []*tfprotov5.Diagnostic) {
+	t.Helper()
+
+	srv, count := newDatacentersAPI(t, cloud)
+	server := testProviderServer(newTestClient(t, srv))
 
 	plan := func(prior cty.Value) *tfprotov5.PlanResourceChangeResponse {
 		resp, err := server.PlanResourceChange(context.Background(), &tfprotov5.PlanResourceChangeRequest{
@@ -472,18 +498,18 @@ func planPeering(t *testing.T, prior, config cty.Value, forceReplace bool) (plan
 
 	resp := plan(prior)
 	if len(resp.Diagnostics) > 0 {
-		return cty.NilVal, false, resp.Diagnostics
+		return cty.NilVal, false, int(count.Load()), resp.Diagnostics
 	}
 
 	replace = !prior.IsNull() && (len(resp.RequiresReplace) > 0 || forceReplace)
 	if replace {
 		resp = plan(cty.NullVal(peeringType()))
 		if len(resp.Diagnostics) > 0 {
-			return cty.NilVal, true, resp.Diagnostics
+			return cty.NilVal, true, int(count.Load()), resp.Diagnostics
 		}
 	}
 
-	return decode(t, resp.PlannedState), replace, nil
+	return decode(t, resp.PlannedState), replace, int(count.Load()), nil
 }
 
 func TestResourceVPCPeeringPlan(t *testing.T) {
@@ -496,11 +522,14 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 		awsState  = testState("us-east-1", "192.168.0.0/16")
 		awsConfig = testConfig(cty.StringVal("us-east-1"), cidrList("192.168.0.0/16"))
 
-		unknownRegionErr = `"peer_cidr_blocks" is required when "peer_region" is known only at apply time`
+		unknownRegionErr  = `"peer_cidr_blocks" is required when "peer_region" is known only at apply time`
+		unknownClusterErr = `"peer_cidr_blocks" is required when "cluster_id" is known only at apply time`
 	)
 
 	tests := []struct {
 		name string
+		// cloud is the cloud of the clusters, GCP when 0.
+		cloud int
 		// prior is nil for a new peering.
 		prior  map[string]cty.Value
 		config map[string]cty.Value
@@ -509,20 +538,24 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 		wantReplace  bool
 		wantCIDRs    cty.Value
 		wantErr      string
+		// wantLookups is the number of reads of the cluster datacenters.
+		wantLookups int
 	}{
 		{
 			// The bug this plan fixes: the read stores the default, which
 			// the configuration does not set.
-			name:      "GCP default CIDR block not set in the configuration",
-			prior:     gcpState,
-			config:    gcpConfig,
-			wantCIDRs: cidrList("10.128.0.0/20"),
+			name:        "GCP default CIDR block not set in the configuration",
+			prior:       gcpState,
+			config:      gcpConfig,
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 1,
 		},
 		{
-			name:      "GCP default CIDR block with the region in uppercase",
-			prior:     gcpState,
-			config:    with(gcpConfig, "peer_region", cty.StringVal("US-CENTRAL1")),
-			wantCIDRs: cidrList("10.128.0.0/20"),
+			name:        "GCP default CIDR block with the region in uppercase",
+			prior:       gcpState,
+			config:      with(gcpConfig, "peer_region", cty.StringVal("US-CENTRAL1")),
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 1,
 		},
 		{
 			name:        "custom GCP CIDR blocks removed from the configuration",
@@ -530,6 +563,7 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			config:      gcpConfig,
 			wantReplace: true,
 			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 2,
 		},
 		{
 			name:    "AWS CIDR blocks removed from the configuration",
@@ -550,6 +584,7 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			config:      with(gcpConfig, "peer_region", cty.StringVal("europe-west1")),
 			wantReplace: true,
 			wantCIDRs:   cidrList("10.132.0.0/20"),
+			wantLookups: 2,
 		},
 		{
 			name:        "GCP region change with CIDR blocks",
@@ -636,11 +671,13 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			forceReplace: true,
 			wantReplace:  true,
 			wantCIDRs:    cidrList("10.128.0.0/20"),
+			wantLookups:  2,
 		},
 		{
-			name:      "new GCP peering without CIDR blocks",
-			config:    gcpConfig,
-			wantCIDRs: cidrList("10.128.0.0/20"),
+			name:        "new GCP peering without CIDR blocks",
+			config:      gcpConfig,
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 1,
 		},
 		{
 			name:    "new AWS peering without CIDR blocks",
@@ -663,6 +700,42 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			config:  with(gcpConfig, "peer_region", cty.UnknownVal(cty.String)),
 			wantErr: unknownRegionErr,
 		},
+		{
+			// A GCP region name with an AWS peering: the plan must not
+			// replace it with one on a GCP range, which AWS rejects.
+			name:        "AWS CIDR blocks removed and a GCP region name",
+			cloud:       testCloudAWS,
+			prior:       awsState,
+			config:      testConfig(cty.StringVal("us-east1"), noCIDRs),
+			wantErr:     `"peer_cidr_blocks" is required: cluster 42 is on AWS`,
+			wantLookups: 1,
+		},
+		{
+			name:        "new AWS peering with a GCP region name without CIDR blocks",
+			cloud:       testCloudAWS,
+			config:      testConfig(cty.StringVal("us-east1"), noCIDRs),
+			wantErr:     `"peer_cidr_blocks" is required: cluster 42 is on AWS`,
+			wantLookups: 1,
+		},
+		{
+			// A data source can read the ID of the same cluster only at
+			// apply time, so the cloud is unknown and nothing is read.
+			name:    "AWS CIDR blocks removed with a cluster known after apply",
+			cloud:   testCloudAWS,
+			prior:   awsState,
+			config:  with(testConfig(cty.StringVal("us-east1"), noCIDRs), "cluster_id", cty.UnknownVal(cty.Number)),
+			wantErr: unknownClusterErr,
+		},
+		{
+			name:    "new GCP peering on a cluster known after apply without CIDR blocks",
+			config:  with(gcpConfig, "cluster_id", cty.UnknownVal(cty.Number)),
+			wantErr: unknownClusterErr,
+		},
+		{
+			name:      "new GCP peering on a cluster known after apply with CIDR blocks",
+			config:    with(testConfig(cty.StringVal("us-central1"), cidrList("10.128.0.0/20")), "cluster_id", cty.UnknownVal(cty.Number)),
+			wantCIDRs: cidrList("10.128.0.0/20"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -674,7 +747,9 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 				prior = testPeering(tt.prior)
 			}
 
-			planned, replace, diags := planPeering(t, prior, testPeering(tt.config), tt.forceReplace)
+			cloud := cmp.Or(tt.cloud, testCloudGCP)
+			planned, replace, lookups, diags := planPeering(t, cloud, prior, testPeering(tt.config), tt.forceReplace)
+			require.Equal(t, tt.wantLookups, lookups, "datacenter reads")
 
 			if tt.wantErr != "" {
 				require.Len(t, diags, 1)

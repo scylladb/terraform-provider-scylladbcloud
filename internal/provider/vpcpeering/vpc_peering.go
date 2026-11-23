@@ -53,7 +53,7 @@ func ResourceVPCPeering() *schema.Resource {
 
 		Schema: map[string]*schema.Schema{
 			"cluster_id": {
-				Description: "Cluster ID",
+				Description: "Cluster ID. Changing it replaces the peering.",
 				Required:    true,
 				ForceNew:    true,
 				Type:        schema.TypeInt,
@@ -71,7 +71,7 @@ func ResourceVPCPeering() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"peer_cidr_blocks": {
-				Description: "Peer VPC CIDR block list. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region`.",
+				Description: "Peer VPC CIDR block list, not empty. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region` when the plan knows `peer_region` and `cluster_id` and the region has such a range, and it is required otherwise. Without it, a configuration that fails this check also fails `terraform destroy`, which then needs `-refresh=false`. Changing it replaces the peering.",
 				Optional:    true,
 				Computed:    true,
 				ForceNew:    true,
@@ -309,9 +309,10 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 // resourceVPCPeeringCustomizeDiff plans the default CIDR block of peer_region
 // when the configuration does not set peer_cidr_blocks. The plan then shows
 // the CIDR blocks of a replacement, and removing custom ones replaces the
-// peering. A region without a default, as any AWS region, or a region known
-// only at apply time fails the plan before anything is deleted.
-func resourceVPCPeeringCustomizeDiff(_ context.Context, d *schema.ResourceDiff, meta any) error {
+// peering. A region without a default, as any AWS region, a region known only
+// at apply time, or a cluster that is not on GCP fails the plan before
+// anything is deleted.
+func resourceVPCPeeringCustomizeDiff(ctx context.Context, d *schema.ResourceDiff, meta any) error {
 	// The state keeps the CIDR blocks of a removed list, so only the raw
 	// configuration tells whether it sets them. An unknown list is set.
 	config := d.GetRawConfig()
@@ -325,14 +326,52 @@ func resourceVPCPeeringCustomizeDiff(_ context.Context, d *schema.ResourceDiff, 
 		return errors.New(`"peer_cidr_blocks" is required when "peer_region" is known only at apply time`)
 	}
 
+	c := meta.(*scylla.Client)
 	region := strings.ToLower(d.Get("peer_region").(string))
 
-	cidr, ok := meta.(*scylla.Client).Meta.GCPBlocks[region]
+	cidr, ok := c.Meta.GCPBlocks[region]
 	if !ok {
 		return noDefaultCIDRError(region)
 	}
 
+	// A peer_region is any string for AWS, so a GCP region name does not
+	// make the peering a GCP one.
+	if err := requireGCPCluster(ctx, d, c); err != nil {
+		return err
+	}
+
 	return d.SetNew("peer_cidr_blocks", []string{cidr})
+}
+
+// requireGCPCluster fails unless the cluster of the peering is on GCP. An
+// unknown cluster_id fails too: it can still be the cluster of the existing
+// peering, as when a data source reads it only at apply time, and the plan
+// then replaces that peering.
+func requireGCPCluster(ctx context.Context, d *schema.ResourceDiff, c *scylla.Client) error {
+	if !d.NewValueKnown("cluster_id") {
+		return errors.New(`"peer_cidr_blocks" is required when "cluster_id" is known only at apply time`)
+	}
+
+	clusterID := d.Get("cluster_id").(int)
+
+	dcs, err := c.ListDataCenters(ctx, int64(clusterID))
+	if err != nil {
+		return fmt.Errorf("error reading the datacenters of cluster %d: %w", clusterID, err)
+	}
+	if len(dcs) == 0 {
+		return fmt.Errorf("cluster %d has no datacenter", clusterID)
+	}
+
+	// All datacenters of a cluster are on the same cloud.
+	p := c.Meta.ProviderByID(dcs[0].CloudProviderID)
+	if p == nil {
+		return fmt.Errorf("unable to find cloud provider with id=%d", dcs[0].CloudProviderID)
+	}
+	if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
+		return fmt.Errorf(`"peer_cidr_blocks" is required: cluster %d is on %s`, clusterID, p.CloudProvider.Name)
+	}
+
+	return nil
 }
 
 func noDefaultCIDRError(region string) error {
