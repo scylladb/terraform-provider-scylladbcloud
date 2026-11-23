@@ -687,6 +687,7 @@ func TestCreateClusterWithEncryptionFallback(t *testing.T) {
 				Headers:    make(http.Header),
 				HTTPClient: srv.Client(),
 				Retry:      retrier.New(nil, nil),
+				RetryOnce:  retrier.New(nil, nil),
 				AccountID:  7,
 			}
 
