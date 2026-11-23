@@ -729,7 +729,7 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"status": {
-				Description: "The cluster status.",
+				Description: "The cluster status from the API, for example `ACTIVE`. The provider sets two values itself: `DELETED` when the cluster was deleted outside Terraform, and `CREATE_FAILED` when the create request of the cluster failed. Destroy or replace a cluster with status `CREATE_FAILED`.",
 				Computed:    true,
 				Type:        schema.TypeString,
 			},
