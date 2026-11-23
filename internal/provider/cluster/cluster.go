@@ -961,17 +961,27 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("failed to create a cluster request: %s", err)
 	}
 
+	// Save the ID before the wait. If a later step fails, Terraform keeps the
+	// cluster in state as tainted, and the next apply replaces it.
+	d.SetId(strconv.FormatInt(cr.ClusterID, 10))
+	_ = d.Set("request_id", cr.ID)
+
+	// fail keeps the warnings so far, such as the encryption fallback.
+	fail := func(format string, a ...any) diag.Diagnostics {
+		return append(warns, diag.Errorf(format, a...)...)
+	}
+
 	if err := WaitForClusterRequestID(ctx, scyllaClient, cr.ID); err != nil {
-		return diag.Errorf("failed to wait for request %d creating cluster %d: %s", cr.ID, cr.ClusterID, err)
+		return fail("failed to wait for request %d creating cluster %d: %s", cr.ID, cr.ClusterID, err)
 	}
 
 	cluster, err := scyllaClient.GetCluster(ctx, cr.ClusterID)
 	if err != nil {
-		return diag.Errorf("failed to read cluster %d: %s", cr.ClusterID, err)
+		return fail("failed to read cluster %d: %s", cr.ClusterID, err)
 	}
 
 	if n := len(cluster.Datacenters); n != 1 {
-		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+		return fail("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
 	// The instance the cluster runs on is only tracked for Standard clusters.
@@ -982,7 +992,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
 		i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
 		if i == nil {
-			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
+			return fail("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
 		}
 		instanceExternalID = i.ExternalID
 	}
@@ -991,11 +1001,8 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
 	if err != nil {
-		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
+		return fail("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
-
-	d.SetId(strconv.Itoa(int(cr.ClusterID)))
-	_ = d.Set("request_id", cr.ID)
 
 	return warns
 }
@@ -1024,9 +1031,13 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	}
 	_ = d.Set("request_id", reqs[0].ID)
 
-	if reqs[0].Status != "COMPLETED" {
-		if err := WaitForClusterRequestID(ctx, scyllaClient, reqs[0].ID); err != nil {
+	if !reqs[0].Completed() {
+		r, err := scyllaClient.WaitClusterRequestEnd(ctx, reqs[0].ID)
+		if err != nil {
 			return diag.Errorf("failed to wait for cluster request %d: %s", reqs[0].ID, err)
+		}
+		if r.Failed() {
+			return failedCreateDiags(ctx, scyllaClient, d, r)
 		}
 	}
 
@@ -1086,6 +1097,47 @@ func alternatorIsolationWarning(cluster *model.Cluster) diag.Diagnostics {
 			"is different from the empty value in the state. " +
 			"To keep the cluster, add alternator_write_isolation to lifecycle.ignore_changes.",
 	}}
+}
+
+// failedCreateStatus is the status Read stores for a cluster whose create
+// request failed.
+const failedCreateStatus = "CREATE_FAILED"
+
+// failedCreateDiags keeps a cluster whose create request failed in state
+// without an error, so that plan and destroy still work.
+func failedCreateDiags(ctx context.Context, c *scylla.Client, d *schema.ResourceData, r model.ClusterRequest) diag.Diagnostics {
+	_ = d.Set("status", failedCreateStatus)
+	// Delete needs the name. An imported cluster has no name in state yet.
+	if d.Get("name").(string) == "" {
+		setFailedClusterName(ctx, c, d, r.ClusterID)
+	}
+	return diag.Diagnostics{{
+		Severity: diag.Warning,
+		Summary:  fmt.Sprintf("The create request of cluster %d failed", r.ClusterID),
+		Detail: fmt.Sprintf("Cluster request ID %d failed (%s at %d%%): %s\n\n"+
+			"Destroy or replace this cluster.",
+			r.ID, r.RequestType, r.ProgressPercent, r.ProgressDescription),
+	}}
+}
+
+// setFailedClusterName sets the name of a cluster whose create failed, from
+// the cluster list. The cluster may have no datacenter, so GetCluster cannot
+// read it.
+func setFailedClusterName(ctx context.Context, c *scylla.Client, d *schema.ResourceData, clusterID int64) {
+	clusters, err := c.ListClusters(ctx)
+	if err != nil {
+		tflog.Warn(ctx, "failed to list clusters to find the name of a failed cluster", map[string]interface{}{
+			"cluster_id": clusterID,
+			"error":      err.Error(),
+		})
+		return
+	}
+	for _, cl := range clusters {
+		if cl.ID == clusterID {
+			_ = d.Set("name", cl.ClusterName)
+			return
+		}
+	}
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without

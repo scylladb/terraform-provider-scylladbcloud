@@ -108,6 +108,10 @@ type ClusterRequest struct {
 	Status              string `json:"status"`
 }
 
+func (r ClusterRequest) Completed() bool { return strings.EqualFold(r.Status, "COMPLETED") }
+
+func (r ClusterRequest) Failed() bool { return strings.EqualFold(r.Status, "FAILED") }
+
 // Encryption-at-rest key providers. The scylla-prefixed ones denote a
 // service-managed key, the bare ones a customer-managed key created in the
 // ScyllaDB Cloud portal.
