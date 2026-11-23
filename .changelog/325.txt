@@ -1,0 +1,3 @@
+```release-note:bug
+provider: A POST request is not sent again after a gateway error or a timeout, because the API can already have run it. This stops second clusters, VPC peerings, cluster connections and allowlist rules. For a cluster create, the error shows the ID of a cluster with the same name, if one exists, and how to import it
+```
