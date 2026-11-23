@@ -16,7 +16,7 @@ on:
         type: string
         required: false
       dry_run:
-        description: Stop after the preview. Nothing is published.
+        description: Dry Run (Nothing is published, preview only)
         type: boolean
         default: false
 
@@ -156,7 +156,15 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir "$RUNNER_TEMP/release"
-          cp dist/*.zip dist/*_SHA256SUMS dist/*_SHA256SUMS.sig dist/*_manifest.json "$RUNNER_TEMP/release/"
+          cp dist/*.zip dist/*_SHA256SUMS dist/*_SHA256SUMS.sig "$RUNNER_TEMP/release/"
+          # GoReleaser adds the manifest only when it publishes, but it is
+          # already in the signed SHA256SUMS.
+          manifest="terraform-provider-scylladbcloud_${VERSION#v}_manifest.json"
+          cp terraform-registry-manifest.json "$RUNNER_TEMP/release/${manifest}"
+          if ! (cd "$RUNNER_TEMP/release" && grep " ${manifest}\$" ./*_SHA256SUMS | sha256sum -c --quiet -); then
+            echo "::error::${manifest} does not match its checksum in SHA256SUMS."
+            exit 1
+          fi
           count="$(ls "$RUNNER_TEMP/release" | wc -l)"
           if [ "$count" -ne 16 ]; then
             echo "::error::Expected 16 release files, found ${count}."
