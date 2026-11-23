@@ -213,11 +213,23 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 		cluster    *model.Cluster
 		vpcPeering *model.VPCPeering
 		p          *scylla.CloudProvider
+
+		// stateClusterID is 0 on import.
+		stateClusterID = int64(d.Get("cluster_id").(int))
 	)
 
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
 		return diag.Errorf("error reading cluster list: %s", err)
+	}
+
+	// All the clusters of a shared network list its peerings, so a refresh
+	// reads only the cluster of the state. Finding the peering through
+	// another cluster would change cluster_id, which replaces the peering.
+	if stateClusterID != 0 {
+		clusters = slices.DeleteFunc(clusters, func(cl model.Cluster) bool {
+			return cl.ID != stateClusterID
+		})
 	}
 
 lookup:

@@ -15,6 +15,10 @@ resource/scylladbcloud_vpc_peering: A change to `cluster_id` plans a replacement
 ```
 
 ```release-note:bug
+resource/scylladbcloud_vpc_peering: A refresh reads the peering only from the cluster in `cluster_id`. A peering that another cluster also lists, as clusters that share a network do, could get the ID of that cluster on refresh, and the next plan showed a `cluster_id` change
+```
+
+```release-note:bug
 resource/scylladbcloud_vpc_peering: A `datacenter` that the cluster does not have fails with `unable to find "<name>" datacenter` instead of an error about the cloud provider
 ```
 
