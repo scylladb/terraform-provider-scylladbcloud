@@ -26,6 +26,10 @@ resource/scylladbcloud_vpc_peering: `peer_region` is case-insensitive
 resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, or a GCP peering in a region without a default CIDR block, fails at plan time instead of during apply
 ```
 
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a GCP peering with a `datacenter` that the cluster does not have fails at plan time instead of during apply, when the plan knows the `datacenter` name. With `peer_cidr_blocks`, the apply still reports it
+```
+
 ```release-note:note
 resource/scylladbcloud_vpc_peering: A GCP peering without `peer_cidr_blocks` whose `peer_region` or `cluster_id` is known only at apply time, as for a peering on a cluster made in the same apply, now fails at plan time. Set `peer_cidr_blocks` in such a configuration
 ```

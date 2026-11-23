@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -147,14 +148,7 @@ func resourceVPCPeeringCreate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("error reading clusters: %s", err)
 	}
 
-	for i := range dcs {
-		if strings.EqualFold(dcs[i].Name, dcName) {
-			dc = &dcs[i]
-			break
-		}
-	}
-
-	if dc == nil {
+	if dc = findDatacenter(dcs, dcName); dc == nil {
 		return diag.Errorf("unable to find %q datacenter", dcName)
 	}
 
@@ -310,8 +304,8 @@ func resourceVPCPeeringDelete(ctx context.Context, d *schema.ResourceData, meta 
 // when the configuration does not set peer_cidr_blocks. The plan then shows
 // the CIDR blocks of a replacement, and removing custom ones replaces the
 // peering. A region without a default, as any AWS region, a region known only
-// at apply time, or a cluster that is not on GCP fails the plan before
-// anything is deleted.
+// at apply time, a cluster that is not on GCP, or a datacenter that the
+// cluster does not have fails the plan before anything is deleted.
 func resourceVPCPeeringCustomizeDiff(ctx context.Context, d *schema.ResourceDiff, meta any) error {
 	// The state keeps the CIDR blocks of a removed list, so only the raw
 	// configuration tells whether it sets them. An unknown list is set.
@@ -326,7 +320,12 @@ func resourceVPCPeeringCustomizeDiff(ctx context.Context, d *schema.ResourceDiff
 		return errors.New(`"peer_cidr_blocks" is required when "peer_region" is known only at apply time`)
 	}
 
+	// The default CIDR blocks come with the deployment metadata.
 	c := meta.(*scylla.Client)
+	if c.Meta == nil {
+		return errors.New(`"peer_cidr_blocks" is required when the provider sets "metadata" to false`)
+	}
+
 	region := strings.ToLower(d.Get("peer_region").(string))
 
 	cidr, ok := c.Meta.GCPBlocks[region]
@@ -334,20 +333,25 @@ func resourceVPCPeeringCustomizeDiff(ctx context.Context, d *schema.ResourceDiff
 		return noDefaultCIDRError(region)
 	}
 
-	// A peer_region is any string for AWS, so a GCP region name does not
-	// make the peering a GCP one.
-	if err := requireGCPCluster(ctx, d, c); err != nil {
-		return err
+	// Terraform plans the new peering of a replacement again, without the
+	// prior state, so only a new peering is checked against the API. A plan
+	// without changes then does not depend on the API.
+	if d.Id() == "" {
+		if err := requireGCPDatacenter(ctx, d, c); err != nil {
+			return err
+		}
 	}
 
 	return d.SetNew("peer_cidr_blocks", []string{cidr})
 }
 
-// requireGCPCluster fails unless the cluster of the peering is on GCP. An
-// unknown cluster_id fails too: it can still be the cluster of the existing
+// requireGCPDatacenter fails unless the cluster of a new peering is on GCP,
+// as a peer_region is any string for AWS, and has the datacenter of the
+// peering. A datacenter known only at apply time is left to the create. An
+// unknown cluster_id fails: it can still be the cluster of the existing
 // peering, as when a data source reads it only at apply time, and the plan
 // then replaces that peering.
-func requireGCPCluster(ctx context.Context, d *schema.ResourceDiff, c *scylla.Client) error {
+func requireGCPDatacenter(ctx context.Context, d *schema.ResourceDiff, c *scylla.Client) error {
 	if !d.NewValueKnown("cluster_id") {
 		return errors.New(`"peer_cidr_blocks" is required when "cluster_id" is known only at apply time`)
 	}
@@ -359,19 +363,39 @@ func requireGCPCluster(ctx context.Context, d *schema.ResourceDiff, c *scylla.Cl
 		return fmt.Errorf("error reading the datacenters of cluster %d: %w", clusterID, err)
 	}
 	if len(dcs) == 0 {
-		return fmt.Errorf("cluster %d has no datacenter", clusterID)
+		return fmt.Errorf("cluster %d has no ACTIVE datacenter", clusterID)
 	}
 
 	// All datacenters of a cluster are on the same cloud.
-	p := c.Meta.ProviderByID(dcs[0].CloudProviderID)
+	dc := &dcs[0]
+	if d.NewValueKnown("datacenter") {
+		name := d.Get("datacenter").(string)
+		if dc = findDatacenter(dcs, name); dc == nil {
+			return fmt.Errorf("unable to find %q datacenter", name)
+		}
+	}
+
+	p := c.Meta.ProviderByID(dc.CloudProviderID)
 	if p == nil {
-		return fmt.Errorf("unable to find cloud provider with id=%d", dcs[0].CloudProviderID)
+		return fmt.Errorf("unable to find cloud provider with id=%d", dc.CloudProviderID)
 	}
 	if !strings.EqualFold(p.CloudProvider.Name, "GCP") {
 		return fmt.Errorf(`"peer_cidr_blocks" is required: cluster %d is on %s`, clusterID, p.CloudProvider.Name)
 	}
 
 	return nil
+}
+
+// findDatacenter returns the datacenter named name in any letter case, or nil.
+func findDatacenter(dcs []model.Datacenter, name string) *model.Datacenter {
+	i := slices.IndexFunc(dcs, func(dc model.Datacenter) bool {
+		return strings.EqualFold(dc.Name, name)
+	})
+	if i < 0 {
+		return nil
+	}
+
+	return &dcs[i]
 }
 
 func noDefaultCIDRError(region string) error {

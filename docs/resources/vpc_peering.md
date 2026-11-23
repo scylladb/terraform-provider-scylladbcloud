@@ -152,6 +152,8 @@ terraform plan
 
 # Keep peer_cidr_blocks in the configuration of an AWS peering, and of a GCP
 # peering with custom CIDR blocks. Without the list, the next plan fails for
-# AWS, and replaces a GCP peering with one on the default CIDR block of its
-# region.
+# AWS. For GCP, it fails when the region has no default CIDR block, and
+# otherwise replaces the peering with one on that block. Before it plans the
+# replacement, it checks that the cluster is on GCP and, when the plan knows
+# the datacenter name, that the cluster has that datacenter.
 ```

@@ -131,7 +131,7 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 		{
 			name:     "GCP region without a default CIDR block takes explicit CIDR blocks",
 			cloud:    testCloudGCP,
-			region:   "me-central2",
+			region:   "nowhere-west1",
 			cidrs:    []any{"10.10.0.0/16"},
 			wantSent: map[string]any{"cidrBlock": "10.10.0.0/16"},
 		},
@@ -158,8 +158,8 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 		{
 			name:    "GCP region without a default CIDR block needs explicit CIDR blocks",
 			cloud:   testCloudGCP,
-			region:  "me-central2",
-			wantErr: `"peer_cidr_blocks" is required: "me-central2" has no default CIDR block`,
+			region:  "nowhere-west1",
+			wantErr: `"peer_cidr_blocks" is required: "nowhere-west1" has no default CIDR block`,
 		},
 		{
 			name:       "unknown datacenter",
@@ -452,9 +452,6 @@ func proposedNewState(prior, config cty.Value) cty.Value {
 	return cty.ObjectVal(attrs)
 }
 
-// planPeering plans a peering through the provider server as Terraform does.
-// A replacement is planned again from a null prior, as Terraform plans the
-// new object, and so is forceReplace, as terraform plan -replace does.
 // newDatacentersAPI returns a fake API with the datacenters of clusters 42
 // and 43 on cloud, and the number of requests for them.
 func newDatacentersAPI(t *testing.T, cloud int) (*httptest.Server, *atomic.Int32) {
@@ -476,8 +473,10 @@ func newDatacentersAPI(t *testing.T, cloud int) (*httptest.Server, *atomic.Int32
 	return srv, &lookups
 }
 
-// planPeering plans the peering of a cluster on cloud, and counts the reads
-// of its datacenters.
+// planPeering plans the peering of a cluster on cloud through the provider
+// server as Terraform does, and counts the reads of its datacenters. A
+// replacement is planned again from a null prior, as Terraform plans the new
+// object, and so is forceReplace, as terraform plan -replace does.
 func planPeering(t *testing.T, cloud int, prior, config cty.Value, forceReplace bool) (planned cty.Value, replace bool, lookups int, diags []*tfprotov5.Diagnostic) {
 	t.Helper()
 
@@ -543,27 +542,27 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 	}{
 		{
 			// The bug this plan fixes: the read stores the default, which
-			// the configuration does not set.
-			name:        "GCP default CIDR block not set in the configuration",
-			prior:       gcpState,
-			config:      gcpConfig,
-			wantCIDRs:   cidrList("10.128.0.0/20"),
-			wantLookups: 1,
+			// the configuration does not set. An unchanged peering is not
+			// checked against the API.
+			name:      "GCP default CIDR block not set in the configuration",
+			prior:     gcpState,
+			config:    gcpConfig,
+			wantCIDRs: cidrList("10.128.0.0/20"),
 		},
 		{
-			name:        "GCP default CIDR block with the region in uppercase",
-			prior:       gcpState,
-			config:      with(gcpConfig, "peer_region", cty.StringVal("US-CENTRAL1")),
-			wantCIDRs:   cidrList("10.128.0.0/20"),
-			wantLookups: 1,
+			name:      "GCP default CIDR block with the region in uppercase",
+			prior:     gcpState,
+			config:    with(gcpConfig, "peer_region", cty.StringVal("US-CENTRAL1")),
+			wantCIDRs: cidrList("10.128.0.0/20"),
 		},
 		{
+			// Only the new peering of the replacement is checked.
 			name:        "custom GCP CIDR blocks removed from the configuration",
 			prior:       testState("us-central1", "10.10.0.0/16"),
 			config:      gcpConfig,
 			wantReplace: true,
 			wantCIDRs:   cidrList("10.128.0.0/20"),
-			wantLookups: 2,
+			wantLookups: 1,
 		},
 		{
 			name:    "AWS CIDR blocks removed from the configuration",
@@ -573,9 +572,9 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 		},
 		{
 			name:    "GCP CIDR blocks removed in a region without a default",
-			prior:   testState("me-central2", "10.10.0.0/16"),
-			config:  testConfig(cty.StringVal("me-central2"), noCIDRs),
-			wantErr: `"peer_cidr_blocks" is required: "me-central2" has no default CIDR block`,
+			prior:   testState("nowhere-west1", "10.10.0.0/16"),
+			config:  testConfig(cty.StringVal("nowhere-west1"), noCIDRs),
+			wantErr: `"peer_cidr_blocks" is required: "nowhere-west1" has no default CIDR block`,
 		},
 		{
 			// The new peering must not keep the default of the old region.
@@ -584,7 +583,7 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			config:      with(gcpConfig, "peer_region", cty.StringVal("europe-west1")),
 			wantReplace: true,
 			wantCIDRs:   cidrList("10.132.0.0/20"),
-			wantLookups: 2,
+			wantLookups: 1,
 		},
 		{
 			name:        "GCP region change with CIDR blocks",
@@ -671,7 +670,7 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			forceReplace: true,
 			wantReplace:  true,
 			wantCIDRs:    cidrList("10.128.0.0/20"),
-			wantLookups:  2,
+			wantLookups:  1,
 		},
 		{
 			name:        "new GCP peering without CIDR blocks",
@@ -736,6 +735,38 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			config:    with(testConfig(cty.StringVal("us-central1"), cidrList("10.128.0.0/20")), "cluster_id", cty.UnknownVal(cty.Number)),
 			wantCIDRs: cidrList("10.128.0.0/20"),
 		},
+		{
+			// The plan must not delete the peering for a create that fails.
+			name:        "GCP datacenter typo without CIDR blocks",
+			prior:       gcpState,
+			config:      with(gcpConfig, "datacenter", cty.StringVal("DC2")),
+			wantErr:     `unable to find "DC2" datacenter`,
+			wantLookups: 1,
+		},
+		{
+			// Explicit CIDR blocks need no lookup, so only the create
+			// reports the typo.
+			name:        "GCP datacenter typo with CIDR blocks",
+			prior:       testState("us-central1", "10.10.0.0/16"),
+			config:      with(testConfig(cty.StringVal("us-central1"), cidrList("10.10.0.0/16")), "datacenter", cty.StringVal("DC2")),
+			wantReplace: true,
+			wantCIDRs:   cidrList("10.10.0.0/16"),
+		},
+		{
+			// The create finds the datacenter in any letter case too.
+			name:        "new GCP peering with the datacenter in lowercase",
+			config:      with(gcpConfig, "datacenter", cty.StringVal("dc1")),
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 1,
+		},
+		{
+			// The cloud comes from any datacenter, and the create checks
+			// the name.
+			name:        "new GCP peering with a datacenter known after apply",
+			config:      with(gcpConfig, "datacenter", cty.UnknownVal(cty.String)),
+			wantCIDRs:   cidrList("10.128.0.0/20"),
+			wantLookups: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -770,6 +801,33 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestResourceVPCPeeringPlanWithoutMetadata plans a peering without
+// peer_cidr_blocks with a provider that sets metadata to false, so it has no
+// default CIDR blocks.
+func TestResourceVPCPeeringPlanWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, newNoAPI(t))
+	client.Meta = nil
+
+	var (
+		prior  = cty.NullVal(peeringType())
+		config = testPeering(testConfig(cty.StringVal("us-central1"), cty.NullVal(cty.List(cty.String))))
+	)
+
+	resp, err := testProviderServer(client).PlanResourceChange(t.Context(), &tfprotov5.PlanResourceChangeRequest{
+		TypeName:         testResourceType,
+		PriorState:       encode(t, prior),
+		ProposedNewState: encode(t, proposedNewState(prior, config)),
+		Config:           encode(t, config),
+	})
+	require.NoError(t, err)
+
+	require.Len(t, resp.Diagnostics, 1)
+	require.Equal(t, tfprotov5.DiagnosticSeverityError, resp.Diagnostics[0].Severity)
+	require.Equal(t, `"peer_cidr_blocks" is required when the provider sets "metadata" to false`, resp.Diagnostics[0].Summary)
 }
 
 // TestResourceVPCPeeringRefresh refreshes through the provider server, which
