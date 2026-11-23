@@ -18,8 +18,8 @@ import (
 // TestVPCPeeringReadClusterWithoutDatacenter reads a peering while the API
 // lists cluster 42 without a datacenter. Reading such a cluster fails, so the
 // read must find the peering without reading it, and must not remove a
-// peering of that cluster from the state. A refresh reads only the cluster
-// of the state.
+// peering of that cluster from the state. A refresh looks in the cluster of
+// the state first, and fails when only another cluster lists the peering.
 func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 	t.Parallel()
 
@@ -30,6 +30,8 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 		// a network do.
 		cluster43 = `{"id":43,"status":"ACTIVE","dcCount":1}`
 		cluster44 = `{"id":44,"status":"ACTIVE","dcCount":1}`
+		// cluster45 has no peering.
+		cluster45 = `{"id":45,"status":"ACTIVE","dcCount":1}`
 	)
 
 	tests := []struct {
@@ -82,17 +84,38 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			clusters:       []string{cluster43, cluster44},
 			wantClusterID:  44,
 		},
+		{
+			// The network outlives a deleted cluster while other clusters
+			// use it, and so does the peering.
+			name:           "refresh while the cluster of the state is gone and another cluster lists the peering",
+			stateClusterID: 43,
+			clusters:       []string{cluster44},
+			wantErr:        `VPC peering "pcx-1" is not listed by cluster 43 of the state but by cluster 44: to manage it through that cluster, remove it from the state and import it again`,
+		},
+		{
+			name:           "refresh while the cluster of the state lists no peering and another cluster lists it",
+			stateClusterID: 45,
+			clusters:       []string{cluster45, cluster44},
+			wantErr:        `VPC peering "pcx-1" is not listed by cluster 45 of the state but by cluster 44: to manage it through that cluster, remove it from the state and import it again`,
+		},
+		{
+			name:           "refresh while the cluster of the state is gone and no cluster lists the peering",
+			stateClusterID: 43,
+			clusters:       []string{cluster45},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			writeCluster := func(w http.ResponseWriter, id int) {
+			const peering = `{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","ownerId":"123",` +
+				`"cidrList":["10.0.0.0/16"],"allowCql":true}`
+
+			writeCluster := func(w http.ResponseWriter, id int, peerings string) {
 				_, _ = fmt.Fprintf(w, `{"data":{"cluster":{"id":%d,"status":"ACTIVE","cloudProviderId":1,`+
 					`"dc":{"id":%d,"name":"AWS_US_EAST_1"},"dataCenters":[{"id":%d,"name":"AWS_US_EAST_1"}],`+
-					`"vpcPeeringList":[{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","ownerId":"123",`+
-					`"cidrList":["10.0.0.0/16"],"allowCql":true}]}}}`, id, id, id)
+					`"vpcPeeringList":[%s]}}}`, id, id, id, peerings)
 			}
 
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,10 +126,12 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 					t.Errorf("read cluster 42, which has no datacenter")
 					_, _ = w.Write([]byte(`{"data":{"cluster":{"id":42,"status":"QUEUED","cloudProviderId":1}}}`))
 				case "GET /account/7/cluster/43":
-					writeCluster(w, 43)
+					writeCluster(w, 43, peering)
 				case "GET /account/7/cluster/44":
-					writeCluster(w, 44)
-				case "GET /account/7/cluster/43/dc/43", "GET /account/7/cluster/44/dc/44":
+					writeCluster(w, 44, peering)
+				case "GET /account/7/cluster/45":
+					writeCluster(w, 45, "")
+				case "GET /account/7/cluster/43/dc/43", "GET /account/7/cluster/44/dc/44", "GET /account/7/cluster/45/dc/45":
 					_, _ = w.Write([]byte(`{"data":{"name":"AWS_US_EAST_1"}}`))
 				default:
 					t.Errorf("unexpected request %s", req)
@@ -141,6 +166,7 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 				require.True(t, diags.HasError())
 				require.Equal(t, tt.wantErr, diags[0].Summary)
 				require.Equal(t, "pcx-1", d.Id(), "the peering must stay in the state")
+				require.Equal(t, tt.stateClusterID, d.Get("cluster_id"), "the peering must keep its cluster_id")
 				return
 			}
 			require.False(t, diags.HasError(), "%v", diags)

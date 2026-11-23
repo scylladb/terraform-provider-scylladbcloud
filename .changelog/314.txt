@@ -3,7 +3,7 @@ provider: Reading VPC peerings, allowlist rules and cluster connections no longe
 ```
 
 ```release-note:bug
-resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while the account has a cluster without a datacenter, for example right after it is created or after its creation failed
+resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while another cluster of the account has no datacenter, for example right after it is created or after its creation failed. While the cluster of the peering itself is listed without a datacenter, its refresh, also the one before `terraform destroy`, still fails, and asks to try again
 ```
 
 ```release-note:bug
