@@ -345,10 +345,11 @@ func resourceVPCPeeringCustomizeDiff(ctx context.Context, d *schema.ResourceDiff
 		return errors.New(`"peer_cidr_blocks" is required when "peer_region" is known only at apply time`)
 	}
 
-	// The default CIDR blocks come with the deployment metadata.
+	// The default CIDR blocks come with the deployment metadata, and the
+	// create and the read need it too.
 	c := meta.(*scylla.Client)
 	if c.Meta == nil {
-		return errors.New(`"peer_cidr_blocks" is required when the provider sets "metadata" to false`)
+		return errors.New(`VPC peerings need the deployment metadata: set "metadata" to true in the provider configuration`)
 	}
 
 	region := strings.ToLower(d.Get("peer_region").(string))
@@ -424,7 +425,7 @@ func findDatacenter(dcs []model.Datacenter, name string) *model.Datacenter {
 }
 
 func noDefaultCIDRError(region string) error {
-	return fmt.Errorf(`"peer_cidr_blocks" is required: %q has no default CIDR block`, region)
+	return fmt.Errorf(`"peer_cidr_blocks" is required: the provider has no default CIDR block for %q`, region)
 }
 
 // resourceVPCPeeringImport imports a peering by its connection ID. The API

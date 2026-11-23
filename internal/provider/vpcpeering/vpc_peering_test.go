@@ -159,7 +159,7 @@ func TestResourceVPCPeeringCreate(t *testing.T) {
 			name:    "GCP region without a default CIDR block needs explicit CIDR blocks",
 			cloud:   testCloudGCP,
 			region:  "nowhere-west1",
-			wantErr: `"peer_cidr_blocks" is required: "nowhere-west1" has no default CIDR block`,
+			wantErr: `"peer_cidr_blocks" is required: the provider has no default CIDR block for "nowhere-west1"`,
 		},
 		{
 			name:       "unknown datacenter",
@@ -568,13 +568,13 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 			name:    "AWS CIDR blocks removed from the configuration",
 			prior:   awsState,
 			config:  with(awsConfig, "peer_cidr_blocks", noCIDRs),
-			wantErr: `"peer_cidr_blocks" is required: "us-east-1" has no default CIDR block`,
+			wantErr: `"peer_cidr_blocks" is required: the provider has no default CIDR block for "us-east-1"`,
 		},
 		{
 			name:    "GCP CIDR blocks removed in a region without a default",
 			prior:   testState("nowhere-west1", "10.10.0.0/16"),
 			config:  testConfig(cty.StringVal("nowhere-west1"), noCIDRs),
-			wantErr: `"peer_cidr_blocks" is required: "nowhere-west1" has no default CIDR block`,
+			wantErr: `"peer_cidr_blocks" is required: the provider has no default CIDR block for "nowhere-west1"`,
 		},
 		{
 			// The new peering must not keep the default of the old region.
@@ -681,7 +681,7 @@ func TestResourceVPCPeeringPlan(t *testing.T) {
 		{
 			name:    "new AWS peering without CIDR blocks",
 			config:  with(awsConfig, "peer_cidr_blocks", noCIDRs),
-			wantErr: `"peer_cidr_blocks" is required: "us-east-1" has no default CIDR block`,
+			wantErr: `"peer_cidr_blocks" is required: the provider has no default CIDR block for "us-east-1"`,
 		},
 		{
 			name:      "new peering with CIDR blocks known after apply",
@@ -827,7 +827,7 @@ func TestResourceVPCPeeringPlanWithoutMetadata(t *testing.T) {
 
 	require.Len(t, resp.Diagnostics, 1)
 	require.Equal(t, tfprotov5.DiagnosticSeverityError, resp.Diagnostics[0].Severity)
-	require.Equal(t, `"peer_cidr_blocks" is required when the provider sets "metadata" to false`, resp.Diagnostics[0].Summary)
+	require.Equal(t, `VPC peerings need the deployment metadata: set "metadata" to true in the provider configuration`, resp.Diagnostics[0].Summary)
 }
 
 // TestResourceVPCPeeringRefresh refreshes through the provider server, which
