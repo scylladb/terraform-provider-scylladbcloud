@@ -972,6 +972,71 @@ func TestResourceVPCPeeringRefreshSharedPeering(t *testing.T) {
 	}
 }
 
+// TestResourceVPCPeeringDatacenterCase refreshes and plans a peering whose
+// datacenter differs from the API name in letter case only. The create finds
+// the datacenter in any letter case, so only another name replaces the
+// peering.
+func TestResourceVPCPeeringDatacenterCase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		stateDC     string
+		configDC    string
+		wantStateDC string
+		wantReplace bool
+	}{
+		{
+			name:        "configuration in another letter case",
+			stateDC:     "dc1",
+			configDC:    "dc1",
+			wantStateDC: "dc1",
+		},
+		{
+			// A refresh of an earlier version stored the API name.
+			name:        "state with the API name",
+			stateDC:     "DC1",
+			configDC:    "dc1",
+			wantStateDC: "DC1",
+		},
+		{
+			name:        "other datacenter",
+			stateDC:     "dc1",
+			configDC:    "DC2",
+			wantStateDC: "dc1",
+			wantReplace: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := testProviderServer(newTestClient(t, newSharedPeeringAPI(t, `{"id":42,"dcCount":1}`)))
+
+			state := with(testState("us-east-1", testAPICIDR), "datacenter", cty.StringVal(tt.stateDC))
+			resp, err := server.ReadResource(t.Context(), &tfprotov5.ReadResourceRequest{
+				TypeName:     testResourceType,
+				CurrentState: encode(t, testPeering(state)),
+			})
+			require.NoError(t, err)
+			require.Empty(t, resp.Diagnostics)
+
+			refreshed := decode(t, resp.NewState)
+			require.Equal(t, cty.StringVal(tt.wantStateDC), refreshed.GetAttr("datacenter"))
+
+			config := with(testConfig(cty.StringVal("us-east-1"), cidrList(testAPICIDR)), "datacenter", cty.StringVal(tt.configDC))
+			planned, replace, _, diags := planPeering(t, testCloudAWS, refreshed, testPeering(config), false)
+			require.Empty(t, diags)
+			require.Equal(t, tt.wantReplace, replace)
+
+			if !tt.wantReplace {
+				require.True(t, refreshed.RawEquals(planned), "unexpected change:\nrefreshed %#v\nplanned   %#v", refreshed, planned)
+			}
+		})
+	}
+}
+
 // newSharedPeeringAPI returns a fake API with AWS clusters 42 and 43 that
 // both list peering pcx-1, and cluster 44 that lists none. clusters is the
 // cluster list, in its order.

@@ -60,10 +60,12 @@ func ResourceVPCPeering() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"datacenter": {
-				Description: "Cluster datacenter name",
-				Required:    true,
-				ForceNew:    true,
-				Type:        schema.TypeString,
+				Description:           "Cluster datacenter name, in any letter case. Changing it to another datacenter replaces the peering.",
+				Required:              true,
+				ForceNew:              true,
+				Type:                  schema.TypeString,
+				DiffSuppressFunc:      suppressCaseDiff,
+				DiffSuppressOnRefresh: true,
 			},
 			"peer_vpc_id": {
 				Description: "Peer VPC ID",
@@ -87,7 +89,7 @@ func ResourceVPCPeering() *schema.Resource {
 				Required:              true,
 				ForceNew:              true,
 				Type:                  schema.TypeString,
-				DiffSuppressFunc:      suppressRegionCaseDiff,
+				DiffSuppressFunc:      suppressCaseDiff,
 				DiffSuppressOnRefresh: true,
 			},
 			"peer_account_id": {
@@ -498,9 +500,10 @@ func peerRegionName(p *scylla.CloudProvider, vp *model.VPCPeering) string {
 	return ""
 }
 
-// suppressRegionCaseDiff ignores a peer_region change in letter case only.
-// The API keeps region names in lowercase.
-func suppressRegionCaseDiff(_, oldValue, newValue string, _ *schema.ResourceData) bool {
+// suppressCaseDiff ignores a change in letter case only, for names that the
+// API matches in any letter case but returns in its own: peer_region and
+// datacenter.
+func suppressCaseDiff(_, oldValue, newValue string, _ *schema.ResourceData) bool {
 	return strings.EqualFold(oldValue, newValue)
 }
 

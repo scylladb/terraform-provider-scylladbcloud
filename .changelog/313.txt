@@ -22,6 +22,10 @@ resource/scylladbcloud_vpc_peering: A refresh checks the cluster in `cluster_id`
 resource/scylladbcloud_vpc_peering: A `datacenter` that the cluster does not have fails with `unable to find "<name>" datacenter` instead of an error about the cloud provider
 ```
 
+```release-note:bug
+resource/scylladbcloud_vpc_peering: `datacenter` is case-insensitive, as the create already was. A name in another letter case than the API name planned a replacement after each refresh
+```
+
 ```release-note:enhancement
 resource/scylladbcloud_vpc_peering: `peer_region` is case-insensitive
 ```
