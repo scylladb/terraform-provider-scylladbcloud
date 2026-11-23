@@ -1053,7 +1053,7 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 	// Without the instance, the read keeps node_type from the state, and the
 	// state of an import has none.
 	if instance == nil && !hasScaling(cluster) && d.Get("node_type").(string) == "" {
-		return diag.Errorf("cluster %d has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes", cluster.ID)
+		return noActiveNodeDiag(cluster.ID)
 	}
 
 	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
@@ -1091,6 +1091,12 @@ func alternatorIsolationWarning(cluster *model.Cluster) diag.Diagnostics {
 			"is different from the empty value in the state. " +
 			"To keep the cluster, add alternator_write_isolation to lifecycle.ignore_changes.",
 	}}
+}
+
+// noActiveNodeDiag is the error for a cluster whose datacenter has no ACTIVE
+// node. The API then reports instance ID 0, so the instance is unknown.
+func noActiveNodeDiag(clusterID int64) diag.Diagnostics {
+	return diag.Errorf("cluster %d has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes", clusterID)
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without
@@ -1293,6 +1299,17 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 			return nil // cluster was deleted
 		}
 		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+	}
+
+	// The read keeps min_nodes from the state while the datacenter has no
+	// ACTIVE node, but the resize needs the instance, and the API reports
+	// instance ID 0 then.
+	if cluster.Datacenter.InstanceID == 0 {
+		// The SDK would store the planned min_nodes of the failed update.
+		// The read keeps a min_nodes below the node count, so a stored
+		// scale-in would never be planned again.
+		d.Partial(true)
+		return noActiveNodeDiag(cluster.ID)
 	}
 
 	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))

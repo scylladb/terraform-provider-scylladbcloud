@@ -11,7 +11,7 @@ resource/scylladbcloud_vpc_peering: Deleting a VPC peering whose cluster was del
 ```
 
 ```release-note:bug
-resource/scylladbcloud_cluster: Reading a cluster no longer fails when the API cannot report its instance. If only the instance lookup of the API fails, the read and the import work as usual. While none of the nodes of a Standard cluster is ACTIVE, the read keeps `node_type`, `node_disk_size` and `min_nodes` from the state and warns that it did not check them, and an import fails until a node is ACTIVE
+resource/scylladbcloud_cluster: Reading a cluster no longer fails when the API cannot report its instance. If only the instance lookup of the API fails, the read and the import work as usual. While none of the nodes of a Standard cluster is ACTIVE, the read keeps `node_type`, `node_disk_size` and `min_nodes` from the state and warns that it did not check them, and an import or a `min_nodes` change fails until a node is ACTIVE. The failed change keeps the earlier `min_nodes` in the state, so the next plan has it again
 ```
 
 ```release-note:bug
