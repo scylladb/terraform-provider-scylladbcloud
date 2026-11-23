@@ -971,7 +971,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return append(warns, diag.Errorf(format, a...)...)
 	}
 
-	if err := WaitForClusterRequestID(ctx, scyllaClient, cr.ID); err != nil {
+	if err := scyllaClient.AwaitClusterRequest(ctx, cr.ID); err != nil {
 		return fail("failed to wait for request %d creating cluster %d: %s", cr.ID, cr.ClusterID, err)
 	}
 
@@ -1303,7 +1303,7 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
-	if err := WaitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
+	if err := scyllaClient.AwaitNoInProgressRequests(ctx, cluster.ID); err != nil {
 		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err)
 	}
 
@@ -1346,7 +1346,7 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 		return diag.Errorf("error resizing cluster: %s", err)
 	}
 
-	if err := WaitForClusterRequestID(ctx, scyllaClient, resizeRequest.ID); err != nil {
+	if err := scyllaClient.AwaitClusterRequest(ctx, resizeRequest.ID); err != nil {
 		return diag.Errorf(
 			"failed waiting for the cluster resize with ID %d for the cluster %d: %s",
 			resizeRequest.ID, cluster.ID, err,
@@ -1415,7 +1415,7 @@ func resourceClusterUpdateScaling(ctx context.Context, d *schema.ResourceData, s
 		return diag.Errorf("failed to update cluster scaling: missing cluster request ID in response")
 	}
 
-	if err := WaitForClusterRequestID(ctx, scyllaClient, request.ID); err != nil {
+	if err := scyllaClient.AwaitClusterRequest(ctx, request.ID); err != nil {
 		return diag.Errorf("failed waiting for scaling update request %d for cluster %d: %s", request.ID, cluster.ID, err)
 	}
 
@@ -1453,16 +1453,6 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 	}
 
 	return nil
-}
-
-// WaitForClusterRequestID returns only after the cluster request is completed or failed.
-func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID int64) error {
-	return c.AwaitClusterRequest(ctx, requestID)
-}
-
-// WaitForNoInProgressRequests waits until there are no requests in progress.
-func WaitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
-	return c.AwaitNoInProgressRequests(ctx, clusterID)
 }
 
 func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
