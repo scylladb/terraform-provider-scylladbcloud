@@ -2,6 +2,7 @@ package vpcpeering
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -233,6 +234,15 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
 		return diag.Errorf("error reading cluster list: %s", err)
+	}
+
+	// All the clusters of a shared network list its peerings, so a refresh
+	// reads only the cluster of the state. Finding the peering through
+	// another cluster would change cluster_id, which replaces the peering.
+	if stateClusterID != 0 {
+		clusters = slices.DeleteFunc(clusters, func(cl model.ClusterSummary) bool {
+			return cl.ID != stateClusterID
+		})
 	}
 
 lookup:

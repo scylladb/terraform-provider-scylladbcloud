@@ -1,6 +1,7 @@
 package vpcpeering
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,15 +18,18 @@ import (
 // TestVPCPeeringReadClusterWithoutDatacenter reads a peering while the API
 // lists cluster 42 without a datacenter. Reading such a cluster fails, so the
 // read must find the peering without reading it, and must not remove a
-// peering of that cluster from the state.
+// peering of that cluster from the state. A refresh reads only the cluster
+// of the state.
 func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 	t.Parallel()
 
 	const (
 		// The API omits dcCount for a cluster without a datacenter.
 		cluster42 = `{"id":42,"status":"QUEUED"}`
-		// cluster43 has the peering.
+		// cluster43 and cluster44 have the peering, as clusters that share
+		// a network do.
 		cluster43 = `{"id":43,"status":"ACTIVE","dcCount":1}`
+		cluster44 = `{"id":44,"status":"ACTIVE","dcCount":1}`
 	)
 
 	tests := []struct {
@@ -59,24 +63,37 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			clusters:       []string{cluster42},
 		},
 		{
-			// The cluster of the state is listed without a datacenter, so
-			// the read must look for the peering in the other clusters.
-			name:           "refresh that finds the peering in another cluster",
-			stateClusterID: 42,
-			clusters:       []string{cluster42, cluster43},
-			wantClusterID:  43,
-		},
-		{
 			name:           "refresh while the cluster of the state has no datacenter",
 			stateClusterID: 42,
 			clusters:       []string{cluster42},
 			wantErr:        `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: try again later`,
+		},
+		{
+			// The clusters of a shared network list the same peering, but
+			// taking it from another cluster would change cluster_id.
+			name:           "refresh while the cluster of the state has no datacenter and another cluster lists the peering",
+			stateClusterID: 42,
+			clusters:       []string{cluster42, cluster43},
+			wantErr:        `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: try again later`,
+		},
+		{
+			name:           "refresh of a peering that a cluster listed first also has",
+			stateClusterID: 44,
+			clusters:       []string{cluster43, cluster44},
+			wantClusterID:  44,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
+			writeCluster := func(w http.ResponseWriter, id int) {
+				_, _ = fmt.Fprintf(w, `{"data":{"cluster":{"id":%d,"status":"ACTIVE","cloudProviderId":1,`+
+					`"dc":{"id":%d,"name":"AWS_US_EAST_1"},"dataCenters":[{"id":%d,"name":"AWS_US_EAST_1"}],`+
+					`"vpcPeeringList":[{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","ownerId":"123",`+
+					`"cidrList":["10.0.0.0/16"],"allowCql":true}]}}}`, id, id, id)
+			}
 
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch req := r.Method + " " + r.URL.Path; req {
@@ -86,12 +103,11 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 					t.Errorf("read cluster 42, which has no datacenter")
 					_, _ = w.Write([]byte(`{"data":{"cluster":{"id":42,"status":"QUEUED","cloudProviderId":1}}}`))
 				case "GET /account/7/cluster/43":
-					_, _ = w.Write([]byte(`{"data":{"cluster":{"id":43,"status":"ACTIVE","cloudProviderId":1,` +
-						`"dc":{"id":5,"name":"AWS_US_EAST_1"},"dataCenters":[{"id":5,"name":"AWS_US_EAST_1"}],` +
-						`"vpcPeeringList":[{"id":9,"externalId":"pcx-1","vpcId":"vpc-1","ownerId":"123",` +
-						`"cidrList":["10.0.0.0/16"],"allowCql":true}]}}}`))
-				case "GET /account/7/cluster/43/dc/5":
-					_, _ = w.Write([]byte(`{"data":{"id":5,"name":"AWS_US_EAST_1"}}`))
+					writeCluster(w, 43)
+				case "GET /account/7/cluster/44":
+					writeCluster(w, 44)
+				case "GET /account/7/cluster/43/dc/43", "GET /account/7/cluster/44/dc/44":
+					_, _ = w.Write([]byte(`{"data":{"name":"AWS_US_EAST_1"}}`))
 				default:
 					t.Errorf("unexpected request %s", req)
 				}
