@@ -1,8 +1,10 @@
 name: release
 
-# Started by hand from main. The prepare job builds, signs and previews the
-# release. The publish job waits for approval in the release environment and
-# then publishes exactly the files the prepare job built.
+# Started by hand from main. See RELEASING.md.
+# plan:    the version, the release notes and the checks (scripts/release-plan.sh).
+# build:   builds and signs the release files without publishing them.
+# publish: waits for approval in the release environment, then publishes
+#          exactly the files the build job made.
 on:
   workflow_dispatch:
     inputs:
@@ -28,11 +30,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  prepare:
+  plan:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      sha: ${{ steps.version.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - name: Check the branch
         if: github.ref != 'refs/heads/main'
@@ -50,85 +52,52 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Choose the version
-        id: version
+      - name: Plan the release
+        id: plan
         env:
           BUMP: ${{ inputs.bump }}
-        run: |
-          last="$(go tool svu current)"
-          if [ "$BUMP" = auto ]; then
-            next="$(go tool svu next)"
-          else
-            next="$(go tool svu "$BUMP")"
-          fi
-          if [ "$next" = "$last" ]; then
-            echo "::error::No feat or fix PR since ${last}, so there is nothing to release. Choose a bump to release anyway."
-            exit 1
-          fi
-          if git ls-remote --exit-code --tags origin "refs/tags/${next}" >/dev/null; then
-            echo "::error::Tag ${next} already exists."
-            exit 1
-          fi
-          {
-            echo "last=${last}"
-            echo "version=${next}"
-            echo "sha=${GITHUB_SHA}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build the release notes
-        env:
-          LAST: ${{ steps.version.outputs.last }}
           SUMMARY: ${{ inputs.summary }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          OUT: ${{ runner.temp }}/plan
         run: |
-          # The first release after adding .changelog/ has no entries at its
-          # last tag. "-" takes every entry in the directory.
-          if git cat-file -e "${LAST}:.changelog" 2>/dev/null; then from="$LAST"; else from=-; fi
-          go tool changelog-build -git-dir "$PWD" -last-release "$from" -this-release "$GITHUB_SHA" \
-            -entries-dir .changelog \
-            -changelog-template .github/changelog/release-notes.tmpl \
-            -note-template .github/changelog/note.tmpl > "$RUNNER_TEMP/entries.md"
+          ./scripts/release-plan.sh
+          cat "$OUT/plan.env" >> "$GITHUB_OUTPUT"
           {
-            if [ -n "$SUMMARY" ]; then printf '%s\n\n' "$SUMMARY"; fi
-            sed '/./,$!d' "$RUNNER_TEMP/entries.md"
-          } > "$RUNNER_TEMP/notes.md"
-          echo "from=${from}" >> "$GITHUB_ENV"
-
-      - name: Check the bump against the entries
-        env:
-          LAST: ${{ steps.version.outputs.last }}
-          NEXT: ${{ steps.version.outputs.version }}
-        run: |
-          if [ "$from" = - ]; then
-            files="$(ls .changelog/*.txt)"
-          else
-            files="$(git diff --name-only --diff-filter=A "$LAST" HEAD -- .changelog/)"
-          fi
-          types="$(sed -n 's/^```release-note:\(.*\)$/\1/p' $files /dev/null | sort -u)"
-
-          IFS=. read -r lmaj lmin _ <<< "${LAST#v}"
-          IFS=. read -r nmaj nmin _ <<< "${NEXT#v}"
-          if [ "$nmaj" != "$lmaj" ]; then level=major
-          elif [ "$nmin" != "$lmin" ]; then level=minor
-          else level=patch; fi
-
-          : > "$RUNNER_TEMP/warnings.md"
-          if grep -qx breaking-change <<< "$types" && [ "$level" != major ]; then
-            echo "::error::A breaking-change entry needs a major release, but ${NEXT} is a ${level} release."
-            exit 1
-          fi
-          if grep -qxE 'feature|new-resource|new-data-source' <<< "$types" && [ "$level" = patch ]; then
-            echo "- A feature entry is released in a patch version." >> "$RUNNER_TEMP/warnings.md"
-          fi
-          git log --format='%s' "${LAST}..HEAD" | while read -r subject; do
-            pr="$(sed -n 's/.*(#\([0-9]\{1,\}\))$/\1/p' <<< "$subject")"
-            if grep -qE '^(feat|fix)(\(.*\))?!?: ' <<< "$subject" && [ -n "$pr" ] && [ ! -f ".changelog/${pr}.txt" ]; then
-              echo "- \`${subject}\` has no changelog entry." >> "$RUNNER_TEMP/warnings.md"
+            cat "$OUT/preview.md"
+            echo
+            if [ "$DRY_RUN" = true ]; then
+              echo "**Dry run.** Nothing will be published."
+            else
+              echo "After the build, approve or reject the \`publish\` job."
             fi
-          done
-          if [ ! -s "$RUNNER_TEMP/entries.md" ] || ! grep -q '[^[:space:]]' "$RUNNER_TEMP/entries.md"; then
-            echo "- The release notes have no entries." >> "$RUNNER_TEMP/warnings.md"
-          fi
-          echo "level=${level}" >> "$GITHUB_ENV"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan/notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan
 
       - name: Import the GPG key
         id: gpg
@@ -139,21 +108,21 @@ jobs:
 
       - name: Tag on the runner
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: git tag "$VERSION"
 
       - name: Build and sign
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: v2.20.3
-          args: release --clean --skip=publish --release-notes ${{ runner.temp }}/notes.md
+          args: release --clean --skip=publish --release-notes ${{ runner.temp }}/plan/notes.md
         env:
           GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Collect the release files
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           mkdir "$RUNNER_TEMP/release"
           cp dist/*.zip dist/*_SHA256SUMS dist/*_SHA256SUMS.sig "$RUNNER_TEMP/release/"
@@ -165,12 +134,12 @@ jobs:
             echo "::error::${manifest} does not match its checksum in SHA256SUMS."
             exit 1
           fi
-          count="$(ls "$RUNNER_TEMP/release" | wc -l)"
+          count="$(find "$RUNNER_TEMP/release" -type f | wc -l)"
           if [ "$count" -ne 16 ]; then
             echo "::error::Expected 16 release files, found ${count}."
             exit 1
           fi
-          cp "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP/release/notes.md"
+          cp "$RUNNER_TEMP/plan/notes.md" "$RUNNER_TEMP/release/notes.md"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -179,46 +148,16 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Write the preview
+      - name: Add the build to the preview
         env:
-          LAST: ${{ steps.version.outputs.last }}
-          VERSION: ${{ steps.version.outputs.version }}
-          BUMP: ${{ inputs.bump }}
-          DRY_RUN: ${{ inputs.dry_run }}
           FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
         run: |
           {
-            echo "## Release preview: ${VERSION}"
+            echo "### Build"
             echo
-            if [ "$DRY_RUN" = true ]; then
-              echo "**Dry run.** Nothing will be published."
-            else
-              echo "Review this preview, then approve or reject the \`publish\` job."
-            fi
+            echo "Signing key: \`${FINGERPRINT}\`"
             echo
-            echo "| | |"
-            echo "|---|---|"
-            echo "| Version | ${LAST} → **${VERSION}** (${level}, bump: ${BUMP}) |"
-            echo "| Commit | \`${GITHUB_SHA}\` |"
-            echo "| Signing key | \`${FINGERPRINT}\` |"
-            echo "| Files | $(ls "$RUNNER_TEMP/release" | grep -vc notes.md) |"
-            echo
-            if [ -s "$RUNNER_TEMP/warnings.md" ]; then
-              echo "### Warnings"
-              cat "$RUNNER_TEMP/warnings.md"
-              echo
-            fi
-            echo "### Release notes"
-            echo
-            cat "$RUNNER_TEMP/notes.md"
-            echo
-            echo "<details><summary>Commits since ${LAST}</summary>"
-            echo
-            git log --format='- `%h` %s' "${LAST}..HEAD"
-            echo
-            echo "</details>"
-            echo
-            echo "<details><summary>Files</summary>"
+            echo "<details><summary>16 files (SHA256SUMS)</summary>"
             echo
             echo '```'
             cat "$RUNNER_TEMP"/release/*_SHA256SUMS
@@ -228,7 +167,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
-    needs: prepare
+    needs: [plan, build]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     environment: release
@@ -243,8 +182,8 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ needs.plan.outputs.sha }}
         working-directory: release
         run: |
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
@@ -259,7 +198,7 @@ jobs:
       - name: Wait for the Terraform Registry
         if: github.repository == 'scylladb/terraform-provider-scylladbcloud'
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
           url=https://registry.terraform.io/v1/providers/scylladb/scylladbcloud/versions
           for _ in $(seq 1 30); do
