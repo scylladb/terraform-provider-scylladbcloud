@@ -31,7 +31,7 @@ resource/scylladbcloud_vpc_peering: `peer_region` is case-insensitive
 ```
 
 ```release-note:enhancement
-resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, or a GCP peering in a region without a default CIDR block, fails at plan time instead of during apply
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, or a GCP peering in a region for which the provider has no default CIDR block, fails at plan time instead of during apply
 ```
 
 ```release-note:enhancement
@@ -47,5 +47,5 @@ resource/scylladbcloud_vpc_peering: A GCP peering is imported with its region: `
 ```
 
 ```release-note:note
-resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that refresh. Terraform still plans the destroy. Public clusters do not list peerings: if the private cluster of a peering was deleted and only public clusters still use its network, Terraform can remove the peering from the state while it remains live. Check in AWS or GCP that the peering is gone before treating the destroy as complete. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the GCP region has a default CIDR block
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that refresh. Terraform still plans the destroy. Public clusters do not list peerings: if the private cluster of a peering was deleted and only public clusters still use its network, Terraform can remove the peering from the state while it remains live. Check in AWS or GCP that the peering is gone before treating the destroy as complete. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the provider has a default CIDR block for the GCP region
 ```

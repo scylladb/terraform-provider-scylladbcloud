@@ -108,7 +108,7 @@ resource "google_compute_network_peering" "app" {
 ### Optional
 
 - `allow_cql` (Boolean) Whether to allow CQL traffic
-- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list, not empty. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region` when the plan knows `peer_region` and `cluster_id` and the region has such a range, and it is required otherwise. Without it, a configuration that fails this check also fails `terraform destroy`, which then needs `-refresh=false`. If the original private cluster was deleted and only public clusters still use its network, check in AWS or GCP that the peering is gone after destroy. Changing it replaces the peering.
+- `peer_cidr_blocks` (List of String) Peer VPC CIDR block list, not empty. Required for AWS. For GCP, it defaults to the auto mode subnet range of `peer_region` when the plan knows `peer_region` and `cluster_id` and the provider has a default CIDR block for that region, and it is required otherwise. Without it, a configuration that fails this check also fails `terraform destroy`, which then needs `-refresh=false`. If the original private cluster was deleted and only public clusters still use its network, check in AWS or GCP that the peering is gone after destroy. Changing it replaces the peering.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -152,8 +152,8 @@ terraform plan
 
 # Keep peer_cidr_blocks in the configuration of an AWS peering, and of a GCP
 # peering with custom CIDR blocks. Without the list, the next plan fails for
-# AWS. For GCP, it fails when the region has no default CIDR block, and
-# otherwise replaces the peering with one on that block. Before it plans the
-# replacement, it checks that the cluster is on GCP and, when the plan knows
-# the datacenter name, that the cluster has that datacenter.
+# AWS. For GCP, it fails when the provider has no default CIDR block for the
+# region, and otherwise replaces the peering with one on that block. Before
+# it plans the replacement, it checks that the cluster is on GCP and, when
+# the plan knows the datacenter name, that the cluster has that datacenter.
 ```
