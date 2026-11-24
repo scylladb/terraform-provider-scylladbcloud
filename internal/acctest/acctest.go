@@ -3,8 +3,11 @@
 package acctest
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -119,30 +122,62 @@ func CheckClusterExists(t testing.TB, resourceName string, cluster *model.Cluste
 	}
 }
 
-// CheckClusterDestroyed returns a check that fails when a cluster in the
-// state still exists.
+// CheckClusterDestroyed returns a check that fails unless the API confirms
+// that each cluster in the state is deleted.
 func CheckClusterDestroyed(t testing.TB) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		c, err := sharedClient()
 		if err != nil {
 			return err
 		}
+		return checkClusterDestroyed(t.Context(), c, s)
+	}
+}
 
-		for _, rs := range s.RootModule().Resources {
-			if rs.Type != "scylladbcloud_cluster" {
-				continue
-			}
-
-			id, err := clusterID(rs)
-			if err != nil {
-				return err
-			}
-
-			if _, err := c.GetCluster(t.Context(), id); err == nil {
-				return fmt.Errorf("cluster %d still exists", id)
-			}
+func checkClusterDestroyed(ctx context.Context, c *scylla.Client, s *terraform.State) error {
+	for _, rs := range s.RootModule().Resources {
+		if rs.Type != "scylladbcloud_cluster" {
+			continue
 		}
 
-		return nil
+		id, err := clusterID(rs)
+		if err != nil {
+			return err
+		}
+
+		if err := awaitClusterDeleted(ctx, c, id); err != nil {
+			return err
+		}
 	}
+
+	return nil
+}
+
+// awaitClusterDeleted returns once the API confirms that the cluster is
+// deleted. Delete does not wait until the cluster is gone (CLOUD-5783), so
+// the cluster can still exist when the check starts. It then waits for the
+// delete request to complete.
+func awaitClusterDeleted(ctx context.Context, c *scylla.Client, id int64) error {
+	reqs, err := c.ListClusterRequest(ctx, id, scylla.ListClusterRequestParams{Type: "DELETE_CLUSTER"})
+	switch {
+	case isGone(err):
+		return nil
+	case err != nil:
+		// Any other error, such as a 5xx or an expired token, does not
+		// show that the cluster is gone. A leaked cluster costs money.
+		return fmt.Errorf("cannot confirm that cluster %d is destroyed: %w", id, err)
+	case len(reqs) == 0:
+		return fmt.Errorf("cluster %d still exists, no delete request was sent", id)
+	}
+
+	last := slices.MaxFunc(reqs, func(a, b model.ClusterRequest) int { return cmp.Compare(a.ID, b.ID) })
+	if err := c.AwaitClusterRequest(ctx, last.ID); err != nil {
+		return fmt.Errorf("cannot confirm that cluster %d is destroyed: %w", id, err)
+	}
+	return nil
+}
+
+// isGone reports whether err is an API answer that the object does not exist.
+func isGone(err error) bool {
+	return scylla.IsNotFound(err) || scylla.IsClusterDeletedErr(err) || scylla.IsDeletedErr(err)
 }
