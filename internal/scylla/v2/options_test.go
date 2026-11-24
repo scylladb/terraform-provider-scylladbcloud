@@ -22,6 +22,21 @@ func TestNewTrace(t *testing.T) {
 	require.NotEqual(t, trace, other)
 }
 
+func TestTraceOrNew(t *testing.T) {
+	t.Run("configured trace is preserved", func(t *testing.T) {
+		trace, err := TraceOrNew("explicit")
+		require.NoError(t, err)
+		require.Equal(t, "explicit", trace)
+	})
+
+	t.Run("missing trace is generated", func(t *testing.T) {
+		trace, err := TraceOrNew("")
+		require.NoError(t, err)
+		require.True(t, strings.HasPrefix(trace, TracePrefix),
+			"trace %q missing prefix %q", trace, TracePrefix)
+	})
+}
+
 func TestWithTrace(t *testing.T) {
 	t.Run("sets header", func(t *testing.T) {
 		req := New(WithTrace("trace-id")).Request(t.Context(), "GET", nil, "/")

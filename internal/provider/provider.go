@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"os"
-	"runtime"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/allowlistrule"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
@@ -125,7 +124,7 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 	// A trace supplied in the configuration or via SCYLLADB_CLOUD_TRACE matches
 	// the trace already recorded for the stack, so it is preferred over a
 	// generated one.
-	trace, err := traceOrNew(d.Get("trace").(string))
+	trace, err := v2scylla.TraceOrNew(d.Get("trace").(string))
 	if err != nil {
 		return nil, diag.Errorf("could not generate trace id: %s", err)
 	}
@@ -134,30 +133,12 @@ func configure(ctx context.Context, p *schema.Provider, d *schema.ResourceData) 
 		"trace": trace,
 	})
 
-	c, err := scylla.NewClient(endpoint, token, userAgent(p.TerraformVersion), trace, metadata)
+	c, err := scylla.NewClient(endpoint, token, scylla.UserAgent(p.TerraformVersion), trace, metadata)
 	if err != nil {
 		return nil, diag.Errorf("could not create new Scylla client: %s", err)
 	}
 
 	return c, nil
-}
-
-// traceOrNew returns the configured trace or a freshly generated one.
-func traceOrNew(configured string) (string, error) {
-	if configured != "" {
-		return configured, nil
-	}
-	return v2scylla.NewTrace()
-}
-
-func userAgent(tfVersion string) string {
-	sysinfo := "(" + runtime.GOOS + "/" + runtime.GOARCH + ")"
-
-	if tfVersion != "" {
-		return "Terraform/" + tfVersion + "(" + sysinfo + ")"
-	}
-
-	return "Terraform/0.11+compatible (" + sysinfo + ")"
 }
 
 func nonempty[T comparable](t ...T) T {

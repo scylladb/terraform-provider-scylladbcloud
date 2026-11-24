@@ -58,6 +58,14 @@ func NewTrace() (string, error) {
 	return TracePrefix + hex.EncodeToString(buf), nil
 }
 
+// TraceOrNew returns the configured trace or a freshly generated one.
+func TraceOrNew(configured string) (string, error) {
+	if configured != "" {
+		return configured, nil
+	}
+	return NewTrace()
+}
+
 func WithTrace(s string) func(*Client) {
 	if s == "" {
 		return func(*Client) {}

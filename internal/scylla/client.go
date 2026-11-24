@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	stdpath "path"
+	"runtime"
 	"time"
 
 	v2scylla "github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/v2"
@@ -57,6 +58,18 @@ type Client struct {
 	// V2 is the client to call the V2 API, it does not require costly
 	// metadata building.
 	V2 *v2scylla.Client
+}
+
+// UserAgent returns the User-Agent header for the Terraform version
+// tfVersion, or for an unknown version when tfVersion is "".
+func UserAgent(tfVersion string) string {
+	sysinfo := "(" + runtime.GOOS + "/" + runtime.GOARCH + ")"
+
+	if tfVersion != "" {
+		return "Terraform/" + tfVersion + "(" + sysinfo + ")"
+	}
+
+	return "Terraform/0.11+compatible (" + sysinfo + ")"
 }
 
 func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client, error) {
