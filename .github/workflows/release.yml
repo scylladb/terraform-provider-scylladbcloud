@@ -35,6 +35,7 @@ jobs:
     outputs:
       version: ${{ steps.plan.outputs.version }}
       sha: ${{ steps.plan.outputs.sha }}
+      last: ${{ steps.plan.outputs.last }}
     steps:
       - name: Check the branch
         if: github.ref != 'refs/heads/main'
@@ -68,7 +69,14 @@ jobs:
             if [ "$DRY_RUN" = true ]; then
               echo "**Dry run.** Nothing will be published."
             else
-              echo "After the build, approve or reject the \`publish\` job."
+              echo "### Before you approve"
+              echo
+              echo "- [ ] The version and the bump are right for the changes."
+              echo "- [ ] The release body is written for users and has no internal details."
+              echo "- [ ] Every warning is understood."
+              echo "- [ ] The build summary below shows the signing key as expected (✓)."
+              echo
+              echo "Then approve or reject the \`publish\` job in **Review deployments**."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -105,6 +113,35 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
+
+      - name: Check the signing key
+        env:
+          FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+          EXPECTED: ${{ vars.RELEASE_SIGNING_KEY }}
+          LAST: ${{ needs.plan.outputs.last }}
+        run: |
+          # The Registry accepts only releases signed with the key in its
+          # namespace settings. A fork has no such key: set the
+          # RELEASE_SIGNING_KEY variable there instead.
+          if [ -n "$EXPECTED" ]; then
+            source="the RELEASE_SIGNING_KEY variable"
+            expected="$EXPECTED"
+          else
+            source="the Terraform Registry (key of ${LAST})"
+            url="https://registry.terraform.io/v1/providers/scylladb/scylladbcloud/${LAST#v}/download/linux/amd64"
+            expected="$(curl -fsS "$url" | jq -r '.signing_keys.gpg_public_keys[].key_id')"
+          fi
+          fpr="$(tr '[:lower:]' '[:upper:]' <<< "$FINGERPRINT")"
+          match=""
+          for key in $expected; do
+            key="$(tr '[:lower:]' '[:upper:]' <<< "$key")"
+            if [ -n "$key" ] && [ "${fpr%"$key"}" != "$fpr" ]; then match="$key"; fi
+          done
+          if [ -z "$match" ]; then
+            echo "::error::The signing key ${fpr} is not the expected key from ${source}: ${expected:-none found}."
+            exit 1
+          fi
+          echo "key_line=Signing key: \`${fpr}\` ✓ matches \`${match}\` from ${source}." >> "$GITHUB_ENV"
 
       - name: Tag on the runner
         env:
@@ -149,13 +186,11 @@ jobs:
           retention-days: 7
 
       - name: Add the build to the preview
-        env:
-          FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
         run: |
           {
             echo "### Build"
             echo
-            echo "Signing key: \`${FINGERPRINT}\`"
+            echo "$key_line"
             echo
             echo "<details><summary>16 files (SHA256SUMS)</summary>"
             echo

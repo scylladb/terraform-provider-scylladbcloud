@@ -44,12 +44,14 @@ title as its subject (see [CONTRIBUTING.md](CONTRIBUTING.md)).
    | Job | Takes | Does |
    |---|---|---|
    | `plan` | about 1 minute | Picks the version, builds the release notes, runs the checks and writes the preview on the run page. |
-   | `build` | about 6 minutes | Builds and signs the 16 release files with GoReleaser, without publishing them, and adds the signing key and checksums to the preview. |
+   | `build` | about 6 minutes | Checks the signing key, builds and signs the 16 release files with GoReleaser without publishing them, and adds the key and the checksums to the preview. |
    | `publish` | after approval | Waits in the `release` environment. On approval, creates the tag and the release from exactly the files `build` made, then waits until the Registry lists the version. Skipped in a dry run. |
 
-5. Read the preview on the run page. If something is wrong, cancel the run
-   or reject the `publish` job. Nothing is published, and no tag is
-   created.
+5. Read the preview on the run page. The release title is the version.
+   The quoted text under **Release body** is published as the body of the
+   release. The preview ends with a checklist. If something is wrong,
+   cancel the run or reject the `publish` job. Nothing is published, and
+   no tag is created.
 6. The other release owner opens **Review deployments** on the run page and
    approves. The person who started the run cannot approve it.
 
@@ -64,6 +66,7 @@ run started are not included.
 | **Stops** | The tag already exists. |
 | **Stops** | A `breaking-change` entry, and the version is not a major version. |
 | **Stops** | The run was not started from `main`. |
+| **Stops** | The signing key is not the expected key (see [The signing key](#the-signing-key)). |
 | **Warns** | A `feature`, `new-resource` or `new-data-source` entry in a patch version. |
 | **Warns** | A `feat` or `fix` PR without a changelog entry. |
 | **Warns** | The release notes have no entries. |
@@ -120,9 +123,12 @@ Test in a personal fork, never in this repository.
    secrets.
 3. Create the `release` environment in the fork with yourself as the
    reviewer and Prevent self-review off.
-4. Push the change to the fork's `main`: **Run workflow** lists only
+4. Set the fork's `RELEASE_SIGNING_KEY` repository variable to the
+   fingerprint of the throwaway key. Without it, the `build` job compares
+   the key with the Registry and stops.
+5. Push the change to the fork's `main`: **Run workflow** lists only
    workflows on the default branch.
-5. Test the logic of `scripts/release-plan.sh` locally first. Use the fork
+6. Test the logic of `scripts/release-plan.sh` locally first. Use the fork
    for the build, the approval and the publish.
 
 The fork skips the Registry step. Delete the fork's test releases and tags
@@ -135,12 +141,32 @@ afterwards.
 | "No feat or fix PR since …" | Nothing user-facing was merged, or the PR titles have the wrong type. Choose a bump to release anyway. |
 | "A breaking-change entry needs a major release" | Release as `major`, or change the entry if the change is not breaking. |
 | "… does not match its checksum in SHA256SUMS" | The signed checksums do not list `terraform-registry-manifest.json`. Check `checksum.extra_files` in `.goreleaser.yml`. |
+| "The signing key … is not the expected key" | The `GPG_PRIVATE_KEY` secret is not the key the Registry knows. Do not release: fix the secret, or rotate the key as described above. |
 | The Registry does not list the version after 10 minutes | The Registry did not get or accept the release. The namespace owner can resync the provider in the Registry. Check that the release has all 16 files and that the signing key matches the key in the Registry. |
 | A published release is wrong | Release the next patch version. Never change the tag or the files. |
 
-## Rotating the signing key
+## The signing key
 
-The private key is a repository secret, and its public half is in the
-Registry. Change both together: a release signed with a key the Registry
-does not know is rejected. Only the Registry namespace owner can change
-the public key.
+GoReleaser signs `SHA256SUMS` with the GPG key in the `GPG_PRIVATE_KEY`
+secret. The Registry checks that signature with the public half of the
+key, which is in the settings of the `scylladb` namespace, and rejects a
+release signed with any other key. Terraform checks it again on every
+install.
+
+Before building, the `build` job compares the fingerprint of the key in
+the secret with the expected key, and stops if they differ:
+
+- In this repository, the expected key is the one the Registry lists for
+  the last released version (`signing_keys` in
+  `registry.terraform.io/v1/providers/scylladb/scylladbcloud/<version>/download/linux/amd64`).
+- If the `RELEASE_SIGNING_KEY` repository variable is set, its value is
+  expected instead. Forks use it for their throwaway key.
+
+The fingerprint identifies the public key and is safe to show. It cannot
+sign anything.
+
+To rotate the key, change the secret and the public key in the Registry
+together. Only the Registry namespace owner can change the public key.
+The first release after a rotation stops at the key check, because the
+last release was signed with the old key: set `RELEASE_SIGNING_KEY` to
+the new fingerprint for that release, then delete the variable.

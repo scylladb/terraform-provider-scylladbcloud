@@ -106,6 +106,7 @@ fi
 	echo "| | |"
 	echo "|---|---|"
 	echo "| Version | ${last} → **${version}** (${level}, bump: ${BUMP}) |"
+	echo "| Release title | ${version} |"
 	echo "| Commit | \`${sha}\` |"
 	echo
 	if [ -s "$OUT/warnings.md" ]; then
@@ -114,9 +115,11 @@ fi
 		cat "$OUT/warnings.md"
 		echo
 	fi
-	echo "### Release notes"
+	echo "### Release body"
 	echo
-	cat "$OUT/notes.md"
+	echo "Everything in the quote below is published as the body of the release."
+	echo
+	sed 's/^/> /' "$OUT/notes.md"
 	echo
 	echo "<details><summary>Commits since ${last}</summary>"
 	echo
