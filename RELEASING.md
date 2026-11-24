@@ -3,8 +3,8 @@
 A release publishes a signed build of the provider as a GitHub release.
 The [Terraform Registry](https://registry.terraform.io/providers/scylladb/scylladbcloud)
 picks it up from there. A published version cannot be changed, so the
-release workflow shows a preview and waits for a second release owner to
-approve it.
+release workflow shows a preview and waits for a release owner to approve
+it.
 
 ## Rules that cannot be undone
 
@@ -63,7 +63,8 @@ The release title is the version. The release body has, in this order:
    cancel the run or reject the `publish` job. Nothing is published, and
    no tag is created.
 6. The other release owner opens **Review deployments** on the run page and
-   approves. The person who started the run cannot approve it.
+   approves. If they are not available, the person who started the run can
+   approve it. Write the reason in the approval comment.
 
 The release uses the commit that `plan` saw. Merges to `main` after the
 run started are not included.
@@ -115,7 +116,8 @@ git switch main && git branch -D release-try
 
 - **`release` environment** (Settings → Environments):
   - Required reviewers: the release owners.
-  - Prevent self-review: on.
+  - Prevent self-review: off, so a release is not blocked when the other
+    release owner is away.
   - Allow administrators to bypass: off.
   - Deployment branches: `main` only.
 - **Repository secrets:** `GPG_PRIVATE_KEY` and `PASSPHRASE`. The `build`
