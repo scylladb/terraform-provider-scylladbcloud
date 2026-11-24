@@ -29,6 +29,16 @@ title as its subject (see [CONTRIBUTING.md](CONTRIBUTING.md)).
   The templates are in `.github/changelog/`. Do not add other files to
   `.changelog/`: go-changelog reads every new file there as an entry.
 
+The release title is the version. The release body has, in this order:
+
+1. The `summary` input, if given. It takes Markdown, including links.
+2. The changelog entries, grouped: Breaking changes, Notes, Features,
+   Enhancements, Bug fixes.
+3. **All changes**, collapsed: every commit since the last tag with its PR
+   and author. The `@mentions` make GitHub show the contributors of the
+   release.
+4. **Full changelog**: the compare link from the last tag.
+
 ## How to release
 
 1. Make sure everything for the release is merged to `main`.
@@ -86,7 +96,8 @@ make release-preview BUMP=patch SUMMARY="Maintenance release."
 
 It needs the full git history and the tags. In a shallow clone, run
 `git fetch --unshallow --tags` first. It reads commits, not uncommitted
-changes.
+changes. It looks up PR authors with the `gh` CLI. Without `gh`, the list
+of changes has no authors.
 
 To see how merges would change a release, commit on a throwaway branch
 and preview it:

@@ -58,6 +58,7 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           SUMMARY: ${{ inputs.summary }}
+          GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run }}
           OUT: ${{ runner.temp }}/plan
         run: |

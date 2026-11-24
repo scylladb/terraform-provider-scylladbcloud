@@ -7,6 +7,9 @@
 #   BUMP     auto (default), patch, minor or major
 #   SUMMARY  optional paragraph at the top of the release notes
 #   OUT      directory for the results (default: a new temporary directory)
+#   REPO     owner/name on GitHub (default: GITHUB_REPOSITORY, or origin)
+#
+# PR authors are read with the gh CLI. Without it, the list has no authors.
 #
 # Results in OUT: plan.env (last, version, sha, level), notes.md,
 # warnings.md and preview.md. Exits 1 if there is nothing to release or a
@@ -16,6 +19,7 @@ set -euo pipefail
 BUMP="${BUMP:-auto}"
 SUMMARY="${SUMMARY:-}"
 OUT="${OUT:-$(mktemp -d)}"
+REPO="${REPO:-${GITHUB_REPOSITORY:-}}"
 
 fail() {
 	if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::error::$1"; else echo "error: $1" >&2; fi
@@ -68,9 +72,48 @@ go tool changelog-build -git-dir "$PWD" -last-release "$from" -this-release "$sh
 	-entries-dir .changelog \
 	-changelog-template .github/changelog/release-notes.tmpl \
 	-note-template .github/changelog/note.tmpl >"$OUT/entries.md"
+# Prints the result of a GitHub API query, or nothing if it fails.
+gh_get() {
+	local result
+	if result="$(gh api "$1" --jq "$2" 2>/dev/null)"; then printf '%s' "$result"; fi
+}
+
+# Every change since the last tag, with the PR authors. The @mentions make
+# GitHub show the contributors of the release.
+if [ -z "$REPO" ]; then
+	REPO="$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')"
+fi
+: >"$OUT/changes.md"
+while read -r short subject; do
+	pr="$(sed -n 's/.*(#\([0-9]\{1,\}\))$/\1/p' <<<"$subject")"
+	author=""
+	if [ -n "$pr" ]; then
+		author="$(gh_get "repos/${REPO}/pulls/${pr}" .user.login)"
+	else
+		# Commits merged before squash merges have no "(#N)" in the subject.
+		found="$(gh_get "repos/${REPO}/commits/${short}/pulls" '.[0] | "\(.number) \(.user.login)"')"
+		if [ -n "$found" ] && [ "$found" != "null null" ]; then read -r pr author <<<"$found"; fi
+	fi
+	if [ -n "$pr" ]; then
+		line="* ${subject% (#"$pr")}"
+		if [ -n "$author" ]; then line="${line} by @${author}"; fi
+		echo "${line} in #${pr}" >>"$OUT/changes.md"
+	else
+		echo "* ${subject} (${short})" >>"$OUT/changes.md"
+	fi
+done < <(git log --reverse --format='%h %s' "${last}..HEAD")
+
 {
 	if [ -n "$SUMMARY" ]; then printf '%s\n\n' "$SUMMARY"; fi
 	sed '/./,$!d' "$OUT/entries.md"
+	echo
+	echo "<details><summary>All changes ($(wc -l <"$OUT/changes.md" | tr -d ' '))</summary>"
+	echo
+	cat "$OUT/changes.md"
+	echo
+	echo "</details>"
+	echo
+	echo "**Full changelog**: https://github.com/${REPO}/compare/${last}...${version}"
 } >"$OUT/notes.md"
 
 # Checks of the bump against the entries.
@@ -120,13 +163,6 @@ fi
 	echo "Everything in the quote below is published as the body of the release."
 	echo
 	sed 's/^/> /' "$OUT/notes.md"
-	echo
-	echo "<details><summary>Commits since ${last}</summary>"
-	echo
-	# shellcheck disable=SC2016 # literal backticks for Markdown
-	git log --format='- `%h` %s' "${last}..HEAD"
-	echo
-	echo "</details>"
 } >"$OUT/preview.md"
 
 if [ -z "${GITHUB_ACTIONS:-}" ]; then
