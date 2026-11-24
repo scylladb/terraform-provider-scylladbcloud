@@ -1067,7 +1067,25 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
-	return warns
+	return append(warns, alternatorIsolationWarning(cluster)...)
+}
+
+// alternatorIsolationWarning warns about an Alternator cluster for which the
+// API has no write isolation. Such clusters were made on Scylla before 4.1,
+// when the value was optional. The real value is only in scylla.yaml on the
+// nodes, so the state keeps "" and the plan can replace the cluster.
+func alternatorIsolationWarning(cluster *model.Cluster) diag.Diagnostics {
+	if cluster.UserAPIInterface != "ALTERNATOR" || cluster.AlternatorWriteIsolation != "" {
+		return nil
+	}
+	return diag.Diagnostics{{
+		Severity: diag.Warning,
+		Summary:  fmt.Sprintf("Write isolation of cluster %d is unknown", cluster.ID),
+		Detail: "The API has no Alternator write isolation for this cluster. " +
+			"The plan replaces the cluster if alternator_write_isolation in the configuration " +
+			"is different from the empty value in the state. " +
+			"To keep the cluster, add alternator_write_isolation to lifecycle.ignore_changes.",
+	}}
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without

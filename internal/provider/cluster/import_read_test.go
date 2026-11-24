@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +25,8 @@ func TestAlternatorWriteIsolationPlan(t *testing.T) {
 		{name: "imported CQL cluster", api: "CQL"},
 		{name: "CQL cluster, value set in config", api: "CQL", config: "always_use_lwt"},
 		{name: "imported Alternator cluster", api: "ALTERNATOR", isolation: "always_use_lwt", config: "always_use_lwt"},
+		// The value is unknown, see alternatorIsolationWarning.
+		{name: "imported Alternator cluster, API has no value", api: "ALTERNATOR", wantDiff: true},
 		{name: "Alternator cluster, value changed", api: "ALTERNATOR", isolation: "only_rmw_uses_lwt", config: "always_use_lwt", wantDiff: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -58,6 +61,31 @@ func TestAlternatorWriteIsolationPlan(t *testing.T) {
 				got = a != nil && (a.Old != a.New || a.NewRemoved)
 			}
 			require.Equal(t, tt.wantDiff, got)
+		})
+	}
+}
+
+func TestAlternatorIsolationWarning(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name           string
+		api, isolation string
+		want           bool
+	}{
+		{name: "CQL cluster", api: "CQL"},
+		{name: "Alternator cluster", api: "ALTERNATOR", isolation: "always"},
+		{name: "Alternator cluster, API has no value", api: "ALTERNATOR", want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := alternatorIsolationWarning(&model.Cluster{ID: 3, UserAPIInterface: tt.api, AlternatorWriteIsolation: tt.isolation})
+			if !tt.want {
+				require.Empty(t, got)
+				return
+			}
+			require.Len(t, got, 1)
+			require.Equal(t, diag.Warning, got[0].Severity)
+			require.Equal(t, "Write isolation of cluster 3 is unknown", got[0].Summary)
 		})
 	}
 }
