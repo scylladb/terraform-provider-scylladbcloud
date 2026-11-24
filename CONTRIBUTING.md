@@ -164,6 +164,7 @@ Acceptance tests create real resources in ScyllaDB Cloud, so they require valid 
 | `SCYLLADB_CLOUD_TRACE` | Trace ID that the API calls send. Without it, each run makes a new one | No |
 | `TEST_SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID | For the GCP BYOA tests only |
 | `TEST_SCYLLADB_CLOUD_EAR_KEY_ID` | Customer-managed key ID for encryption at rest | For the encryption key tests only |
+| `TEST_SCYLLADB_CLOUD_PEER_VPC_ID`, `TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID`, `TEST_SCYLLADB_CLOUD_PEER_CIDR` | An AWS VPC in `us-east-1` for the VPC peering in `basicAWS`. Its CIDR must not overlap `10.0.1.0/24` | No. Without them, `basicAWS` skips the VPC peering |
 
 ### Running Acceptance Tests
 

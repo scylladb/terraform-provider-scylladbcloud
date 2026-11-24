@@ -115,6 +115,16 @@ func EARKeyID() string {
 	return os.Getenv("TEST_SCYLLADB_CLOUD_EAR_KEY_ID")
 }
 
+// AWSPeerVPC returns the AWS VPC for the VPC peering tests, and false when
+// one of its variables is not set. The VPC is in us-east-1, and its CIDR
+// must not overlap the CIDR of the test clusters, 10.0.1.0/24.
+func AWSPeerVPC() (vpcID, accountID, cidr string, ok bool) {
+	vpcID = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_VPC_ID")
+	accountID = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID")
+	cidr = os.Getenv("TEST_SCYLLADB_CLOUD_PEER_CIDR")
+	return vpcID, accountID, cidr, vpcID != "" && accountID != "" && cidr != ""
+}
+
 // clusterID returns the cluster ID of a scylladbcloud_cluster in the state.
 func clusterID(rs *terraform.ResourceState) (int64, error) {
 	if rs.Primary == nil || rs.Primary.ID == "" {

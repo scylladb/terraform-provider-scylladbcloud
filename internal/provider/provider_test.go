@@ -85,6 +85,11 @@ func testAccEncryptionKey(keyID string) config.Variable {
 	return config.ObjectVariable(map[string]config.Variable{"key_id": config.StringVariable(keyID)})
 }
 
+// TestAccScyllaDBCloudCluster_basicAWS is in the smoke set, so it checks as
+// much as it can on its one cluster: an allowlist rule, the cql_auth data
+// source, and the import of the cluster and the rule. The framework checks
+// that the plan after the apply is empty. With the variables of acctest.AWSPeerVPC set, it also creates a
+// VPC peering.
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws")
 	vars := testAccAWSClusterVars(resourceName)
@@ -94,6 +99,34 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 		config.StringVariable("use1-az4"),
 		config.StringVariable("use1-az6"),
 	)
+	vars["allowlist_cidr"] = config.StringVariable("192.0.2.0/24")
+	vars["read_cql_auth"] = config.BoolVariable(true)
+
+	var peerChecks []statecheck.StateCheck
+	if vpcID, accountID, cidr, ok := acctest.AWSPeerVPC(); ok {
+		vars["peer"] = config.ObjectVariable(map[string]config.Variable{
+			"vpc_id":     config.StringVariable(vpcID),
+			"account_id": config.StringVariable(accountID),
+			"cidr":       config.StringVariable(cidr),
+		})
+		peerChecks = []statecheck.StateCheck{
+			statecheck.ExpectKnownValue(
+				"scylladbcloud_vpc_peering.test[0]",
+				tfjsonpath.New("peer_vpc_id"),
+				knownvalue.StringExact(vpcID),
+			),
+			statecheck.ExpectKnownValue(
+				"scylladbcloud_vpc_peering.test[0]",
+				tfjsonpath.New("connection_id"),
+				knownvalue.StringRegexp(regexp.MustCompile(`^pcx-`)),
+			),
+			statecheck.CompareValuePairs(
+				"scylladbcloud_vpc_peering.test[0]", tfjsonpath.New("cluster_id"),
+				"scylladbcloud_cluster.test", tfjsonpath.New("cluster_id"),
+				compare.ValuesSame(),
+			),
+		}
+	}
 
 	var cluster model.Cluster
 
@@ -105,7 +138,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 			{
 				ConfigDirectory: testAccClusterDir,
 				ConfigVariables: vars,
-				ConfigStateChecks: []statecheck.StateCheck{
+				ConfigStateChecks: append([]statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
 						tfjsonpath.New("min_nodes"),
@@ -151,7 +184,37 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
 						knownvalue.StringExact(""),
 					),
-				},
+					statecheck.CompareValuePairs(
+						"scylladbcloud_allowlist_rule.test[0]", tfjsonpath.New("cluster_id"),
+						"scylladbcloud_cluster.test", tfjsonpath.New("cluster_id"),
+						compare.ValuesSame(),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_allowlist_rule.test[0]",
+						tfjsonpath.New("cidr_block"),
+						knownvalue.StringExact("192.0.2.0/24"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_allowlist_rule.test[0]",
+						tfjsonpath.New("rule_id"),
+						knownvalue.NotNull(),
+					),
+					statecheck.ExpectKnownValue(
+						"data.scylladbcloud_cql_auth.test[0]",
+						tfjsonpath.New("username"),
+						knownvalue.StringRegexp(regexp.MustCompile(`.`)),
+					),
+					statecheck.ExpectKnownValue(
+						"data.scylladbcloud_cql_auth.test[0]",
+						tfjsonpath.New("password"),
+						knownvalue.StringRegexp(regexp.MustCompile(`.`)),
+					),
+					statecheck.ExpectKnownValue(
+						"data.scylladbcloud_cql_auth.test[0]",
+						tfjsonpath.New("seeds"),
+						knownvalue.StringRegexp(regexp.MustCompile(`.`)),
+					),
+				}, peerChecks...),
 				Check: resource.ComposeTestCheckFunc(
 					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 					func(s *terraform.State) error {
@@ -166,8 +229,39 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					},
 				),
 			},
+			{
+				ConfigDirectory:   testAccClusterDir,
+				ConfigVariables:   vars,
+				ResourceName:      "scylladbcloud_cluster.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// Read never sets backup_retention_days, and sets
+				// alternator_write_isolation only for Alternator clusters.
+				ImportStateVerifyIgnore: []string{"backup_retention_days", "alternator_write_isolation"},
+			},
+			{
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
+				// The address has the count index. The state has the
+				// resource at "test.0", so the ID must come from there.
+				ResourceName:      "scylladbcloud_allowlist_rule.test[0]",
+				ImportStateIdFunc: testAccResourceID("scylladbcloud_allowlist_rule.test.0"),
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
+}
+
+// testAccResourceID returns the ID of the resource at key in the state.
+func testAccResourceID(key string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[key]
+		if !ok || rs.Primary == nil {
+			return "", fmt.Errorf("resource %q not found in state", key)
+		}
+		return rs.Primary.ID, nil
+	}
 }
 
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
