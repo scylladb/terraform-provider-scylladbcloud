@@ -277,13 +277,8 @@ func resourceClusterConnectionUpdate(ctx context.Context, d *schema.ResourceData
 		Status:   d.Get("status").(string),
 	}
 
-	err = c.UpdateClusterConnections(ctx, int64(clusterID), connID, &req)
-	if err != nil {
-		return diag.Errorf("error updating cluster connection: %s", err)
-	}
-	err = waitForClusterConnection(ctx, c, int64(clusterID), connID, req.Status)
-	if err != nil {
-		return diag.Errorf("%+v", err)
+	if err := updateClusterConnection(ctx, c, int64(clusterID), connID, &req); err != nil {
+		return diag.FromErr(err)
 	}
 
 	conn, err := c.GetClusterConnection(ctx, int64(clusterID), connID)
@@ -321,6 +316,15 @@ func resourceClusterConnectionDelete(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error waiting for cluster connection to become deleted: %s", err)
 	}
 	return nil
+}
+
+// updateClusterConnection sends the update and waits until the connection has
+// the status of req.
+func updateClusterConnection(ctx context.Context, c *scylla.Client, clusterID, connID int64, req *model.ClusterConnectionUpdateRequest) error {
+	if err := c.UpdateClusterConnections(ctx, clusterID, connID, req); err != nil {
+		return fmt.Errorf("error updating cluster connection: %w", err)
+	}
+	return waitForClusterConnection(ctx, c, clusterID, connID, req.Status)
 }
 
 func waitForClusterConnection(ctx context.Context, c *scylla.Client, clusterID, connectionID int64, targetStatus string) error {
