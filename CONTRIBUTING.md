@@ -155,13 +155,15 @@ make test
 
 Acceptance tests create real resources in ScyllaDB Cloud, so they require valid credentials and may incur costs.
 
-### Required Environment Variables
+### Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `SCYLLADB_CLOUD_TOKEN` | API token for authentication | Yes |
-| `SCYLLADB_CLOUD_ENDPOINT` | Custom API endpoint (optional) | No |
-| `SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID for BYOA tests | For GCP BYOA tests only |
+| `SCYLLADB_CLOUD_ENDPOINT` | API endpoint, for example `https://api.cloud.scylladb.com` | Yes |
+| `SCYLLADB_CLOUD_TRACE` | Trace ID that the API calls send. Without it, each run makes a new one | No |
+| `TEST_SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID | For the GCP BYOA tests only |
+| `TEST_SCYLLADB_CLOUD_EAR_KEY_ID` | Customer-managed key ID for encryption at rest | For the encryption key tests only |
 
 ### Running Acceptance Tests
 
