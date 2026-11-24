@@ -20,10 +20,13 @@ it.
 PRs are squash-merged, so each PR is one commit on `main` with the PR
 title as its subject (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
-- **Version:** [svu](https://github.com/caarlos0/svu) reads the commit
-  subjects since the last tag. `feat` gives a minor version, `fix` a patch
-  version, and `!` before the colon or a `BREAKING CHANGE:` footer a major
-  version. Other types give no new version.
+- **Version:** `scripts/release-plan.sh` reads the commits since the last
+  tag. A subject that starts with `feat` gives a minor version, `fix` a
+  patch version, and any type with `!` before the colon a major version.
+  So does a body line that starts with `BREAKING CHANGE:`. Other types give
+  no new version. Only the start of the subject and of body lines counts:
+  a `fix:` quoted inside a title, or a commit message of the PR in the
+  squash body, does not.
 - **Release notes:** [go-changelog](https://github.com/hashicorp/go-changelog)
   collects the `.changelog/<PR number>.txt` files added since the last tag.
   The templates are in `.github/changelog/`. Do not add other files to
@@ -77,6 +80,7 @@ run started are not included.
 | **Stops** | The tag already exists. |
 | **Stops** | A `breaking-change` entry, and the version is not a major version. |
 | **Stops** | The run was not started from `main`. |
+| **Stops** | The `release` environment is missing or has no required reviewers. Without them, `publish` would run without approval. |
 | **Stops** | The signing key is not the expected key (see [The signing key](#the-signing-key)). |
 | **Warns** | A `feature`, `new-resource` or `new-data-source` entry in a patch version. |
 | **Warns** | A `feat` or `fix` PR without a changelog entry. |

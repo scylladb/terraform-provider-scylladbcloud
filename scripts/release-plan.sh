@@ -35,28 +35,54 @@ fi
 case "$BUMP" in auto | patch | minor | major) ;; *) fail "BUMP must be auto, patch, minor or major, not \"$BUMP\"." ;; esac
 
 sha="$(git rev-parse HEAD)"
-last="$(go tool svu current)"
-if [ "$BUMP" = auto ]; then
-	version="$(go tool svu next)"
-else
-	version="$(go tool svu "$BUMP")"
+last="$(git tag --merged HEAD --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+if [ -z "$last" ]; then
+	fail "No vX.Y.Z tag before HEAD."
 fi
-if [ "$version" = "$last" ]; then
+
+# The bump of each commit comes from its subject, which is the PR title:
+# "type!:" or a "BREAKING CHANGE:" footer line gives major, "feat" minor,
+# "fix" patch. Only the start of the subject and the start of footer lines
+# count, so a "fix:" quoted inside a title or a body does not.
+bump_of() {
+	local subject body
+	subject="$(git log -1 --format=%s "$1")"
+	body="$(git log -1 --format=%b "$1")"
+	if grep -qE '^[a-z]+(\([^)]*\))?!: ' <<<"$subject" || grep -qE '^BREAKING[ -]CHANGE: ' <<<"$body"; then
+		echo 3
+	elif grep -qE '^feat(\([^)]*\))?: ' <<<"$subject"; then
+		echo 2
+	elif grep -qE '^fix(\([^)]*\))?: ' <<<"$subject"; then
+		echo 1
+	else
+		echo 0
+	fi
+}
+case "$BUMP" in
+patch) rank=1 ;;
+minor) rank=2 ;;
+major) rank=3 ;;
+auto)
+	rank=0
+	for commit in $(git rev-list "${last}..HEAD"); do
+		r="$(bump_of "$commit")"
+		if [ "$r" -gt "$rank" ]; then rank="$r"; fi
+	done
+	;;
+esac
+if [ "$rank" -eq 0 ]; then
 	fail "No feat or fix PR since ${last}, so there is nothing to release. Choose a bump to release anyway."
 fi
+
+IFS=. read -r major minor patch <<<"${last#v}"
+case "$rank" in
+3) level="major" version="v$((major + 1)).0.0" ;;
+2) level="minor" version="v${major}.$((minor + 1)).0" ;;
+1) level="patch" version="v${major}.${minor}.$((patch + 1))" ;;
+esac
 if git rev-parse -q --verify "refs/tags/${version}" >/dev/null ||
 	git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
 	fail "Tag ${version} already exists."
-fi
-
-IFS=. read -r lmaj lmin _ <<<"${last#v}"
-IFS=. read -r nmaj nmin _ <<<"${version#v}"
-if [ "$nmaj" != "$lmaj" ]; then
-	level="major"
-elif [ "$nmin" != "$lmin" ]; then
-	level="minor"
-else
-	level="patch"
 fi
 
 # Release notes. When the last tag has no .changelog/ yet, "-" takes every
@@ -117,8 +143,9 @@ done < <(git log --reverse --format='%h %s' "${last}..HEAD")
 } >"$OUT/notes.md"
 
 # Checks of the bump against the entries.
-# shellcheck disable=SC2086 # entry_files is a list of paths without spaces
-types="$(sed -n 's/^```release-note:\(.*\)$/\1/p' $entry_files /dev/null | sort -u)"
+# The entries are read from the planned commit, as changelog-build reads
+# them, not from the working tree.
+types="$(for f in $entry_files; do git show "${sha}:${f}"; done | tr -d '\r' | sed -n 's/^```release-note:\(.*\)$/\1/p' | sort -u)"
 if grep -qx breaking-change <<<"$types" && [ "$level" != major ]; then
 	fail "A breaking-change entry needs a major release, but ${version} is a ${level} release."
 fi

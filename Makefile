@@ -30,8 +30,10 @@ testacc:
 # Plans a release without building it: version, notes and checks.
 # Example: make release-preview BUMP=patch SUMMARY="Maintenance release."
 BUMP ?= auto
+release-preview: export BUMP := $(BUMP)
+release-preview: export SUMMARY := $(SUMMARY)
 release-preview:
-	BUMP="$(BUMP)" SUMMARY="$(SUMMARY)" ./scripts/release-plan.sh
+	./scripts/release-plan.sh
 
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'

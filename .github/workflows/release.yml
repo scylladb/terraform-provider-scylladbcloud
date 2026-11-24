@@ -32,6 +32,9 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.plan.outputs.version }}
       sha: ${{ steps.plan.outputs.sha }}
@@ -42,6 +45,19 @@ jobs:
         run: |
           echo "::error::Start the release from main, not ${GITHUB_REF}."
           exit 1
+
+      - name: Check the release environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A run that names a missing environment creates it without
+          # reviewers, and publish would then run without approval.
+          reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/release" \
+            --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length' 2>/dev/null || echo 0)"
+          if [ "$reviewers" -lt 1 ]; then
+            echo "::error::The release environment is missing or has no required reviewers. See Setup in RELEASING.md."
+            exit 1
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,7 +102,7 @@ jobs:
           name: plan
           path: ${{ runner.temp }}/plan/notes.md
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   build:
     needs: plan
@@ -184,7 +200,7 @@ jobs:
           name: release
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
       - name: Add the build to the preview
         run: |
