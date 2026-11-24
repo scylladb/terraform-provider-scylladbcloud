@@ -179,6 +179,13 @@ Run a specific test:
 make testacc run=TestAccScyllaDBCloudCluster_basicAWS
 ```
 
+The Terraform configurations of the acceptance tests are in
+`internal/provider/testdata`, not in Go strings. Most tests use
+`testdata/cluster` and set its variables with `testAccAWSClusterVars` or
+`testAccGCPClusterVars`. A test of an upgrade from an old release pins that
+release in its own directory, under `required_providers`. `make lint` runs
+`terraform fmt -check` on these files.
+
 List all available acceptance tests:
 
 ```bash

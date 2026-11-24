@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
+	"github.com/hashicorp/terraform-plugin-testing/config"
 	sdkacctest "github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
@@ -38,8 +40,60 @@ func protoV5ProviderFactoriesInit(ctx context.Context) map[string]func() (tfprot
 	}
 }
 
+// The configurations of the acceptance tests are in testdata. testAccClusterDir
+// is the cluster that most tests use. Its variables come from
+// testAccAWSClusterVars or testAccGCPClusterVars.
+var (
+	testAccClusterDir            = config.StaticDirectory("testdata/cluster")
+	testAccClusterXCloudDir      = config.StaticDirectory("testdata/cluster_xcloud")
+	testAccClusterProvider112Dir = config.StaticDirectory("testdata/cluster_provider_1_12")
+	testAccClusterProvider19Dir  = config.StaticDirectory("testdata/cluster_provider_1_9")
+)
+
+// testAccAWSClusterVars returns the variables of testAccClusterDir for the
+// usual AWS cluster: 3 i3.large nodes, no backups and no encryption at rest.
+// A test changes a copy to set other values.
+func testAccAWSClusterVars(name string) config.Variables {
+	return config.Variables{
+		"name":                  config.StringVariable(name),
+		"cloud":                 config.StringVariable("AWS"),
+		"region":                config.StringVariable("us-east-1"),
+		"node_type":             config.StringVariable("i3.large"),
+		"min_nodes":             config.IntegerVariable(3),
+		"backup_retention_days": config.IntegerVariable(0),
+		"encryption_at_rest":    testAccEncryptionEnabled(false),
+	}
+}
+
+// testAccGCPClusterVars is testAccAWSClusterVars for GCP.
+func testAccGCPClusterVars(name string) config.Variables {
+	v := testAccAWSClusterVars(name)
+	v["cloud"] = config.StringVariable("GCP")
+	v["region"] = config.StringVariable("us-central1")
+	v["node_type"] = config.StringVariable("n2d-highmem-2")
+	return v
+}
+
+// testAccEncryptionEnabled is an encryption_at_rest block with only enabled.
+func testAccEncryptionEnabled(enabled bool) config.Variable {
+	return config.ObjectVariable(map[string]config.Variable{"enabled": config.BoolVariable(enabled)})
+}
+
+// testAccEncryptionKey is an encryption_at_rest block with only key_id, so
+// that the test also covers the default of enabled.
+func testAccEncryptionKey(keyID string) config.Variable {
+	return config.ObjectVariable(map[string]config.Variable{"key_id": config.StringVariable(keyID)})
+}
+
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws")
+	vars := testAccAWSClusterVars(resourceName)
+	vars["scylla_version"] = config.StringVariable("2026.1.1")
+	vars["availability_zone_ids"] = config.SetVariable(
+		config.StringVariable("use1-az2"),
+		config.StringVariable("use1-az4"),
+		config.StringVariable("use1-az6"),
+	)
 
 	var cluster model.Cluster
 
@@ -49,22 +103,8 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 3
-  scylla_version        = "2026.1.1"
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-  availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -125,29 +165,8 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-  availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
-  scaling {
-    instance_families = ["i4i"]
-    storage_policy {
-      min_gb             = 500
-      target_utilization = 0.75
-    }
-    vcpu_policy {
-      min = 8
-    }
-  }
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterXCloudDir,
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -187,6 +206,8 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws-single-az")
+	vars := testAccAWSClusterVars(resourceName)
+	vars["availability_zone_ids"] = config.SetVariable(config.StringVariable("use1-az2"))
 
 	var cluster model.Cluster
 
@@ -196,21 +217,8 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-  availability_zone_ids = ["use1-az2"]
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -240,6 +248,8 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out")
+	scaledOut := testAccAWSClusterVars(resourceName)
+	scaledOut["min_nodes"] = config.IntegerVariable(6)
 
 	var cluster model.Cluster
 
@@ -251,20 +261,8 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: testAccAWSClusterVars(resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					clusterIDCompare.AddStateValue(
 						"scylladbcloud_cluster.test",
@@ -286,20 +284,8 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 				),
 			},
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 6
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: scaledOut,
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectNonEmptyPlan(),
@@ -339,20 +325,8 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: testAccAWSClusterVars(resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -404,20 +378,8 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "GCP"
-  region                = "us-central1"
-  node_type             = "n2d-highmem-2"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: testAccGCPClusterVars(resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -445,6 +407,12 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	if byoaID == "" {
 		t.Skip("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID must be set for this test")
 	}
+	id, err := strconv.Atoi(byoaID)
+	if err != nil {
+		t.Fatalf("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID must be a number: %v", err)
+	}
+	vars := testAccGCPClusterVars(resourceName)
+	vars["byoa_id"] = config.IntegerVariable(id)
 
 	var cluster model.Cluster
 
@@ -454,21 +422,8 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "GCP"
-  region                = "us-central1"
-  node_type             = "n2d-highmem-2"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-  byoa_id              = %[2]s
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName, byoaID),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -491,6 +446,8 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("backup-retention-default")
+	vars := testAccAWSClusterVars(resourceName)
+	delete(vars, "backup_retention_days")
 
 	var cluster model.Cluster
 
@@ -500,19 +457,8 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name       = %[1]q
-  cloud      = "AWS"
-  region     = "us-east-1"
-  node_type  = "i3.large"
-  min_nodes  = 3
-  cidr_block = "10.0.1.0/24"
-  enable_dns = true
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -528,54 +474,11 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 	})
 }
 
-// testAccEncryptionAtRestConfig renders a minimal cluster whose
-// encryption_at_rest block holds the single attribute assignment.
-func testAccEncryptionAtRestConfig(name, cloud, region, nodeType, attribute string) string {
-	return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = %[2]q
-  region                = %[3]q
-  node_type             = %[4]q
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    %[5]s
-  }
-}`, name, cloud, region, nodeType, attribute)
-}
-
-// testAccEncryptionAtRestEnabledConfig renders a cluster that enabled or disables encryption at rest.
-func testAccEncryptionAtRestEnabledConfig(name, cloud, region, nodeType string, enabled bool) string {
-	return testAccEncryptionAtRestConfig(name, cloud, region, nodeType,
-		fmt.Sprintf("enabled = %t", enabled))
-}
-
-// testAccEncryptionAtRestKeyConfig renders a cluster encrypted with the given
-// customer-managed key. It leaves "enabled" out on purpose, so that the test
-// also covers its default.
-func testAccEncryptionAtRestKeyConfig(name, cloud, region, nodeType, keyID string) string {
-	return testAccEncryptionAtRestConfig(name, cloud, region, nodeType,
-		fmt.Sprintf("key_id = %q", keyID))
-}
-
-func testAccEncryptionAtRestDefaultConfig(name, cloud, region, nodeType string) string {
-	return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = %[2]q
-  region                = %[3]q
-  node_type             = %[4]q
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-}`, name, cloud, region, nodeType)
-}
-
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("ear-enabled")
+	enabled := testAccAWSClusterVars(resourceName)
+	enabled["encryption_at_rest"] = testAccEncryptionEnabled(true)
+	disabled := testAccAWSClusterVars(resourceName)
 
 	var cluster model.Cluster
 
@@ -585,7 +488,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", true),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: enabled,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -612,7 +516,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 				// Encryption at rest is create-time only, so any change must
 				// plan a replacement rather than an in-place update. PlanOnly
 				// keeps this assertion from costing a second real cluster.
-				Config:             testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
+				ConfigDirectory:    testAccClusterDir,
+				ConfigVariables:    disabled,
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 				ConfigPlanChecks: resource.ConfigPlanChecks{
@@ -639,7 +544,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: testAccAWSClusterVars(resourceName),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -669,6 +575,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 // feature flag to be on in the target environment.
 func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("ear-gcp")
+	vars := testAccGCPClusterVars(resourceName)
+	vars["encryption_at_rest"] = testAccEncryptionEnabled(true)
 
 	var cluster model.Cluster
 
@@ -678,7 +586,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "GCP", "us-central1", "n2d-highmem-2", true),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -703,6 +612,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	if keyID == "" {
 		t.Skip("TEST_SCYLLADB_CLOUD_EAR_KEY_ID must be set for this test")
 	}
+	vars := testAccAWSClusterVars(resourceName)
+	vars["encryption_at_rest"] = testAccEncryptionKey(keyID)
 
 	var cluster model.Cluster
 
@@ -712,7 +623,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestKeyConfig(resourceName, "AWS", "us-east-1", "i3.large", keyID),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -740,6 +652,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("ear-default")
+	vars := testAccAWSClusterVars(resourceName)
+	delete(vars, "encryption_at_rest")
 
 	var cluster model.Cluster
 
@@ -749,7 +663,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large"),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -774,8 +689,9 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 			{
 				// The block is Computed, so leaving it out of the configuration
 				// must keep planning a no-op rather than a replacement.
-				Config:   testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large"),
-				PlanOnly: true,
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
+				PlanOnly:        true,
 			},
 		},
 	})
@@ -783,6 +699,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("ear-default-gcp")
+	vars := testAccGCPClusterVars(resourceName)
+	delete(vars, "encryption_at_rest")
 
 	var cluster model.Cluster
 
@@ -792,7 +710,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEncryptionAtRestDefaultConfig(resourceName, "GCP", "us-central1", "n2d-highmem-2"),
+				ConfigDirectory: testAccClusterDir,
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -832,21 +751,18 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 
 	clusterIDCompare := statecheck.CompareValue(compare.ValuesSame())
 
-	config := testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large")
+	// The same cluster as testAccClusterProvider112Dir, for the local build.
+	vars := testAccAWSClusterVars(resourceName)
+	delete(vars, "encryption_at_rest")
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:     func() { acctest.PreCheck(t) },
 		CheckDestroy: acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				ExternalProviders: map[string]resource.ExternalProvider{
-					"scylladbcloud": {
-						// The last version released without encryption at rest.
-						VersionConstraint: "1.12",
-						Source:            "scylladb/scylladbcloud",
-					},
-				},
-				Config: config,
+				// The configuration pins provider 1.12.
+				ConfigDirectory: testAccClusterProvider112Dir,
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
 				ConfigStateChecks: []statecheck.StateCheck{
 					clusterIDCompare.AddStateValue(
 						"scylladbcloud_cluster.test",
@@ -859,7 +775,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 			},
 			{
 				ProtoV5ProviderFactories: protoV5ProviderFactories,
-				Config:                   config,
+				ConfigDirectory:          testAccClusterDir,
+				ConfigVariables:          vars,
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectEmptyPlan(),
@@ -895,28 +812,10 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 		CheckDestroy: acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
-				ExternalProviders: map[string]resource.ExternalProvider{
-					"scylladbcloud": {
-						// 1.9 is the last version that uses the v1 schema
-						// that is node_count instead of min_nodes.
-						//
-						// Note: Be careful about overwritting the provider with
-						// a local build in .terraformrc. If you do that,
-						// it will overwrite the selected version in this
-						// test case.
-						VersionConstraint: "1.9",
-						Source:            "scylladb/scylladbcloud",
-					},
-				},
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name       = %[1]q
-  cloud      = "AWS"
-  region     = "us-east-1"
-  node_type  = "i3.large"
-  node_count = 3
-  cidr_block = "10.0.1.0/24"
-  enable_dns = true
-}`, resourceName),
+				// The configuration pins provider 1.9, the last release with
+				// the v1 schema.
+				ConfigDirectory: testAccClusterProvider19Dir,
+				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
 				ConfigStateChecks: []statecheck.StateCheck{
 					nodeCountCompare.AddStateValue(
 						"scylladbcloud_cluster.test",
@@ -934,20 +833,8 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 			},
 			{
 				ProtoV5ProviderFactories: protoV5ProviderFactories,
-				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
-  name                  = %[1]q
-  cloud                 = "AWS"
-  region                = "us-east-1"
-  node_type             = "i3.large"
-  min_nodes             = 3
-  cidr_block            = "10.0.1.0/24"
-  enable_dns            = true
-  backup_retention_days = 0
-
-  encryption_at_rest {
-    enabled = false
-  }
-}`, resourceName),
+				ConfigDirectory:          testAccClusterDir,
+				ConfigVariables:          testAccAWSClusterVars(resourceName),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectEmptyPlan(),
