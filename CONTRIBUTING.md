@@ -167,11 +167,22 @@ Acceptance tests create real resources in ScyllaDB Cloud, so they require valid 
 
 ### Running Acceptance Tests
 
-Run all acceptance tests:
+Run the smoke set, for a pull request. It creates one cluster on AWS, one on
+GCP and one from an old provider release, so it takes about 30 minutes:
+
+```bash
+make testacc-short
+```
+
+Run all acceptance tests, for a release or a nightly run:
 
 ```bash
 make testacc
 ```
+
+A new acceptance test is long by default: start it with
+`acctest.SkipIfShort(t)`. Leave the call out only when the test must run for
+each pull request, and check on an existing cluster when you can.
 
 Run a specific test:
 

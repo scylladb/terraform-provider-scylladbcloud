@@ -81,6 +81,16 @@ func PreCheck(t testing.TB) {
 	Client(t)
 }
 
+// SkipIfShort skips a long acceptance test when the tests run with -short.
+// The short run is the smoke set for pull requests. The full run is for
+// releases and nightly runs.
+func SkipIfShort(t testing.TB) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("long acceptance test: run it without -short")
+	}
+}
+
 // Client returns the shared client. It fails the test when the client cannot
 // be created. Do not call it in a check function: the framework calls
 // CheckDestroy in a deferred function, where t.Fatal hides the error.

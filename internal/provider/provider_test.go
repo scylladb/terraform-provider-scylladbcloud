@@ -171,6 +171,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("xcloud-aws")
 
 	var cluster model.Cluster
@@ -221,6 +222,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws-single-az")
 	vars := testAccAWSClusterVars(resourceName)
 	vars["availability_zone_ids"] = config.SetVariable(config.StringVariable("use1-az2"))
@@ -263,6 +265,7 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out")
 	scaledOut := testAccAWSClusterVars(resourceName)
 	scaledOut["min_nodes"] = config.IntegerVariable(6)
@@ -330,6 +333,7 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
+	acctest.SkipIfShort(t)
 	ctx := t.Context()
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out-outside")
 
@@ -417,6 +421,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("basic-gcp-byoa")
 
 	byoaID := acctest.GCPBYOAID()
@@ -461,6 +466,7 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("ear-enabled")
 	enabled := testAccAWSClusterVars(resourceName)
 	enabled["encryption_at_rest"] = testAccEncryptionEnabled(true)
@@ -522,6 +528,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 // TestAccScyllaDBCloudCluster_encryptionAtRestGCP requires the enable_ear_gcp
 // feature flag to be on in the target environment.
 func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("ear-gcp")
 	vars := testAccGCPClusterVars(resourceName)
 	vars["encryption_at_rest"] = testAccEncryptionEnabled(true)
@@ -554,6 +561,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 // TestAccScyllaDBCloudCluster_encryptionAtRestCMK needs a customer-managed key
 // created up front in the ScyllaDB Cloud portal; there is no public keys API.
 func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("ear-cmk")
 
 	keyID := acctest.EARKeyID()
@@ -602,6 +610,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 // cluster on one cluster: the configuration sets neither
 // backup_retention_days nor encryption_at_rest.
 func TestAccScyllaDBCloudCluster_defaultsAWS(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("defaults-aws")
 	vars := testAccAWSClusterVars(resourceName)
 	delete(vars, "backup_retention_days")
@@ -655,6 +664,7 @@ func TestAccScyllaDBCloudCluster_defaultsAWS(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("ear-default-gcp")
 	vars := testAccGCPClusterVars(resourceName)
 	delete(vars, "encryption_at_rest")
@@ -702,6 +712,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 // ~/.terraformrc before running this. An override wins over the version pin
 // below and would silently test the local build against itself.
 func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
+	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("ear-no-diff-on-upgrade")
 
 	var cluster model.Cluster
