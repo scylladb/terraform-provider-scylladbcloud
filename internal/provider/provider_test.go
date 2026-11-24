@@ -3,34 +3,26 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"regexp"
-	"strconv"
-	"sync"
 	"testing"
 
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	sdkterraform "github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
-	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
+	sdkacctest "github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scylladb/terraform-provider-scylladbcloud/internal/acctest"
 	providercluster "github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
-
-var provider *schema.Provider = New(context.Background())
 
 var protoV5ProviderFactories map[string]func() (tfprotov5.ProviderServer, error) = protoV5ProviderFactoriesInit(context.Background())
 
@@ -47,15 +39,14 @@ func protoV5ProviderFactoriesInit(ctx context.Context) map[string]func() (tfprot
 }
 
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws")
+	resourceName := sdkacctest.RandomWithPrefix("basic-aws")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -106,7 +97,7 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 					func(s *terraform.State) error {
 						if cluster.ScyllaVersion == nil {
 							return fmt.Errorf("cluster ScyllaVersion is nil")
@@ -124,15 +115,14 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("xcloud-aws")
+	resourceName := sdkacctest.RandomWithPrefix("xcloud-aws")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -188,7 +178,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -196,15 +186,14 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-single-az")
+	resourceName := sdkacctest.RandomWithPrefix("basic-aws-single-az")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -242,7 +231,7 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -250,17 +239,16 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out")
+	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out")
 
 	var cluster model.Cluster
 
 	clusterIDCompare := statecheck.CompareValue(compare.ValuesSame())
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -294,7 +282,7 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
@@ -341,13 +329,13 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-scale-out-outside")
+	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out-outside")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:                 func() { acctest.PreCheck(t) },
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -378,12 +366,12 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
 				PreConfig: func() {
-					client := getClientFromProvider(provider)
+					client := acctest.Client(t)
 
 					err := providercluster.WaitForNoInProgressRequests(ctx, client, cluster.ID)
 					require.NoError(t, err)
@@ -406,15 +394,14 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-gcp")
+	resourceName := sdkacctest.RandomWithPrefix("basic-gcp")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -444,7 +431,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -452,10 +439,9 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-gcp-byoa")
+	resourceName := sdkacctest.RandomWithPrefix("basic-gcp-byoa")
 
-	byoaID := envGCPBYOAID()
+	byoaID := acctest.GCPBYOAID()
 	if byoaID == "" {
 		t.Skip("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID must be set for this test")
 	}
@@ -463,9 +449,9 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -496,7 +482,7 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -504,15 +490,14 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("backup-retention-default")
+	resourceName := sdkacctest.RandomWithPrefix("backup-retention-default")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
@@ -536,7 +521,7 @@ func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -590,15 +575,14 @@ func testAccEncryptionAtRestDefaultConfig(name, cloud, region, nodeType string) 
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-enabled")
+	resourceName := sdkacctest.RandomWithPrefix("ear-enabled")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", true),
@@ -621,7 +605,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
@@ -645,15 +629,14 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-disabled")
+	resourceName := sdkacctest.RandomWithPrefix("ear-disabled")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "AWS", "us-east-1", "i3.large", false),
@@ -675,7 +658,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -685,15 +668,14 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
 // TestAccScyllaDBCloudCluster_encryptionAtRestGCP requires the enable_ear_gcp
 // feature flag to be on in the target environment.
 func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-gcp")
+	resourceName := sdkacctest.RandomWithPrefix("ear-gcp")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestEnabledConfig(resourceName, "GCP", "us-central1", "n2d-highmem-2", true),
@@ -705,7 +687,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -715,10 +697,9 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 // TestAccScyllaDBCloudCluster_encryptionAtRestCMK needs a customer-managed key
 // created up front in the ScyllaDB Cloud portal; there is no public keys API.
 func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-cmk")
+	resourceName := sdkacctest.RandomWithPrefix("ear-cmk")
 
-	keyID := envEARKeyID()
+	keyID := acctest.EARKeyID()
 	if keyID == "" {
 		t.Skip("TEST_SCYLLADB_CLOUD_EAR_KEY_ID must be set for this test")
 	}
@@ -726,9 +707,9 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestKeyConfig(resourceName, "AWS", "us-east-1", "i3.large", keyID),
@@ -750,7 +731,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -758,15 +739,14 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-default")
+	resourceName := sdkacctest.RandomWithPrefix("ear-default")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large"),
@@ -788,7 +768,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
@@ -802,15 +782,14 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-default-gcp")
+	resourceName := sdkacctest.RandomWithPrefix("ear-default-gcp")
 
 	var cluster model.Cluster
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		CheckDestroy:             acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccEncryptionAtRestDefaultConfig(resourceName, "GCP", "us-central1", "n2d-highmem-2"),
@@ -827,7 +806,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 		},
@@ -847,8 +826,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 // ~/.terraformrc before running this. An override wins over the version pin
 // below and would silently test the local build against itself.
 func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("ear-no-diff-on-upgrade")
+	resourceName := sdkacctest.RandomWithPrefix("ear-no-diff-on-upgrade")
 
 	var cluster model.Cluster
 
@@ -857,8 +835,8 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 	config := testAccEncryptionAtRestDefaultConfig(resourceName, "AWS", "us-east-1", "i3.large")
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:     func() { acctest.PreCheck(t) },
+		CheckDestroy: acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				ExternalProviders: map[string]resource.ExternalProvider{
@@ -876,7 +854,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
@@ -906,16 +884,15 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
-	ctx := t.Context()
-	resourceName := acctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
+	resourceName := sdkacctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
 
 	var cluster model.Cluster
 
 	nodeCountCompare := statecheck.CompareValue(compare.ValuesSame())
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		CheckDestroy: testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		PreCheck:     func() { acctest.PreCheck(t) },
+		CheckDestroy: acctest.CheckClusterDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				ExternalProviders: map[string]resource.ExternalProvider{
@@ -952,7 +929,7 @@ func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
 					),
 				},
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
 			{
@@ -1010,102 +987,4 @@ func TestProviderTraceValidation(t *testing.T) {
 	require.Len(t, diags, 1)
 	require.Equal(t, diag.Error, diags[0].Severity)
 	require.Equal(t, "invalid trace value", diags[0].Summary)
-}
-
-var configureProviderOnce sync.Once
-
-func testAccPreCheck(t *testing.T) {
-	// Validate that required environment variables are set.
-	if v := envToken(); v == "" {
-		t.Fatal("SCYLLADB_CLOUD_TOKEN must be set for acceptance tests")
-	}
-	if v := envEndpoint(); v == "" {
-		t.Fatal("SCYLLADB_CLOUD_ENDPOINT must be set for acceptance tests")
-	}
-
-	configureProviderOnce.Do(func() {
-		diags := provider.Configure(context.Background(), sdkterraform.NewResourceConfigRaw(nil))
-
-		for _, d := range diags {
-			if d.Severity == diag.Error {
-				panic(d.Summary)
-			}
-		}
-	})
-}
-
-func testAccCheckScyllaDBCloudClusterExists(
-	ctx context.Context,
-	resourceName string,
-	cluster *model.Cluster,
-) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		client := getClientFromProvider(provider)
-
-		rs, ok := s.RootModule().Resources[resourceName]
-		if !ok {
-			return errors.Errorf("resource %q not found", resourceName)
-		}
-
-		clusterID, err := parseClusterIDFromResourceID(rs.Primary.ID)
-		if err != nil {
-			return err
-		}
-
-		clusterResponse, err := client.GetCluster(ctx, clusterID)
-		if err != nil {
-			return errors.Wrapf(err, "error retrieving cluster %d", clusterID)
-		}
-
-		*cluster = *clusterResponse
-
-		return nil
-	}
-}
-
-func testAccCheckScyllaDBCloudClusterDestroy(ctx context.Context) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		client := getClientFromProvider(provider)
-
-		for _, rs := range s.RootModule().Resources {
-			if rs.Type != "scylladbcloud_cluster" {
-				continue
-			}
-
-			clusterID, err := parseClusterIDFromResourceID(rs.Primary.ID)
-			if err != nil {
-				return err
-			}
-
-			_, err = client.GetCluster(ctx, clusterID)
-			if err == nil {
-				return errors.Errorf("cluster %d still exists", clusterID)
-			}
-		}
-
-		return nil
-	}
-}
-
-func envGCPBYOAID() string {
-	return os.Getenv("TEST_SCYLLADB_CLOUD_GCP_BYOA_ID")
-}
-
-func envEARKeyID() string {
-	return os.Getenv("TEST_SCYLLADB_CLOUD_EAR_KEY_ID")
-}
-
-func getClientFromProvider(provider *schema.Provider) *scylla.Client {
-	return provider.Meta().(*scylla.Client)
-}
-
-func parseClusterIDFromResourceID(resourceID string) (int64, error) {
-	if resourceID == "" {
-		return 0, errors.Errorf("cluster ID not set")
-	}
-	id, err := strconv.ParseInt(resourceID, 10, 64)
-	if err != nil {
-		return 0, errors.Wrapf(err, "invalid cluster ID %q", resourceID)
-	}
-	return id, nil
 }
