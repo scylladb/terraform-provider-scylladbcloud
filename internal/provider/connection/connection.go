@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/schemautils"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
@@ -94,17 +95,12 @@ func ResourceClusterConnection() *schema.Resource {
 				Type:        schema.TypeString,
 			},
 			"status": {
-				Description: "Connection Status",
-				Optional:    true,
-				Default:     "ACTIVE",
-				ValidateDiagFunc: func(i interface{}, s cty.Path) diag.Diagnostics {
-					status := i.(string)
-					if status != "ACTIVE" && status != "INACTIVE " {
-						return diag.Errorf("status must be one of: ACTIVE or INACTIVE")
-					}
-					return nil
-				},
-				Type: schema.TypeString,
+				Description: "The connection status: `ACTIVE` or `INACTIVE`. A connection with `INACTIVE` is " +
+					"created as active and then turned off.",
+				Optional:         true,
+				Default:          "ACTIVE",
+				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice([]string{"ACTIVE", "INACTIVE"}, false)),
+				Type:             schema.TypeString,
 			},
 			"external_id": {
 				Description: "ID of the cloud resource that represents connection",
@@ -191,6 +187,18 @@ func resourceClusterConnectionCreate(ctx context.Context, d *schema.ResourceData
 	err = waitForClusterConnection(ctx, c, int64(clusterID), conn.ID, "ACTIVE")
 	if err != nil {
 		return diag.Errorf("%+v", err)
+	}
+	// The API creates every connection as active. Turn it off when the
+	// configuration asks for it.
+	if status := d.Get("status").(string); status != "ACTIVE" {
+		err = updateClusterConnection(ctx, c, int64(clusterID), conn.ID, &model.ClusterConnectionUpdateRequest{
+			Name:     r.Name,
+			CIDRList: r.CIDRList,
+			Status:   status,
+		})
+		if err != nil {
+			return diag.FromErr(err)
+		}
 	}
 	conn, err = c.GetClusterConnection(ctx, int64(clusterID), conn.ID)
 	if err != nil {
@@ -327,9 +335,23 @@ func updateClusterConnection(ctx context.Context, c *scylla.Client, clusterID, c
 	return waitForClusterConnection(ctx, c, clusterID, connID, req.Status)
 }
 
+// connectionPendingStatuses returns the statuses that a connection can have
+// on its way to target. Until a status change takes effect, the API can still
+// return the other one of ACTIVE and INACTIVE.
+func connectionPendingStatuses(target string) []string {
+	pending := []string{"PENDING", "INIT", "DELETING"}
+	switch target {
+	case "ACTIVE":
+		pending = append(pending, "INACTIVE")
+	case "INACTIVE":
+		pending = append(pending, "ACTIVE")
+	}
+	return pending
+}
+
 func waitForClusterConnection(ctx context.Context, c *scylla.Client, clusterID, connectionID int64, targetStatus string) error {
 	stateConf := &retry.StateChangeConf{
-		Pending: []string{"PENDING", "INIT", "DELETING"},
+		Pending: connectionPendingStatuses(targetStatus),
 		Target:  []string{targetStatus},
 		Refresh: func() (interface{}, string, error) {
 			conn, err := c.GetClusterConnection(context.Background(), clusterID, connectionID)
