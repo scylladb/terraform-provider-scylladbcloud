@@ -1261,6 +1261,12 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 	oldMinNodesI, newMinNodesI := d.GetChange("min_nodes")
 	oldMinNodes, newMinNodes := oldMinNodesI.(int), newMinNodesI.(int)
 
+	// While the update checks whether to resize, a failure changes nothing in
+	// the cloud, so keep min_nodes from the state. The SDK would store the
+	// planned value of a failed update, and the read keeps a min_nodes below
+	// the node count, so a failed scale-in would never be planned again.
+	d.Partial(true)
+
 	clusterID, diags := parseClusterID(d)
 	if diags != nil {
 		return diags
@@ -1305,12 +1311,14 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 	// ACTIVE node, but the resize needs the instance, and the API reports
 	// instance ID 0 then.
 	if cluster.Datacenter.InstanceID == 0 {
-		// The SDK would store the planned min_nodes of the failed update.
-		// The read keeps a min_nodes below the node count, so a stored
-		// scale-in would never be planned again.
-		d.Partial(true)
 		return noActiveNodeDiag(cluster.ID)
 	}
+
+	// The API can save the resize request and still answer with an error,
+	// so from here on a failure stores the planned min_nodes, as before.
+	// Keeping the old value would plan the resize again and could send it
+	// twice.
+	d.Partial(false)
 
 	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
 

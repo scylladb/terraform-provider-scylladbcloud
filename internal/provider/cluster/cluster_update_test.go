@@ -122,13 +122,15 @@ func TestResourceClusterUpdateMinNodesInstance(t *testing.T) {
 	}
 }
 
-// TestResourceClusterUpdateMinNodesKeepsState scales a six-node Standard
-// cluster in to 3 while no node is ACTIVE, through the SDK. The update fails,
-// and the SDK stores the planned values of a failed update unless the update
-// says otherwise. The read keeps a min_nodes below the node count, so once the
-// nodes are ACTIVE again, a stored 3 would plan no change, and the scale-in
-// would never happen.
-func TestResourceClusterUpdateMinNodesKeepsState(t *testing.T) {
+// TestResourceClusterUpdateMinNodesState scales a six-node Standard cluster
+// in to 3 through the SDK, and fails the update. The SDK stores the planned
+// values of a failed update unless the update says otherwise, and the read
+// keeps a min_nodes below the node count, so a stored 3 would plan no change
+// once six nodes are ACTIVE. A failed check that decides whether to resize
+// keeps 6. An error of the resize call stores 3: the API can save the request
+// and still answer with an error, and planning the resize again could send it
+// twice.
+func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -137,116 +139,173 @@ func TestResourceClusterUpdateMinNodesKeepsState(t *testing.T) {
 			`{"id":4,"status":"ACTIVE"},{"id":5,"status":"ACTIVE"},{"id":6,"status":"ACTIVE"}]`
 	)
 
-	// active is false while no node is ACTIVE, and the API reports instance
-	// ID 0 then.
-	var active atomic.Bool
+	tests := []struct {
+		name string
+		// active is whether the nodes are ACTIVE during the plan and the
+		// update. While none is, the API reports instance ID 0.
+		active bool
+		// failList fails the list of IN_PROGRESS requests that the update
+		// waits on.
+		failList bool
+		wantErr  string
+		// wantMinNodes is min_nodes in the state after the failed update.
+		wantMinNodes string
+		wantResizes  int32
+	}{
+		{
+			name:         "no node is ACTIVE",
+			wantErr:      "cluster 42 has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes",
+			wantMinNodes: "6",
+		},
+		{
+			name:         "the request list fails",
+			failList:     true,
+			wantErr:      "failed waiting for no in-progress cluster requests for cluster 42",
+			wantMinNodes: "6",
+		},
+		{
+			name:         "the resize call fails",
+			active:       true,
+			wantErr:      "error resizing cluster",
+			wantMinNodes: "3",
+			wantResizes:  1,
+		},
+	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		instanceID, instance, nodes := 0, placeholderInstance, `[]`
-		if active.Load() {
-			instanceID, instance, nodes = 2, realInstance, sixNodes
-		}
-		dc := fmt.Sprintf(`{"id":5,"name":"AWS_US_EAST_1","instanceId":%d}`, instanceID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		switch r.Method + " " + r.URL.Path {
-		case "GET /account/7/cluster/42/request":
-			// The update waits until no request is IN_PROGRESS, and the read
-			// reads the create request.
-			if r.URL.Query().Get("status") == "IN_PROGRESS" {
-				_, _ = w.Write([]byte(`{"data":[]}`))
+			var (
+				active  atomic.Bool
+				resizes atomic.Int32
+			)
+			active.Store(tt.active)
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				instanceID, instance, nodes := 0, placeholderInstance, `[]`
+				if active.Load() {
+					instanceID, instance, nodes = 2, realInstance, sixNodes
+				}
+				dc := fmt.Sprintf(`{"id":5,"name":"AWS_US_EAST_1","instanceId":%d}`, instanceID)
+
+				switch r.Method + " " + r.URL.Path {
+				case "GET /account/7/cluster/42/request":
+					// The read reads the create request, and the update waits
+					// until no request is IN_PROGRESS.
+					switch {
+					case r.URL.Query().Get("status") != "IN_PROGRESS":
+						_, _ = w.Write([]byte(`{"data":[{"id":11,"status":"COMPLETED"}]}`))
+					case tt.failList:
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = w.Write([]byte(`{"error":"040023"}`))
+					default:
+						_, _ = w.Write([]byte(`{"data":[]}`))
+					}
+				case "GET /account/7/cluster/42":
+					_, _ = w.Write([]byte(`{"data":{"cluster":{"id":42,"clusterName":"cluster","status":"ACTIVE",` +
+						`"cloudProviderId":1,"userApiInterface":"CQL","broadcastType":"PRIVATE","dns":true,` +
+						`"region":{"id":1,"externalId":"us-east-1"},"scyllaVersion":{"version":"2025.1.0"},` +
+						`"instance":` + instance + `,"dc":` + dc + `,"dataCenters":[` + dc + `],` +
+						`"nodes":` + nodes + `}}}`))
+				case "GET /account/7/cluster/42/dc/5":
+					_, _ = w.Write([]byte(`{"data":` + dc + `}`))
+				case "GET /deployment/cloud-provider/1/region/1":
+					_, _ = w.Write([]byte(`{"data":{"instances":[` + realInstance + `]}}`))
+				case "GET /account/7/cluster/42/certificate":
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"error":"041201"}`))
+				case "POST /account/7/cluster/42/resize":
+					resizes.Add(1)
+					// The general resize error, which the API also sends after
+					// it saved the request. It answers with status 200.
+					_, _ = w.Write([]byte(`{"error":"041002"}`))
+				default:
+					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			endpoint, err := url.Parse(srv.URL)
+			require.NoError(t, err)
+
+			client := &scylla.Client{
+				Endpoint:   endpoint,
+				Headers:    make(http.Header),
+				HTTPClient: srv.Client(),
+				Retry:      retrier.New(nil, nil),
+				AccountID:  7,
+				Meta: &scylla.Cloudmeta{CloudProviders: []scylla.CloudProvider{{
+					CloudProvider:        &model.CloudProvider{ID: 1, Name: "AWS"},
+					CloudProviderRegions: &model.CloudProviderRegions{},
+				}}},
+			}
+
+			// The refresh of the plan keeps min_nodes = 6.
+			d := ResourceCluster().TestResourceData()
+			d.SetId("42")
+			for k, v := range map[string]any{
+				"name":           "cluster",
+				"cloud":          "AWS",
+				"region":         "us-east-1",
+				"node_type":      "i3.large",
+				"node_disk_size": 475,
+				"min_nodes":      6,
+				// The create stores the default, and the read of a CQL
+				// cluster keeps it.
+				"alternator_write_isolation": "only_rmw_uses_lwt",
+			} {
+				require.NoError(t, d.Set(k, v))
+			}
+
+			state, diags := ResourceCluster().RefreshWithoutUpgrade(t.Context(), d.State(), client)
+			require.False(t, diags.HasError(), "%v", diags)
+
+			config := map[string]cty.Value{
+				"name":           cty.StringVal("cluster"),
+				"cloud":          cty.StringVal("AWS"),
+				"region":         cty.StringVal("us-east-1"),
+				"node_type":      cty.StringVal("i3.large"),
+				"node_disk_size": cty.NumberIntVal(475),
+				"min_nodes":      cty.NumberIntVal(3),
+			}
+
+			// requireScaleIn checks that the plan of config scales the
+			// cluster in.
+			requireScaleIn := func(state *terraform.InstanceState) *terraform.InstanceDiff {
+				t.Helper()
+
+				diff, err := clusterDiff(t, state, config)
+				require.NoError(t, err)
+				require.NotNil(t, diff)
+				require.False(t, diff.RequiresNew())
+
+				a := diff.Attributes["min_nodes"]
+				require.NotNil(t, a)
+				require.Equal(t, []string{"6", "3"}, []string{a.Old, a.New})
+				return diff
+			}
+
+			diff := requireScaleIn(state)
+
+			state, diags = ResourceCluster().Apply(t.Context(), state, diff, client)
+			require.True(t, diags.HasError())
+			require.Contains(t, diags[0].Summary, tt.wantErr)
+			require.Equal(t, tt.wantMinNodes, state.Attributes["min_nodes"])
+			require.Equal(t, tt.wantResizes, resizes.Load())
+
+			// A sent resize is the API's to carry out.
+			if tt.wantResizes > 0 {
 				return
 			}
-			_, _ = w.Write([]byte(`{"data":[{"id":11,"status":"COMPLETED"}]}`))
-		case "GET /account/7/cluster/42":
-			_, _ = w.Write([]byte(`{"data":{"cluster":{"id":42,"clusterName":"cluster","status":"ACTIVE",` +
-				`"cloudProviderId":1,"userApiInterface":"CQL","broadcastType":"PRIVATE","dns":true,` +
-				`"region":{"id":1,"externalId":"us-east-1"},"scyllaVersion":{"version":"2025.1.0"},` +
-				`"instance":` + instance + `,"dc":` + dc + `,"dataCenters":[` + dc + `],` +
-				`"nodes":` + nodes + `}}}`))
-		case "GET /account/7/cluster/42/dc/5":
-			_, _ = w.Write([]byte(`{"data":` + dc + `}`))
-		case "GET /deployment/cloud-provider/1/region/1":
-			_, _ = w.Write([]byte(`{"data":{"instances":[` + realInstance + `]}}`))
-		case "GET /account/7/cluster/42/certificate":
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":"041201"}`))
-		default:
-			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	t.Cleanup(srv.Close)
 
-	endpoint, err := url.Parse(srv.URL)
-	require.NoError(t, err)
+			active.Store(true)
 
-	client := &scylla.Client{
-		Endpoint:   endpoint,
-		Headers:    make(http.Header),
-		HTTPClient: srv.Client(),
-		Retry:      retrier.New(nil, nil),
-		AccountID:  7,
-		Meta: &scylla.Cloudmeta{CloudProviders: []scylla.CloudProvider{{
-			CloudProvider:        &model.CloudProvider{ID: 1, Name: "AWS"},
-			CloudProviderRegions: &model.CloudProviderRegions{},
-		}}},
+			state, diags = ResourceCluster().RefreshWithoutUpgrade(t.Context(), state, client)
+			require.False(t, diags.HasError(), "%v", diags)
+
+			// The plan still scales the cluster in once its nodes are ACTIVE.
+			requireScaleIn(state)
+		})
 	}
-
-	// The refresh of the plan, while no node is ACTIVE, keeps min_nodes = 6.
-	d := ResourceCluster().TestResourceData()
-	d.SetId("42")
-	for k, v := range map[string]any{
-		"name":           "cluster",
-		"cloud":          "AWS",
-		"region":         "us-east-1",
-		"node_type":      "i3.large",
-		"node_disk_size": 475,
-		"min_nodes":      6,
-		// The create stores the default, and the read of a CQL cluster
-		// keeps it.
-		"alternator_write_isolation": "only_rmw_uses_lwt",
-	} {
-		require.NoError(t, d.Set(k, v))
-	}
-
-	state, diags := ResourceCluster().RefreshWithoutUpgrade(t.Context(), d.State(), client)
-	require.False(t, diags.HasError(), "%v", diags)
-
-	config := map[string]cty.Value{
-		"name":           cty.StringVal("cluster"),
-		"cloud":          cty.StringVal("AWS"),
-		"region":         cty.StringVal("us-east-1"),
-		"node_type":      cty.StringVal("i3.large"),
-		"node_disk_size": cty.NumberIntVal(475),
-		"min_nodes":      cty.NumberIntVal(3),
-	}
-
-	// requireScaleIn checks that the plan of config scales the cluster in.
-	requireScaleIn := func(state *terraform.InstanceState) *terraform.InstanceDiff {
-		t.Helper()
-
-		diff, err := clusterDiff(t, state, config)
-		require.NoError(t, err)
-		require.NotNil(t, diff)
-		require.False(t, diff.RequiresNew())
-
-		a := diff.Attributes["min_nodes"]
-		require.NotNil(t, a)
-		require.Equal(t, []string{"6", "3"}, []string{a.Old, a.New})
-		return diff
-	}
-
-	diff := requireScaleIn(state)
-
-	state, diags = ResourceCluster().Apply(t.Context(), state, diff, client)
-	require.True(t, diags.HasError())
-	require.Equal(t, "cluster 42 has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes", diags[0].Summary)
-	require.Equal(t, "6", state.Attributes["min_nodes"], "the failed update must keep min_nodes")
-
-	active.Store(true)
-
-	state, diags = ResourceCluster().RefreshWithoutUpgrade(t.Context(), state, client)
-	require.False(t, diags.HasError(), "%v", diags)
-
-	// The plan still scales the cluster in once its nodes are ACTIVE.
-	requireScaleIn(state)
 }
