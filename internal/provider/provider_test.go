@@ -135,6 +135,22 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 						tfjsonpath.New("ca_certificate"),
 						knownvalue.StringRegexp(regexp.MustCompile(`^-----BEGIN CERTIFICATE-----`)),
 					),
+					// The configuration turns encryption at rest off.
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
+						knownvalue.Bool(false),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
+						knownvalue.StringExact(""),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
+						knownvalue.StringExact(""),
+					),
 				},
 				Check: resource.ComposeTestCheckFunc(
 					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
@@ -444,36 +460,6 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	})
 }
 
-func TestAccScyllaDBCloudCluster_backupRetentionDefault(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("backup-retention-default")
-	vars := testAccAWSClusterVars(resourceName)
-	delete(vars, "backup_retention_days")
-
-	var cluster model.Cluster
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { acctest.PreCheck(t) },
-		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             acctest.CheckClusterDestroyed(t),
-		Steps: []resource.TestStep{
-			{
-				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: vars,
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("backup_retention_days"),
-						knownvalue.Int32Exact(1),
-					),
-				},
-				Check: resource.ComposeTestCheckFunc(
-					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
-				),
-			},
-		},
-	})
-}
-
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("ear-enabled")
 	enabled := testAccAWSClusterVars(resourceName)
@@ -528,44 +514,6 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 						),
 					},
 				},
-			},
-		},
-	})
-}
-
-func TestAccScyllaDBCloudCluster_encryptionAtRestDisabled(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("ear-disabled")
-
-	var cluster model.Cluster
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { acctest.PreCheck(t) },
-		ProtoV5ProviderFactories: protoV5ProviderFactories,
-		CheckDestroy:             acctest.CheckClusterDestroyed(t),
-		Steps: []resource.TestStep{
-			{
-				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: testAccAWSClusterVars(resourceName),
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
-						knownvalue.Bool(false),
-					),
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("provider"),
-						knownvalue.StringExact(""),
-					),
-					statecheck.ExpectKnownValue(
-						"scylladbcloud_cluster.test",
-						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("key_id"),
-						knownvalue.StringExact(""),
-					),
-				},
-				Check: resource.ComposeTestCheckFunc(
-					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
-				),
 			},
 		},
 	})
@@ -650,9 +598,13 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	})
 }
 
-func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("ear-default")
+// TestAccScyllaDBCloudCluster_defaultsAWS checks the defaults of an AWS
+// cluster on one cluster: the configuration sets neither
+// backup_retention_days nor encryption_at_rest.
+func TestAccScyllaDBCloudCluster_defaultsAWS(t *testing.T) {
+	resourceName := sdkacctest.RandomWithPrefix("defaults-aws")
 	vars := testAccAWSClusterVars(resourceName)
+	delete(vars, "backup_retention_days")
 	delete(vars, "encryption_at_rest")
 
 	var cluster model.Cluster
@@ -666,6 +618,11 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefault(t *testing.T) {
 				ConfigDirectory: testAccClusterDir,
 				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("backup_retention_days"),
+						knownvalue.Int32Exact(1),
+					),
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
 						tfjsonpath.New("encryption_at_rest").AtSliceIndex(0).AtMapKey("enabled"),
