@@ -38,6 +38,11 @@ testacc-short: pkgs?=./...
 testacc-short:
 	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -short -v -timeout=90m -parallel=3 -race -run="$(value run)" $(pkgs)
 
+# Deletes the clusters that acceptance runs left behind: every cluster whose
+# name starts with tf-acc-test-, in the account of SCYLLADB_CLOUD_TOKEN.
+sweep:
+	go test -v -timeout=30m ./internal/provider/ -sweep=all
+
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
 
@@ -54,4 +59,4 @@ $(GOLANGCI_LINT):
 	mv $$tmp/golangci-lint $@ && \
 	rmdir $$tmp
 
-.PHONY: build fmt generate lint test testacc testacc-short
+.PHONY: build fmt generate lint test testacc testacc-short sweep
