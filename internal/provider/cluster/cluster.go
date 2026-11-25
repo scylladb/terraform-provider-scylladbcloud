@@ -1107,37 +1107,38 @@ const failedCreateStatus = "CREATE_FAILED"
 // without an error, so that plan and destroy still work.
 func failedCreateDiags(ctx context.Context, c *scylla.Client, d *schema.ResourceData, r model.ClusterRequest) diag.Diagnostics {
 	_ = d.Set("status", failedCreateStatus)
-	// Delete needs the name. An imported cluster has no name in state yet.
-	if d.Get("name").(string) == "" {
-		setFailedClusterName(ctx, c, d, r.ClusterID)
-	}
-	return diag.Diagnostics{{
+	diags := diag.Diagnostics{{
 		Severity: diag.Warning,
 		Summary:  fmt.Sprintf("The create request of cluster %d failed", r.ClusterID),
 		Detail: fmt.Sprintf("Cluster request ID %d failed (%s at %d%%): %s\n\n"+
 			"Destroy or replace this cluster.",
 			r.ID, r.RequestType, r.ProgressPercent, r.ProgressDescription),
 	}}
+	// Delete needs the name. An imported cluster has no name in state yet.
+	// Without it, a later destroy fails, so the refresh fails now.
+	if d.Get("name").(string) == "" {
+		if err := setFailedClusterName(ctx, c, d, r.ClusterID); err != nil {
+			return append(diags, diag.Errorf("failed to read the name of cluster %d: %s", r.ClusterID, err)...)
+		}
+	}
+	return diags
 }
 
 // setFailedClusterName sets the name of a cluster whose create failed, from
 // the cluster list. The cluster may have no datacenter, so GetCluster cannot
 // read it.
-func setFailedClusterName(ctx context.Context, c *scylla.Client, d *schema.ResourceData, clusterID int64) {
+func setFailedClusterName(ctx context.Context, c *scylla.Client, d *schema.ResourceData, clusterID int64) error {
 	clusters, err := c.ListClusters(ctx)
 	if err != nil {
-		tflog.Warn(ctx, "failed to list clusters to find the name of a failed cluster", map[string]interface{}{
-			"cluster_id": clusterID,
-			"error":      err.Error(),
-		})
-		return
+		return err
 	}
 	for _, cl := range clusters {
 		if cl.ID == clusterID {
 			_ = d.Set("name", cl.ClusterName)
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without

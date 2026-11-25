@@ -196,6 +196,24 @@ func TestReadFailedCreateOfImportedCluster(t *testing.T) {
 	require.Equal(t, "failed-cluster", d.Get("name"))
 }
 
+// Without the name, a later destroy fails before it calls the API. So a
+// failed name lookup must fail the refresh, not leave the name empty.
+func TestReadFailedCreateOfImportedClusterListError(t *testing.T) {
+	t.Parallel()
+	srv := scyllatest.New(t)
+	srv.Reply(http.MethodGet, "/account/1/cluster/3/request", []model.ClusterRequest{testCreateRequest("FAILED")})
+	srv.Reply(http.MethodGet, "/account/1/cluster/request/9", testCreateRequest("FAILED"))
+	srv.Fail(http.MethodGet, "/account/1/clusters", http.StatusInternalServerError, "000000")
+	d := ResourceCluster().TestResourceData()
+	d.SetId("3")
+
+	diags := resourceClusterRead(context.Background(), d, srv.Client(t))
+
+	require.True(t, diags.HasError())
+	require.Contains(t, diagSummaries(diags), "failed to read the name of cluster 3")
+	require.Equal(t, "3", d.Id())
+}
+
 func diagSummaries(diags diag.Diagnostics) string {
 	var s string
 	for _, d := range diags {
