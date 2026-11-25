@@ -26,7 +26,7 @@ resource "aws_route_table" "app" {
 	vpc_id = aws_vpc.app.id
 
 	route {
-		cidr_block = scylladbcloud_cluster.example.cidr_block
+		cidr_block                = "172.31.0.0/16" # cidr_block of the ScyllaDB cluster
 		vpc_peering_connection_id = aws_vpc_peering_connection_accepter.app.vpc_peering_connection_id
 	}
 }

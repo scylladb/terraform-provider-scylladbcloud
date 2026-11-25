@@ -14,7 +14,7 @@ description: |-
 
 ```terraform
 # Fetch connection bundle file for serverless cluster identified by 1337.
-data "scylladbcloud_serverless_bundle" "my" {
+data "scylladbcloud_serverless_bundle" "example" {
 	cluster_id = 1337
 }
 
