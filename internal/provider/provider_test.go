@@ -3,8 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-cty/cty"
@@ -19,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 	"github.com/stretchr/testify/require"
 
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/acctest"
@@ -88,8 +92,8 @@ func testAccEncryptionKey(keyID string) config.Variable {
 // TestAccScyllaDBCloudCluster_basicAWS is in the smoke set, so it checks as
 // much as it can on its one cluster: an allowlist rule, the cql_auth data
 // source, and the import of the cluster and the rule. The framework checks
-// that the plan after the apply is empty. With the variables of acctest.AWSPeerVPC set, it also creates a
-// VPC peering.
+// that the plan after the apply is empty. With the variables of
+// acctest.AWSPeerVPC set, it also creates and imports a VPC peering.
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-aws")
 	vars := testAccAWSClusterVars(resourceName)
@@ -102,7 +106,10 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 	vars["allowlist_cidr"] = config.StringVariable("192.0.2.0/24")
 	vars["read_cql_auth"] = config.BoolVariable(true)
 
-	var peerChecks []statecheck.StateCheck
+	var (
+		peerChecks []statecheck.StateCheck
+		peerSteps  []resource.TestStep
+	)
 	if vpcID, accountID, cidr, ok := acctest.AWSPeerVPC(); ok {
 		vars["peer"] = config.ObjectVariable(map[string]config.Variable{
 			"vpc_id":     config.StringVariable(vpcID),
@@ -126,6 +133,9 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 				compare.ValuesSame(),
 			),
 		}
+		peerSteps = []resource.TestStep{
+			testAccImportStep(testAccClusterDir, vars, "scylladbcloud_vpc_peering.test[0]"),
+		}
 	}
 
 	var cluster model.Cluster
@@ -134,7 +144,8 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
-		Steps: []resource.TestStep{
+		TerraformVersionChecks:   testAccImportBlockVersion,
+		Steps: slices.Concat([]resource.TestStep{
 			{
 				ConfigDirectory: testAccClusterDir,
 				ConfigVariables: vars,
@@ -229,28 +240,101 @@ func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
 					},
 				),
 			},
-			{
-				ConfigDirectory:   testAccClusterDir,
-				ConfigVariables:   vars,
-				ResourceName:      "scylladbcloud_cluster.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-				// Read never sets backup_retention_days, and sets
-				// alternator_write_isolation only for Alternator clusters.
-				ImportStateVerifyIgnore: []string{"backup_retention_days", "alternator_write_isolation"},
+		},
+			testAccClusterImportSteps(testAccClusterDir, vars),
+			[]resource.TestStep{
+				testAccImportStep(testAccClusterDir, vars, "scylladbcloud_allowlist_rule.test[0]"),
 			},
-			{
-				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: vars,
-				// The address has the count index. The state has the
-				// resource at "test.0", so the ID must come from there.
-				ResourceName:      "scylladbcloud_allowlist_rule.test[0]",
-				ImportStateIdFunc: testAccResourceID("scylladbcloud_allowlist_rule.test.0"),
-				ImportState:       true,
-				ImportStateVerify: true,
+			peerSteps,
+		),
+	})
+}
+
+// testAccImportBlockVersion skips a test that has an import {} block step
+// on Terraform before 1.5, which does not support the block. It skips the
+// whole test, so these tests need Terraform 1.5 or later.
+var testAccImportBlockVersion = []tfversion.TerraformVersionCheck{
+	tfversion.SkipBelow(tfversion.Version1_5_0),
+}
+
+// testAccClusterImportSteps imports scylladbcloud_cluster.test with the
+// terraform import command and with an import {} block. The import may
+// differ from the state only in backup_retention_days, which the API does
+// not return, and alternator_write_isolation, which Read sets only for
+// Alternator clusters. The test case must use testAccImportBlockVersion.
+func testAccClusterImportSteps(dir config.TestStepConfigFunc, vars config.Variables) []resource.TestStep {
+	const addr = "scylladbcloud_cluster.test"
+	return []resource.TestStep{
+		testAccImportStep(dir, vars, addr, "backup_retention_days", "alternator_write_isolation"),
+		{
+			ConfigDirectory:    dir,
+			ConfigVariables:    vars,
+			ResourceName:       addr,
+			ImportState:        true,
+			ImportStateKind:    resource.ImportBlockWithID,
+			ExpectNonEmptyPlan: true,
+			ImportPlanChecks: resource.ImportPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					testAccExpectOnlyChanged(addr, "backup_retention_days"),
+				},
 			},
 		},
-	})
+	}
+}
+
+// testAccImportStep imports the resource at addr with the terraform import
+// command. The imported state must be the same as the state of the test,
+// except for the attributes in ignore.
+func testAccImportStep(dir config.TestStepConfigFunc, vars config.Variables, addr string, ignore ...string) resource.TestStep {
+	return resource.TestStep{
+		ConfigDirectory: dir,
+		ConfigVariables: vars,
+		ResourceName:    addr,
+		// The state has a resource with a count index at "name.0", not at
+		// "name[0]", so the ID must come from there.
+		ImportStateIdFunc:       testAccResourceID(strings.NewReplacer("[", ".", "]", "").Replace(addr)),
+		ImportState:             true,
+		ImportStateVerify:       true,
+		ImportStateVerifyIgnore: ignore,
+	}
+}
+
+// testAccExpectOnlyChanged is a plan check. It fails if the plan for the
+// resource at addr changes an attribute that is not in attrs.
+func testAccExpectOnlyChanged(addr string, attrs ...string) plancheck.PlanCheck {
+	return expectOnlyChanged{addr: addr, attrs: attrs}
+}
+
+type expectOnlyChanged struct {
+	addr  string
+	attrs []string
+}
+
+func (e expectOnlyChanged) CheckPlan(_ context.Context, req plancheck.CheckPlanRequest, resp *plancheck.CheckPlanResponse) {
+	for _, rc := range req.Plan.ResourceChanges {
+		if rc.Address != e.addr || rc.Change == nil {
+			continue
+		}
+		before, _ := rc.Change.Before.(map[string]any)
+		after, _ := rc.Change.After.(map[string]any)
+		var changed []string
+		for _, values := range []map[string]any{before, after} {
+			for k := range values {
+				if slices.Contains(e.attrs, k) || slices.Contains(changed, k) {
+					continue
+				}
+				if !reflect.DeepEqual(before[k], after[k]) {
+					changed = append(changed, k)
+				}
+			}
+		}
+		if len(changed) > 0 {
+			slices.Sort(changed)
+			resp.Error = fmt.Errorf("%s: the plan changes %v", e.addr, changed)
+		}
+		return
+	}
+	resp.Error = fmt.Errorf("%s is not in the plan", e.addr)
 }
 
 // testAccResourceID returns the ID of the resource at key in the state.
@@ -267,6 +351,7 @@ func testAccResourceID(key string) resource.ImportStateIdFunc {
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 	acctest.SkipIfShort(t)
 	resourceName := sdkacctest.RandomWithPrefix("xcloud-aws")
+	vars := config.Variables{"name": config.StringVariable(resourceName)}
 
 	var cluster model.Cluster
 
@@ -274,10 +359,11 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
-		Steps: []resource.TestStep{
+		TerraformVersionChecks:   testAccImportBlockVersion,
+		Steps: append([]resource.TestStep{
 			{
 				ConfigDirectory: testAccClusterXCloudDir,
-				ConfigVariables: config.Variables{"name": config.StringVariable(resourceName)},
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -311,7 +397,8 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
-		},
+			// Read takes another path for a cluster with a scaling block.
+		}, testAccClusterImportSteps(testAccClusterXCloudDir, vars)...),
 	})
 }
 
@@ -483,6 +570,7 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 	resourceName := sdkacctest.RandomWithPrefix("basic-gcp")
+	vars := testAccGCPClusterVars(resourceName)
 
 	var cluster model.Cluster
 
@@ -490,10 +578,11 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 		PreCheck:                 func() { acctest.PreCheck(t) },
 		ProtoV5ProviderFactories: protoV5ProviderFactories,
 		CheckDestroy:             acctest.CheckClusterDestroyed(t),
-		Steps: []resource.TestStep{
+		TerraformVersionChecks:   testAccImportBlockVersion,
+		Steps: append([]resource.TestStep{
 			{
 				ConfigDirectory: testAccClusterDir,
-				ConfigVariables: testAccGCPClusterVars(resourceName),
+				ConfigVariables: vars,
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(
 						"scylladbcloud_cluster.test",
@@ -510,7 +599,8 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 					acctest.CheckClusterExists(t, "scylladbcloud_cluster.test", &cluster),
 				),
 			},
-		},
+			// Read takes another path for a GCP cluster.
+		}, testAccClusterImportSteps(testAccClusterDir, vars)...),
 	})
 }
 
