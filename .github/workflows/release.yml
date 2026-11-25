@@ -52,8 +52,12 @@ jobs:
         run: |
           # A run that names a missing environment creates it without
           # reviewers, and publish would then run without approval.
-          reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/release" \
-            --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length' 2>/dev/null || echo 0)"
+          # On an error, gh prints the error JSON to stdout.
+          if ! reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/release" \
+            --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length' 2>/dev/null)"; then
+            reviewers=0
+          fi
+          case "$reviewers" in '' | *[!0-9]*) reviewers=0 ;; esac
           if [ "$reviewers" -lt 1 ]; then
             echo "::error::The release environment is missing or has no required reviewers. See Setup in RELEASING.md."
             exit 1
