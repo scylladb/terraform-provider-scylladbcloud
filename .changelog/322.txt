@@ -1,3 +1,3 @@
 ```release-note:bug
-resource/scylladbcloud_cluster_connection: `status = "INACTIVE"` is accepted, and a new connection with it is turned off after the create. Before, the check expected `"INACTIVE "` with a trailing space, so `"INACTIVE"` failed at plan. A configuration with `"INACTIVE "` now fails at plan.
+resource/scylladbcloud_cluster_connection: `status = "INACTIVE"` is accepted, and a new connection with it is turned off after the create. Before, the check expected `"INACTIVE "` with a trailing space, so `"INACTIVE"` failed at plan. A configuration with `"INACTIVE "` now fails at plan. `"INACTIVE"` on an `AWS_PRIVATE_LINK` or `GCP_PRIVATE_SERVICE_CONNECT` connection also fails at plan, because the API does not change the status of these connections.
 ```

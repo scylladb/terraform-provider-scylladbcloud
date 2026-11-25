@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,7 @@ func ResourceClusterConnection() *schema.Resource {
 		},
 		UpdateContext: resourceClusterConnectionUpdate,
 		DeleteContext: resourceClusterConnectionDelete,
+		CustomizeDiff: checkStatusChangeable,
 
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, data *schema.ResourceData, i interface{}) ([]*schema.ResourceData, error) {
@@ -96,7 +98,8 @@ func ResourceClusterConnection() *schema.Resource {
 			},
 			"status": {
 				Description: "The connection status: `ACTIVE` or `INACTIVE`. A connection with `INACTIVE` is " +
-					"created as active and then turned off.",
+					"created as active and then turned off. `AWS_PRIVATE_LINK` and `GCP_PRIVATE_SERVICE_CONNECT` " +
+					"connections are always `ACTIVE`.",
 				Optional:         true,
 				Default:          "ACTIVE",
 				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice([]string{"ACTIVE", "INACTIVE"}, false)),
@@ -206,6 +209,21 @@ func resourceClusterConnectionCreate(ctx context.Context, d *schema.ResourceData
 	}
 	_ = d.Set("external_id", conn.ExternalID)
 	_ = d.Set("status", conn.Status)
+	return nil
+}
+
+// fixedStatusTypes are the connection types whose status the API does not
+// change. Their connections are always active.
+var fixedStatusTypes = []string{"AWS_PRIVATE_LINK", "GCP_PRIVATE_SERVICE_CONNECT"}
+
+// checkStatusChangeable stops in plan a status that the API rejects. Without
+// it, the create succeeds and then the status change fails, so the
+// connection stays active.
+func checkStatusChangeable(_ context.Context, d *schema.ResourceDiff, _ interface{}) error {
+	connType := d.Get("type").(string)
+	if d.Get("status").(string) == "INACTIVE" && slices.Contains(fixedStatusTypes, connType) {
+		return fmt.Errorf(`status "INACTIVE" is not supported for %s connections, they are always active`, connType)
+	}
 	return nil
 }
 

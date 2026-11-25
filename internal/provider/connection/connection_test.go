@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
@@ -39,6 +40,41 @@ func TestStatusValidation(t *testing.T) {
 			// Only the status may be wrong, so the only error is about it.
 			require.Len(t, diags, 1, "%v", diags)
 			require.Contains(t, diags[0].Summary, "expected status to be one of")
+		})
+	}
+}
+
+// The API does not change the status of PrivateLink and Private Service
+// Connect connections, so INACTIVE must fail in plan, before the create.
+func TestStatusChangeable(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		connType, status string
+		wantErr          bool
+	}{
+		{connType: "AWS_TGW_ATTACHMENT", status: "INACTIVE"},
+		{connType: "AWS_PRIVATE_LINK", status: "ACTIVE"},
+		{connType: "AWS_PRIVATE_LINK", status: "INACTIVE", wantErr: true},
+		{connType: "GCP_PRIVATE_SERVICE_CONNECT", status: "INACTIVE", wantErr: true},
+	} {
+		t.Run(tt.connType+"/"+tt.status, func(t *testing.T) {
+			t.Parallel()
+			config := terraform.NewResourceConfigRaw(map[string]any{
+				"cluster_id": 3,
+				"datacenter": "AWS_US_EAST_1",
+				"type":       tt.connType,
+				"cidrlist":   []any{"10.0.0.0/16"},
+				"data":       map[string]any{"key": "value"},
+				"status":     tt.status,
+			})
+
+			_, err := ResourceClusterConnection().Diff(context.Background(), nil, config, nil)
+
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, `status "INACTIVE" is not supported for `+tt.connType)
 		})
 	}
 }
