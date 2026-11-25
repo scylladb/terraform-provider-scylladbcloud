@@ -28,8 +28,10 @@ func TestFindConnectionWithoutClusterID(t *testing.T) {
 		// unreadable is what the API sends for a cluster it could not read.
 		unreadable = `{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}},`
 
-		errUnchecked = "cluster connection 77 was not found, but 1 of the clusters of the account could not be read, " +
-			"and they may have it: try again later"
+		errNoDC = "cluster connection 77 was not found, but the search skipped clusters that may have it " +
+			"(without an ACTIVE datacenter: 42): check them, and try again when they can be read"
+		errUnreadable = "cluster connection 77 was not found, but the search skipped clusters that may have it " +
+			"(entries the API could not read: 1): check them, and try again when they can be read"
 	)
 
 	tests := []struct {
@@ -64,13 +66,13 @@ func TestFindConnectionWithoutClusterID(t *testing.T) {
 			name:         "a cluster without a datacenter may have the connection",
 			clusters:     cluster42,
 			lookupStatus: http.StatusNotFound,
-			wantErr:      errUnchecked,
+			wantErr:      errNoDC,
 		},
 		{
 			name:         "a cluster the API could not read may have the connection",
 			clusters:     unreadable,
 			lookupStatus: http.StatusNotFound,
-			wantErr:      errUnchecked,
+			wantErr:      errUnreadable,
 		},
 	}
 

@@ -3,6 +3,7 @@ package vpcpeering
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -249,9 +250,9 @@ func resourceVPCPeeringRead(ctx context.Context, d *schema.ResourceData, meta in
 		return diag.FromErr(err)
 	}
 
-	if cluster == nil && l.unchecked > 0 {
-		return retryDiag(stateClusterID, "VPC peering %q was not found, but %d of the clusters of the account could not be read, "+
-			"and they may list it: try again later", connID, l.unchecked)
+	if skipped := l.skipped(); cluster == nil && skipped != "" {
+		return retryDiag(stateClusterID, "VPC peering %q was not found, but the search skipped clusters that may list it (%s): "+
+			"check them, and try again when they can be read", connID, skipped)
 	}
 
 	if cluster == nil {
@@ -309,10 +310,9 @@ type peeringClusters struct {
 	// unreadable counts the entries the API could not read. The list has no
 	// ID for them.
 	unreadable int
-	// unchecked counts the clusters that may list the peering but cannot be
-	// read: the unreadable entries, and the clusters without an ACTIVE
-	// datacenter.
-	unchecked int
+	// noDC holds the IDs of the other clusters without an ACTIVE datacenter,
+	// which cannot be read either.
+	noDC []int64
 }
 
 // listPeeringClusters lists the clusters of the account. All the clusters of
@@ -324,7 +324,7 @@ func listPeeringClusters(ctx context.Context, c *scylla.Client, stateClusterID i
 		return nil, fmt.Errorf("error reading cluster list: %w", err)
 	}
 
-	l := &peeringClusters{unreadable: unreadable, unchecked: unreadable}
+	l := &peeringClusters{unreadable: unreadable}
 	for _, cl := range clusters {
 		switch {
 		case cl.ID == stateClusterID:
@@ -333,13 +333,35 @@ func listPeeringClusters(ctx context.Context, c *scylla.Client, stateClusterID i
 			// The API counts only ACTIVE datacenters, and reading a cluster
 			// without one fails. A cluster whose create failed early never
 			// gets one.
-			l.unchecked++
+			l.noDC = append(l.noDC, cl.ID)
 		default:
 			l.others = append(l.others, cl)
 		}
 	}
 
 	return l, nil
+}
+
+// skipped lists the clusters that a lookup could not read, although they may
+// list the peering, or returns "" when it read them all. It names the
+// clusters without an ACTIVE datacenter, and counts the entries the API could
+// not read, as the list has no ID for them.
+func (l *peeringClusters) skipped() string {
+	var parts []string
+
+	if len(l.noDC) > 0 {
+		ids := make([]string, 0, len(l.noDC))
+		for _, id := range l.noDC {
+			ids = append(ids, strconv.FormatInt(id, 10))
+		}
+		parts = append(parts, "without an ACTIVE datacenter: "+strings.Join(ids, ", "))
+	}
+
+	if l.unreadable > 0 {
+		parts = append(parts, fmt.Sprintf("entries the API could not read: %d", l.unreadable))
+	}
+
+	return strings.Join(parts, "; ")
 }
 
 // findPeering returns the first of clusters that lists the peering connID, and
@@ -440,9 +462,9 @@ func checkPeeringGone(ctx context.Context, c *scylla.Client, connID string, stat
 			"to delete it through that cluster, remove it from the state, import it again and destroy it", stateClusterID, connID, cluster.ID)
 	}
 
-	if l.unchecked > 0 {
-		return retryDiag(stateClusterID, "cluster %d of VPC peering %q was deleted, but %d of the clusters of the account could not be read, "+
-			"and they may list the peering: try again later", stateClusterID, connID, l.unchecked)
+	if skipped := l.skipped(); skipped != "" {
+		return retryDiag(stateClusterID, "cluster %d of VPC peering %q was deleted, but the search skipped clusters that may list the peering (%s): "+
+			"check them, and try again when they can be read", stateClusterID, connID, skipped)
 	}
 
 	return nil

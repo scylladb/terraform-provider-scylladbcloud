@@ -32,8 +32,10 @@ func TestVPCPeeringDeleteDeletedCluster(t *testing.T) {
 		// unreadable is what the API sends for a cluster it could not read.
 		unreadable = `{"error":{"code":"040023","message":"General Request Error","trace_id":"t1"}}`
 
-		errUnchecked = `cluster 43 of VPC peering "pcx-1" was deleted, but 1 of the clusters of the account could not be read, ` +
-			`and they may list the peering: try again later`
+		errNoDC = `cluster 43 of VPC peering "pcx-1" was deleted, but the search skipped clusters that may list the peering ` +
+			`(without an ACTIVE datacenter: 42): check them, and try again when they can be read`
+		errUnreadable = `cluster 43 of VPC peering "pcx-1" was deleted, but the search skipped clusters that may list the peering ` +
+			`(entries the API could not read: 1): check them, and try again when they can be read`
 	)
 
 	tests := []struct {
@@ -75,7 +77,7 @@ func TestVPCPeeringDeleteDeletedCluster(t *testing.T) {
 			deleteErr:  "040001",
 			clusters:   []string{cluster42, cluster45},
 			wantList:   true,
-			wantErr:    errUnchecked,
+			wantErr:    errNoDC,
 			wantDetail: "terraform state rm",
 		},
 		{
@@ -83,7 +85,7 @@ func TestVPCPeeringDeleteDeletedCluster(t *testing.T) {
 			deleteErr:  "040001",
 			clusters:   []string{unreadable, cluster45},
 			wantList:   true,
-			wantErr:    errUnchecked,
+			wantErr:    errUnreadable,
 			wantDetail: "terraform state rm",
 		},
 	}

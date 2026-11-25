@@ -374,14 +374,14 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 		return nil, nil, fmt.Errorf("error reading cluster list: %s", err)
 	}
 
-	// unchecked counts the clusters that may have the connection but cannot
-	// be read.
-	unchecked := unreadable
+	// noDC holds the IDs of the clusters that may have the connection but have
+	// no ACTIVE datacenter, so they cannot be read.
+	var noDC []int64
 	for i := range clusters {
 		// The API counts only ACTIVE datacenters, and it can fail the lookup
 		// in a cluster without one instead of reporting that it found none.
 		if clusters[i].DCCount == 0 {
-			unchecked++
+			noDC = append(noDC, clusters[i].ID)
 			continue
 		}
 
@@ -402,10 +402,32 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 
 	// Not errNotFound: the import would report a missing connection after an
 	// incomplete search.
-	if unchecked > 0 {
-		return nil, nil, fmt.Errorf("cluster connection %d was not found, but %d of the clusters of the account could not be read, "+
-			"and they may have it: try again later", connectionID, unchecked)
+	if skipped := skippedClusters(noDC, unreadable); skipped != "" {
+		return nil, nil, fmt.Errorf("cluster connection %d was not found, but the search skipped clusters that may have it (%s): "+
+			"check them, and try again when they can be read", connectionID, skipped)
 	}
 
 	return nil, nil, errNotFound
+}
+
+// skippedClusters lists the clusters that a lookup could not read, or returns
+// "" when it read them all. It names the clusters without an ACTIVE
+// datacenter, and counts the entries the API could not read, as the list has
+// no ID for them. The VPC peering lookups use the same words.
+func skippedClusters(noDC []int64, unreadable int) string {
+	var parts []string
+
+	if len(noDC) > 0 {
+		ids := make([]string, 0, len(noDC))
+		for _, id := range noDC {
+			ids = append(ids, strconv.FormatInt(id, 10))
+		}
+		parts = append(parts, "without an ACTIVE datacenter: "+strings.Join(ids, ", "))
+	}
+
+	if unreadable > 0 {
+		parts = append(parts, fmt.Sprintf("entries the API could not read: %d", unreadable))
+	}
+
+	return strings.Join(parts, "; ")
 }

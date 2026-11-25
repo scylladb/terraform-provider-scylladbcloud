@@ -38,8 +38,13 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 
 		errStateClusterWithoutDC = `cluster 42 of VPC peering "pcx-1" is listed without a datacenter, so the peering cannot be read: ` +
 			`try again when the cluster has an ACTIVE datacenter`
-		errUnchecked = `VPC peering "pcx-1" was not found, but 1 of the clusters of the account could not be read, ` +
-			`and they may list it: try again later`
+		// errNoDC, errUnreadable and errBoth name what a search skipped.
+		errNoDC = `VPC peering "pcx-1" was not found, but the search skipped clusters that may list it ` +
+			`(without an ACTIVE datacenter: 42): check them, and try again when they can be read`
+		errUnreadable = `VPC peering "pcx-1" was not found, but the search skipped clusters that may list it ` +
+			`(entries the API could not read: 1): check them, and try again when they can be read`
+		errBoth = `VPC peering "pcx-1" was not found, but the search skipped clusters that may list it ` +
+			`(without an ACTIVE datacenter: 42; entries the API could not read: 1): check them, and try again when they can be read`
 
 		// stateRm and checkImport are parts of the error details.
 		stateRm     = "terraform state rm"
@@ -75,12 +80,17 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 		{
 			name:     "import while only a cluster without a datacenter could list the peering",
 			clusters: []string{cluster42, cluster45},
-			wantErr:  errUnchecked,
+			wantErr:  errNoDC,
 		},
 		{
 			name:     "import while only a cluster the API could not read could list the peering",
 			clusters: []string{unreadable, cluster45},
-			wantErr:  errUnchecked,
+			wantErr:  errUnreadable,
+		},
+		{
+			name:     "import while a cluster without a datacenter and a cluster the API could not read could list the peering",
+			clusters: []string{cluster42, unreadable, cluster45},
+			wantErr:  errBoth,
 		},
 		{
 			name:           "refresh",
@@ -158,14 +168,14 @@ func TestVPCPeeringReadClusterWithoutDatacenter(t *testing.T) {
 			name:           "refresh while the cluster of the state is gone and only a cluster without a datacenter could list the peering",
 			stateClusterID: 43,
 			clusters:       []string{cluster42, cluster45},
-			wantErr:        errUnchecked,
+			wantErr:        errNoDC,
 			wantDetail:     stateRm,
 		},
 		{
 			name:           "refresh while the cluster of the state is gone and only a cluster the API could not read could list the peering",
 			stateClusterID: 43,
 			clusters:       []string{unreadable, cluster45},
-			wantErr:        errUnchecked,
+			wantErr:        errUnreadable,
 			wantDetail:     stateRm,
 		},
 	}
