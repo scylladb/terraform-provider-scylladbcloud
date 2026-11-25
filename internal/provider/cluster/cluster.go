@@ -22,7 +22,6 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
-	clusterPollInterval  = 10 * time.Second
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -599,6 +598,11 @@ func ResourceCluster() *schema.Resource {
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Default:     "only_rmw_uses_lwt",
+				// A CQL cluster does not use the value, so a change must not
+				// replace it. An imported CQL cluster has no value in state.
+				DiffSuppressFunc: func(_, _, _ string, d *schema.ResourceData) bool {
+					return d.Get("user_api_interface").(string) != "ALTERNATOR"
+				},
 			},
 			"node_type": {
 				Description: "The instance type for cluster nodes (e.g. i8g.large). Required for Standard clusters. " +
@@ -1063,7 +1067,25 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
 
-	return warns
+	return append(warns, alternatorIsolationWarning(cluster)...)
+}
+
+// alternatorIsolationWarning warns about an Alternator cluster for which the
+// API has no write isolation. Such clusters were made on Scylla before 4.1,
+// when the value was optional. The real value is only in scylla.yaml on the
+// nodes, so the state keeps "" and the plan can replace the cluster.
+func alternatorIsolationWarning(cluster *model.Cluster) diag.Diagnostics {
+	if cluster.UserAPIInterface != "ALTERNATOR" || cluster.AlternatorWriteIsolation != "" {
+		return nil
+	}
+	return diag.Diagnostics{{
+		Severity: diag.Warning,
+		Summary:  fmt.Sprintf("Write isolation of cluster %d is unknown", cluster.ID),
+		Detail: "The API has no Alternator write isolation for this cluster. " +
+			"The plan replaces the cluster if alternator_write_isolation in the configuration " +
+			"is different from the empty value in the state. " +
+			"To keep the cluster, add alternator_write_isolation to lifecycle.ignore_changes.",
+	}}
 }
 
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without
@@ -1383,80 +1405,12 @@ func resourceClusterDelete(ctx context.Context, d *schema.ResourceData, meta int
 
 // WaitForClusterRequestID returns only after the cluster request is completed or failed.
 func WaitForClusterRequestID(ctx context.Context, c *scylla.Client, requestID int64) error {
-	t := time.NewTicker(clusterPollInterval)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-t.C:
-			r, err := c.GetClusterRequest(ctx, requestID)
-			if err != nil {
-				return fmt.Errorf("failed to get cluster request with ID %d: %w", requestID, err)
-			}
-
-			if strings.EqualFold(r.Status, "COMPLETED") {
-				return nil
-			}
-			if strings.EqualFold(r.Status, "FAILED") {
-				return fmt.Errorf("cluster request ID %d failed", r.ID)
-			}
-			if strings.EqualFold(r.Status, "QUEUED") || strings.EqualFold(r.Status, "IN_PROGRESS") {
-				continue
-			}
-
-			return fmt.Errorf("unknown cluster request status: %s", r.Status)
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return c.AwaitClusterRequest(ctx, requestID)
 }
 
 // WaitForNoInProgressRequests waits until there are no requests in progress.
 func WaitForNoInProgressRequests(ctx context.Context, c *scylla.Client, clusterID int64) error {
-	t := time.NewTicker(clusterPollInterval)
-	defer t.Stop()
-
-	checkAllClear := func() (bool, error) {
-		for _, status := range []string{"IN_PROGRESS"} {
-			reqs, err := c.ListClusterRequest(
-				ctx,
-				clusterID,
-				scylla.ListClusterRequestParams{Status: status},
-			)
-			if err != nil {
-				return false, err
-			}
-			if len(reqs) > 0 {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-
-	// Check immediately before waiting for the first tick.
-	allClear, err := checkAllClear()
-	if err != nil {
-		return err
-	}
-	if allClear {
-		return nil
-	}
-
-	for {
-		select {
-		case <-t.C:
-			allClear, err := checkAllClear()
-			if err != nil {
-				return err
-			}
-			if allClear {
-				return nil
-			}
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return c.AwaitNoInProgressRequests(ctx, clusterID)
 }
 
 func parseClusterID(d *schema.ResourceData) (int64, diag.Diagnostics) {
