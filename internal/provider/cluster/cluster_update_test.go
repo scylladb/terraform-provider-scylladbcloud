@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -120,13 +121,17 @@ func TestResourceClusterUpdateMinNodesInstance(t *testing.T) {
 // once six nodes are ACTIVE. A failed check that decides whether to resize
 // keeps 6. An error of the resize call stores 3: the API can save the request
 // and still answer with an error, and planning the resize again could send it
-// twice.
+// twice. The same apply raises backup_retention_days from 0, which the update
+// stores without an API call and the delete reads from the state. Every failed
+// update must store the new value: with 0 in the state, a destroy after it
+// would delete the backups at once.
 func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 	t.Parallel()
 
 	const (
-		realInstance = `{"id":2,"externalId":"i3.large","totalStorage":475}`
-		sixNodes     = `[{"id":1,"status":"ACTIVE"},{"id":2,"status":"ACTIVE"},{"id":3,"status":"ACTIVE"},` +
+		retentionDays = 14
+		realInstance  = `{"id":2,"externalId":"i3.large","totalStorage":475}`
+		sixNodes      = `[{"id":1,"status":"ACTIVE"},{"id":2,"status":"ACTIVE"},{"id":3,"status":"ACTIVE"},` +
 			`{"id":4,"status":"ACTIVE"},{"id":5,"status":"ACTIVE"},{"id":6,"status":"ACTIVE"}]`
 	)
 
@@ -233,6 +238,8 @@ func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 				"node_type":      "i3.large",
 				"node_disk_size": 475,
 				"min_nodes":      6,
+				// Backups are deleted at once with the cluster.
+				"backup_retention_days": 0,
 				// The create stores the default, and the read of a CQL
 				// cluster keeps it.
 				"alternator_write_isolation": "only_rmw_uses_lwt",
@@ -250,6 +257,8 @@ func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 				"node_type":      cty.StringVal("i3.large"),
 				"node_disk_size": cty.NumberIntVal(475),
 				"min_nodes":      cty.NumberIntVal(3),
+				// The same apply keeps the backups for some days.
+				"backup_retention_days": cty.NumberIntVal(retentionDays),
 			}
 
 			// requireScaleIn checks that the plan of config scales the
@@ -274,6 +283,7 @@ func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 			require.True(t, diags.HasError())
 			require.Contains(t, diags[0].Summary, tt.wantErr)
 			require.Equal(t, tt.wantMinNodes, state.Attributes["min_nodes"])
+			require.Equal(t, strconv.Itoa(retentionDays), state.Attributes["backup_retention_days"])
 			require.Equal(t, tt.wantResizes, resizes.Load())
 
 			// A sent resize is the API's to carry out.

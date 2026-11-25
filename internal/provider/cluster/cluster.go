@@ -1262,14 +1262,20 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 	oldMinNodes, newMinNodes := oldMinNodesI.(int), newMinNodesI.(int)
 
 	// While the update checks whether to resize, a failure changes nothing in
-	// the cloud, so keep min_nodes from the state. The SDK would store the
-	// planned value of a failed update, and the read keeps a min_nodes below
-	// the node count, so a failed scale-in would never be planned again.
-	d.Partial(true)
+	// the cloud, so keepMinNodes keeps min_nodes from the state. The SDK
+	// stores the planned values of a failed update, and the read keeps a
+	// min_nodes below the node count, so a failed scale-in would never be
+	// planned again. The other planned values are stored as usual: for
+	// example, backup_retention_days changes only in the state, and the
+	// delete reads it from there.
+	keepMinNodes := func(diags diag.Diagnostics) diag.Diagnostics {
+		_ = d.Set("min_nodes", oldMinNodes)
+		return diags
+	}
 
 	clusterID, diags := parseClusterID(d)
 	if diags != nil {
-		return diags
+		return keepMinNodes(diags)
 	}
 
 	tflog.Debug(ctx, "Updating cluster min_nodes", map[string]interface{}{
@@ -1284,16 +1290,16 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 			d.SetId("")
 			return nil // cluster was deleted
 		}
-		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+		return keepMinNodes(diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err))
 	}
 
 	if n := len(cluster.Datacenters); n != 1 {
-		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+		return keepMinNodes(diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n))
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
 	if err := WaitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
-		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err)
+		return keepMinNodes(diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err))
 	}
 
 	// Re-fetch the cluster to get the current node count after waiting,
@@ -1304,22 +1310,20 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 			d.SetId("")
 			return nil // cluster was deleted
 		}
-		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+		return keepMinNodes(diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err))
 	}
 
 	// The read keeps min_nodes from the state while the datacenter has no
 	// ACTIVE node, but the resize needs the instance, and the API reports
 	// instance ID 0 then.
 	if cluster.Datacenter.InstanceID == 0 {
-		return noActiveNodeDiag(cluster.ID)
+		return keepMinNodes(noActiveNodeDiag(cluster.ID))
 	}
 
 	// The API can save the resize request and still answer with an error,
 	// so from here on a failure stores the planned min_nodes, as before.
 	// Keeping the old value would plan the resize again and could send it
 	// twice.
-	d.Partial(false)
-
 	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
 
 	if newMinNodes == curNodesCount {
