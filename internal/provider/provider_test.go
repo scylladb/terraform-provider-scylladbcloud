@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-testing/compare"
 	"github.com/hashicorp/terraform-plugin-testing/config"
-	sdkacctest "github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
@@ -91,7 +90,7 @@ func testAccEncryptionKey(keyID string) config.Variable {
 // that the plan after the apply is empty. With the variables of acctest.AWSPeerVPC set, it also creates a
 // VPC peering.
 func TestAccScyllaDBCloudCluster_basicAWS(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("basic-aws")
+	resourceName := acctest.RandomName("basic-aws")
 	vars := testAccAWSClusterVars(resourceName)
 	vars["scylla_version"] = config.StringVariable("2026.1.1")
 	vars["availability_zone_ids"] = config.SetVariable(
@@ -266,7 +265,7 @@ func testAccResourceID(key string) resource.ImportStateIdFunc {
 
 func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("xcloud-aws")
+	resourceName := acctest.RandomName("xcloud-aws")
 
 	var cluster model.Cluster
 
@@ -317,7 +316,7 @@ func TestAccScyllaDBCloudCluster_xcloudAWS(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("basic-aws-single-az")
+	resourceName := acctest.RandomName("basic-aws-single-az")
 	vars := testAccAWSClusterVars(resourceName)
 	vars["availability_zone_ids"] = config.SetVariable(config.StringVariable("use1-az2"))
 
@@ -360,7 +359,7 @@ func TestAccScyllaDBCloudCluster_basicAWSSingleAZ(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out")
+	resourceName := acctest.RandomName("basic-aws-scale-out")
 	scaledOut := testAccAWSClusterVars(resourceName)
 	scaledOut["min_nodes"] = config.IntegerVariable(6)
 
@@ -429,7 +428,7 @@ func TestAccScyllaDBCloudCluster_basicAWSScaleOut(t *testing.T) {
 func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 	acctest.SkipIfShort(t)
 	ctx := t.Context()
-	resourceName := sdkacctest.RandomWithPrefix("basic-aws-scale-out-outside")
+	resourceName := acctest.RandomName("basic-aws-scale-out-outside")
 
 	var cluster model.Cluster
 
@@ -482,7 +481,7 @@ func TestAccScyllaDBCloudCluster_scaleOutFromOutside(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("basic-gcp")
+	resourceName := acctest.RandomName("basic-gcp")
 
 	var cluster model.Cluster
 
@@ -516,7 +515,7 @@ func TestAccScyllaDBCloudCluster_basicGCP(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("basic-gcp-byoa")
+	resourceName := acctest.RandomName("basic-gcp-byoa")
 
 	byoaID := acctest.GCPBYOAID()
 	if byoaID == "" {
@@ -561,7 +560,7 @@ func TestAccScyllaDBCloudCluster_basicGCPBYOA(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("ear-enabled")
+	resourceName := acctest.RandomName("ear-enabled")
 	enabled := testAccAWSClusterVars(resourceName)
 	enabled["encryption_at_rest"] = testAccEncryptionEnabled(true)
 	disabled := testAccAWSClusterVars(resourceName)
@@ -623,7 +622,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestEnabled(t *testing.T) {
 // feature flag to be on in the target environment.
 func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("ear-gcp")
+	resourceName := acctest.RandomName("ear-gcp")
 	vars := testAccGCPClusterVars(resourceName)
 	vars["encryption_at_rest"] = testAccEncryptionEnabled(true)
 
@@ -656,7 +655,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestGCP(t *testing.T) {
 // created up front in the ScyllaDB Cloud portal; there is no public keys API.
 func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("ear-cmk")
+	resourceName := acctest.RandomName("ear-cmk")
 
 	keyID := acctest.EARKeyID()
 	if keyID == "" {
@@ -705,7 +704,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestCMK(t *testing.T) {
 // backup_retention_days nor encryption_at_rest.
 func TestAccScyllaDBCloudCluster_defaultsAWS(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("defaults-aws")
+	resourceName := acctest.RandomName("defaults-aws")
 	vars := testAccAWSClusterVars(resourceName)
 	delete(vars, "backup_retention_days")
 	delete(vars, "encryption_at_rest")
@@ -759,7 +758,7 @@ func TestAccScyllaDBCloudCluster_defaultsAWS(t *testing.T) {
 
 func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("ear-default-gcp")
+	resourceName := acctest.RandomName("ear-default-gcp")
 	vars := testAccGCPClusterVars(resourceName)
 	delete(vars, "encryption_at_rest")
 
@@ -807,7 +806,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestDefaultGCP(t *testing.T) {
 // below and would silently test the local build against itself.
 func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 	acctest.SkipIfShort(t)
-	resourceName := sdkacctest.RandomWithPrefix("ear-no-diff-on-upgrade")
+	resourceName := acctest.RandomName("ear-no-diff-on-upgrade")
 
 	var cluster model.Cluster
 
@@ -863,7 +862,7 @@ func TestAccScyllaDBCloudCluster_encryptionAtRestNoDiffOnUpgrade(t *testing.T) {
 }
 
 func TestAccScyllaDBCloudCluster_migrationV1ToV2(t *testing.T) {
-	resourceName := sdkacctest.RandomWithPrefix("basic-aws-migration-v1-to-v2")
+	resourceName := acctest.RandomName("basic-aws-migration-v1-to-v2")
 
 	var cluster model.Cluster
 

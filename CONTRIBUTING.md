@@ -198,6 +198,34 @@ The Terraform configurations of the acceptance tests are in
 release in its own directory, under `required_providers`. `make lint` runs
 `terraform fmt -check` on these files.
 
+### Leaked Clusters
+
+A test destroys its cluster at the end. A run that stops early, for
+example on a timeout, a Ctrl+C or a cancelled CI job, leaves its clusters
+running, and they cost money. Each test resource has a name that starts
+with `tf-acc-test-`: give a new one its name with `acctest.RandomName`.
+
+To delete what earlier runs left behind:
+
+```bash
+make sweep
+```
+
+The sweeper deletes every cluster whose name starts with `tf-acc-test-` in
+the account of `SCYLLADB_CLOUD_TOKEN`, and logs each one. It does not touch
+other clusters. Do not run it while acceptance tests run on the same
+account: it also deletes their clusters.
+
+Before it deletes a private cluster, the sweeper deletes the cluster's
+VPC peerings and connections and waits until they are gone. A cluster
+delete does not delete its VPC peerings, and after the delete they cannot
+be listed. So if this step fails, the sweeper keeps the cluster: run
+`make sweep` again. The sweeper cannot clean the AWS side of a peering,
+in the peer VPC.
+
+The sweeper reports a cluster as deleted only when its delete request
+completes.
+
 List all available acceptance tests:
 
 ```bash
