@@ -57,7 +57,7 @@ The release title is the version. The release body has, in this order:
    | Job | Takes | Does |
    |---|---|---|
    | `plan` | about 1 minute | Picks the version, builds the release notes, runs the checks and writes the preview on the run page. |
-   | `build` | about 6 minutes | Checks the signing key, builds and signs the 16 release files with GoReleaser without publishing them, and adds the key and the checksums to the preview. |
+   | `build` | about 7 minutes | Checks the signing key, builds and signs the 16 release files with GoReleaser without publishing them, smoke-tests them, and adds the key and the checksums to the preview. |
    | `publish` | after approval | Waits in the `release` environment. On approval, creates the tag and the release from exactly the files `build` made, then waits until the Registry lists the version. Skipped in a dry run. |
 
 5. Read the preview on the run page. The release title is the version.
@@ -82,6 +82,7 @@ run started are not included.
 | **Stops** | The run was not started from `main`. |
 | **Stops** | The `release` environment is missing or has no required reviewers. Without them, `publish` would run without approval. |
 | **Stops** | The signing key is not the expected key (see [The signing key](#the-signing-key)). |
+| **Stops** | The smoke test fails (see [Smoke test](#smoke-test)). |
 | **Warns** | A `feature`, `new-resource` or `new-data-source` entry in a patch version. |
 | **Warns** | A `feat` or `fix` PR without a changelog entry. |
 | **Warns** | The release notes have no entries. |
@@ -115,6 +116,30 @@ git commit -m "fix(cluster): fix something (#9001)"
 make release-preview
 git switch main && git branch -D release-try
 ```
+
+## Smoke test
+
+Before upload, the `build` job runs
+[`scripts/release-smoke.sh`](scripts/release-smoke.sh) on the release
+files. It checks them as the Registry and Terraform do, without
+publishing them or calling the ScyllaDB Cloud API:
+
+1. Every file matches `SHA256SUMS`, and the signature of `SHA256SUMS` is
+   valid.
+2. Terraform installs the provider from the `linux_amd64` zip, and the
+   provider serves every resource and data source that has a page in
+   `docs/`.
+3. Every file in `examples/` passes `terraform validate` with this
+   provider. Each file is checked on its own, as the docs show it.
+
+To run it locally on release files, for example the files of a fork's
+test release, import the public key into gpg first:
+
+```bash
+scripts/release-smoke.sh path/to/release-files 1.13.1
+```
+
+It uses the zip of your platform.
 
 ## Setup
 
@@ -158,6 +183,7 @@ afterwards.
 | "No feat or fix PR since …" | Nothing user-facing was merged, or the PR titles have the wrong type. Choose a bump to release anyway. |
 | "A breaking-change entry needs a major release" | Release as `major`, or change the entry if the change is not breaking. |
 | "… does not match its checksum in SHA256SUMS" | The signed checksums do not list `terraform-registry-manifest.json`. Check `checksum.extra_files` in `.goreleaser.yml`. |
+| "… is not valid for this build" | An example in `examples/` does not work with this version of the provider. Fix the example, run `go generate ./...` to update `docs/`, and release again. |
 | "The signing key … is not the expected key" | The `GPG_PRIVATE_KEY` secret is not the key the Registry knows. Do not release: fix the secret, or rotate the key as described above. |
 | The Registry does not list the version after 10 minutes | The Registry did not get or accept the release. The namespace owner can resync the provider in the Registry. Check that the release has all 16 files and that the signing key matches the key in the Registry. |
 | A published release is wrong | Release the next patch version. Never change the tag or the files. |
