@@ -25,9 +25,13 @@ func TestCreateClusterRetry(t *testing.T) {
 		name        string
 		first       scyllatest.Response
 		slow        bool // the first answer comes after the client timeout
+		lookupFails bool // the API accepts the create, then the read of the request fails
 		wantPosts   int
 		wantUnknown bool
 	}{
+		// The cluster exists although the read fails with a 4xx, so the
+		// error must not show that the API did not run the create.
+		{name: "request read fails after the create", first: ok, lookupFails: true, wantPosts: 1, wantUnknown: true},
 		{name: "bad gateway", first: scyllatest.Response{Status: http.StatusBadGateway}, wantPosts: 1, wantUnknown: true},
 		{name: "service unavailable", first: scyllatest.Response{Status: http.StatusServiceUnavailable}, wantPosts: 1, wantUnknown: true},
 		{name: "gateway timeout", first: scyllatest.Response{Status: http.StatusGatewayTimeout}, wantPosts: 1, wantUnknown: true},
@@ -48,7 +52,11 @@ func TestCreateClusterRetry(t *testing.T) {
 				}
 				return tt.first
 			})
-			srv.Reply(http.MethodGet, "/account/1/cluster/request/7", model.ClusterRequest{ID: 7, ClusterID: 3})
+			if tt.lookupFails {
+				srv.Fail(http.MethodGet, "/account/1/cluster/request/7", http.StatusNotFound, "000000")
+			} else {
+				srv.Reply(http.MethodGet, "/account/1/cluster/request/7", model.ClusterRequest{ID: 7, ClusterID: 3})
+			}
 
 			c := srv.Client(t)
 			c.RetryOnce = retrier.New(retrier.ConstantBackoff(3, time.Millisecond), scylla.OnceClassifier)
