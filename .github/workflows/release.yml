@@ -1,45 +1,269 @@
-# This GitHub action can publish assets for release when a tag is created.
-# Currently its setup to run on any tag that matches the pattern "v*" (ie. v0.1.0).
-#
-# This uses an action (hashicorp/ghaction-import-gpg) that assumes you set your
-# private key in the `GPG_PRIVATE_KEY` secret and passphrase in the `PASSPHRASE`
-# secret. If you would rather own your own GPG handling, please fork this action
-# or use an alternative one for key handling.
-#
-# You will need to pass the `--batch` flag to `gpg` in your signing step
-# in `goreleaser` to indicate this is being used in a non-interactive mode.
-#
 name: release
+
+# Started by hand from main. See RELEASING.md.
+# plan:    the version, the release notes and the checks (scripts/release-plan.sh).
+# build:   builds and signs the release files without publishing them.
+# publish: waits for approval in the release environment, then publishes
+#          exactly the files the build job made.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump. "auto" reads the PR titles since the last tag: feat gives minor, fix gives patch, ! gives major.'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      summary:
+        description: Optional paragraph at the top of the release notes.
+        type: string
+        required: false
+      dry_run:
+        description: Dry Run (Nothing is published, preview only)
+        type: boolean
+        default: false
+
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  goreleaser:
+  plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      last: ${{ steps.plan.outputs.last }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Unshallow
-        run: git fetch --prune --unshallow
-      - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      - name: Check the branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Start the release from main, not ${GITHUB_REF}."
+          exit 1
+
+      - name: Check the release environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A run that names a missing environment creates it without
+          # reviewers, and publish would then run without approval.
+          # On an error, gh prints the error JSON to stdout.
+          if ! reviewers="$(gh api "repos/${GITHUB_REPOSITORY}/environments/release" \
+            --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length' 2>/dev/null)"; then
+            reviewers=0
+          fi
+          case "$reviewers" in '' | *[!0-9]*) reviewers=0 ;; esac
+          if [ "$reviewers" -lt 1 ]; then
+            echo "::error::The release environment is missing or has no required reviewers. See Setup in RELEASING.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: 'go.mod'
           cache: true
-      - name: Import GPG key
+
+      - name: Plan the release
+        id: plan
+        env:
+          BUMP: ${{ inputs.bump }}
+          SUMMARY: ${{ inputs.summary }}
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          OUT: ${{ runner.temp }}/plan
+        run: |
+          ./scripts/release-plan.sh
+          cat "$OUT/plan.env" >> "$GITHUB_OUTPUT"
+          {
+            cat "$OUT/preview.md"
+            echo
+            if [ "$DRY_RUN" = true ]; then
+              echo "**Dry run.** Nothing will be published."
+            else
+              echo "### Before you approve"
+              echo
+              echo "- [ ] The version and the bump are right for the changes."
+              echo "- [ ] The release body is written for users and has no internal details."
+              echo "- [ ] Every warning is understood."
+              echo "- [ ] The build summary below shows the signing key as expected (✓)."
+              echo
+              echo "Then approve or reject the \`publish\` job in **Review deployments**."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan/notes.md
+          if-no-files-found: error
+          retention-days: 30
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan
+
+      - name: Import the GPG key
+        id: gpg
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
-        id: import_gpg
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
-      - name: Run GoReleaser
+
+      - name: Check the signing key
+        env:
+          FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+          EXPECTED: ${{ vars.RELEASE_SIGNING_KEY }}
+          LAST: ${{ needs.plan.outputs.last }}
+        run: |
+          # The Registry accepts only releases signed with the key in its
+          # namespace settings. A fork has no such key: set the
+          # RELEASE_SIGNING_KEY variable there instead.
+          if [ -n "$EXPECTED" ]; then
+            source="the RELEASE_SIGNING_KEY variable"
+            expected="$EXPECTED"
+          else
+            source="the Terraform Registry (key of ${LAST})"
+            url="https://registry.terraform.io/v1/providers/scylladb/scylladbcloud/${LAST#v}/download/linux/amd64"
+            expected="$(curl -fsS "$url" | jq -r '.signing_keys.gpg_public_keys[].key_id')"
+          fi
+          fpr="$(tr '[:lower:]' '[:upper:]' <<< "$FINGERPRINT")"
+          match=""
+          for key in $expected; do
+            key="$(tr '[:lower:]' '[:upper:]' <<< "$key")"
+            if [ -n "$key" ] && [ "${fpr%"$key"}" != "$fpr" ]; then match="$key"; fi
+          done
+          if [ -z "$match" ]; then
+            echo "::error::The signing key ${fpr} is not the expected key from ${source}: ${expected:-none found}."
+            exit 1
+          fi
+          echo "key_line=Signing key: \`${fpr}\` ✓ matches \`${match}\` from ${source}." >> "$GITHUB_ENV"
+
+      - name: Tag on the runner
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: git tag "$VERSION"
+
+      - name: Build and sign
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: latest
-          args: release --clean
+          version: v2.20.3
+          args: release --clean --skip=publish --release-notes ${{ runner.temp }}/plan/notes.md
         env:
-          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Collect the release files
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          mkdir "$RUNNER_TEMP/release"
+          cp dist/*.zip dist/*_SHA256SUMS dist/*_SHA256SUMS.sig "$RUNNER_TEMP/release/"
+          # GoReleaser adds the manifest only when it publishes, but it is
+          # already in the signed SHA256SUMS.
+          manifest="terraform-provider-scylladbcloud_${VERSION#v}_manifest.json"
+          cp terraform-registry-manifest.json "$RUNNER_TEMP/release/${manifest}"
+          if ! (cd "$RUNNER_TEMP/release" && grep " ${manifest}\$" ./*_SHA256SUMS | sha256sum -c --quiet -); then
+            echo "::error::${manifest} does not match its checksum in SHA256SUMS."
+            exit 1
+          fi
+          count="$(find "$RUNNER_TEMP/release" -type f | wc -l)"
+          if [ "$count" -ne 16 ]; then
+            echo "::error::Expected 16 release files, found ${count}."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/plan/notes.md" "$RUNNER_TEMP/release/notes.md"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          # Longer than the 30 days a deployment can wait for approval.
+          retention-days: 35
+
+      - name: Add the build to the preview
+        run: |
+          {
+            echo "### Build"
+            echo
+            echo "$key_line"
+            echo
+            echo "<details><summary>16 files (SHA256SUMS)</summary>"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP"/release/*_SHA256SUMS
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: [plan, build]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ needs.plan.outputs.sha }}
+        working-directory: release
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag ${VERSION} was created after the preview. Nothing was published."
+            exit 1
+          fi
+          gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "$VERSION" --notes-file notes.md \
+            ./*.zip ./*_SHA256SUMS ./*_SHA256SUMS.sig ./*_manifest.json
+          echo "Published [${VERSION}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION})." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for the Terraform Registry
+        if: github.repository == 'scylladb/terraform-provider-scylladbcloud'
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          url=https://registry.terraform.io/v1/providers/scylladb/scylladbcloud/versions
+          for _ in $(seq 1 30); do
+            if curl -fsS "$url" | jq -e --arg v "${VERSION#v}" '.versions[] | select(.version == $v)' >/dev/null; then
+              echo "The Terraform Registry lists ${VERSION}." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::The Terraform Registry does not list ${VERSION} after 10 minutes. The namespace owner can resync the provider in the Registry."
+          exit 1

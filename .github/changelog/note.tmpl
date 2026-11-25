@@ -1,0 +1,4 @@
+{{- define "note" -}}
+{{- if eq "new-resource" .Type }}**New resource:** {{ else if eq "new-data-source" .Type }}**New data source:** {{ end -}}
+{{ .Body }} (#{{ .Issue }})
+{{- end -}}

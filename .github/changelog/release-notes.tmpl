@@ -1,0 +1,36 @@
+{{- $breaking := index .NotesByType "breaking-change" -}}
+{{- if $breaking }}
+### Breaking changes
+{{ range $breaking -}}
+* {{ template "note" . }}
+{{ end -}}
+{{- end -}}
+
+{{- if .NotesByType.note }}
+### Notes
+{{ range .NotesByType.note -}}
+* {{ template "note" . }}
+{{ end -}}
+{{- end -}}
+
+{{- $features := combineTypes (index .NotesByType "new-resource") (index .NotesByType "new-data-source") .NotesByType.feature -}}
+{{- if $features }}
+### Features
+{{ range $features -}}
+* {{ template "note" . }}
+{{ end -}}
+{{- end -}}
+
+{{- if .NotesByType.enhancement }}
+### Enhancements
+{{ range .NotesByType.enhancement -}}
+* {{ template "note" . }}
+{{ end -}}
+{{- end -}}
+
+{{- if .NotesByType.bug }}
+### Bug fixes
+{{ range .NotesByType.bug -}}
+* {{ template "note" . }}
+{{ end -}}
+{{- end -}}

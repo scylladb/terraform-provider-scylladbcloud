@@ -27,6 +27,14 @@ testacc: pkgs?=./...
 testacc:
 	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=30m -parallel=3 -race -run="$(value run)" $(pkgs)
 
+# Plans a release without building it: version, notes and checks.
+# Example: make release-preview BUMP=patch SUMMARY="Maintenance release."
+BUMP ?= auto
+release-preview: export BUMP := $(BUMP)
+release-preview: export SUMMARY := $(SUMMARY)
+release-preview:
+	./scripts/release-plan.sh
+
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
 
@@ -43,4 +51,4 @@ $(GOLANGCI_LINT):
 	mv $$tmp/golangci-lint $@ && \
 	rmdir $$tmp
 
-.PHONY: build fmt generate lint test testacc
+.PHONY: build fmt generate lint test testacc release-preview
