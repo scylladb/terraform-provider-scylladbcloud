@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/eapache/go-resiliency/retrier"
 	"github.com/hashicorp/go-cty/cty"
@@ -90,16 +90,7 @@ func TestResourceClusterUpdateMinNodesInstance(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			endpoint, err := url.Parse(srv.URL)
-			require.NoError(t, err)
-
-			client := &scylla.Client{
-				Endpoint:   endpoint,
-				Headers:    make(http.Header),
-				HTTPClient: srv.Client(),
-				Retry:      retrier.New(nil, nil),
-				AccountID:  7,
-			}
+			client := newTestClient(t, srv)
 
 			// A diff from no state, so the new value of min_nodes is 6.
 			d := schema.TestResourceDataRaw(t, ResourceCluster().Schema, map[string]any{"min_nodes": 6})
@@ -226,20 +217,11 @@ func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			endpoint, err := url.Parse(srv.URL)
-			require.NoError(t, err)
-
-			client := &scylla.Client{
-				Endpoint:   endpoint,
-				Headers:    make(http.Header),
-				HTTPClient: srv.Client(),
-				Retry:      retrier.New(nil, nil),
-				AccountID:  7,
-				Meta: &scylla.Cloudmeta{CloudProviders: []scylla.CloudProvider{{
-					CloudProvider:        &model.CloudProvider{ID: 1, Name: "AWS"},
-					CloudProviderRegions: &model.CloudProviderRegions{},
-				}}},
-			}
+			client := newTestClient(t, srv)
+			client.Meta = &scylla.Cloudmeta{CloudProviders: []scylla.CloudProvider{{
+				CloudProvider:        &model.CloudProvider{ID: 1, Name: "AWS"},
+				CloudProviderRegions: &model.CloudProviderRegions{},
+			}}}
 
 			// The refresh of the plan keeps min_nodes = 6.
 			d := ResourceCluster().TestResourceData()
@@ -308,4 +290,21 @@ func TestResourceClusterUpdateMinNodesState(t *testing.T) {
 			requireScaleIn(state)
 		})
 	}
+}
+
+// newTestClient returns a client of the fake API srv for account 7. It is
+// made by NewClient, as the provider's client is, but polls every 5 ms and
+// does not retry, so srv sees each request once.
+func newTestClient(t *testing.T, srv *httptest.Server) *scylla.Client {
+	t.Helper()
+
+	client, err := scylla.NewClient(srv.URL, "token", "test", "", false)
+	require.NoError(t, err)
+
+	client.HTTPClient = srv.Client()
+	client.Retry = retrier.New(nil, nil)
+	client.PollInterval = 5 * time.Millisecond
+	client.AccountID = 7
+
+	return client
 }
