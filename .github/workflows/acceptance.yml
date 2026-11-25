@@ -1,0 +1,109 @@
+name: Acceptance tests
+
+# The acceptance tests create real clusters, so they run only when a person
+# starts them from the Actions tab. They never run for a pull request.
+#
+# The job reads its credentials from the "acceptance" environment. Protect
+# it so that only main can use it:
+#   secrets: SCYLLADB_CLOUD_TOKEN
+#   variables: SCYLLADB_CLOUD_ENDPOINT, and the optional TEST_SCYLLADB_CLOUD_*
+#   values from the Acceptance Tests section in CONTRIBUTING.md.
+#
+# Use a token of an account that only this workflow uses. The sweeper deletes
+# each cluster with the tf-acc-test- prefix in the account, also the clusters
+# of a person who runs the tests on the same account.
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: Regular expression for go test -run
+        default: ".*"
+      short:
+        description: Run only the smoke set (make testacc-short)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Two runs on the same account must not overlap: the sweep of one run
+# deletes the clusters of the other run.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: acceptance
+    runs-on: ubuntu-latest
+    environment: acceptance
+    # Room for both sweeps, the tests and the setup.
+    timeout-minutes: 215
+    env:
+      SCYLLADB_CLOUD_TOKEN: ${{ secrets.SCYLLADB_CLOUD_TOKEN }}
+      SCYLLADB_CLOUD_ENDPOINT: ${{ vars.SCYLLADB_CLOUD_ENDPOINT }}
+      TEST_SCYLLADB_CLOUD_GCP_BYOA_ID: ${{ vars.TEST_SCYLLADB_CLOUD_GCP_BYOA_ID }}
+      TEST_SCYLLADB_CLOUD_EAR_KEY_ID: ${{ vars.TEST_SCYLLADB_CLOUD_EAR_KEY_ID }}
+      TEST_SCYLLADB_CLOUD_PEER_VPC_ID: ${{ vars.TEST_SCYLLADB_CLOUD_PEER_VPC_ID }}
+      TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID: ${{ vars.TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID }}
+      TEST_SCYLLADB_CLOUD_PEER_CIDR: ${{ vars.TEST_SCYLLADB_CLOUD_PEER_CIDR }}
+      LOG_DIR: ${{ github.workspace }}/acceptance-logs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+
+      # Deletes the clusters that an earlier run could not delete, so that
+      # they do not use the quota of this run.
+      - name: Sweep clusters of earlier runs
+        timeout-minutes: 35
+        run: make sweep
+
+      - name: Run the acceptance tests
+        timeout-minutes: 130
+        env:
+          RUN: ${{ inputs.run || '.*' }}
+          TARGET: ${{ inputs.short && 'testacc-short' || 'testacc' }}
+          # The debug logs go to files, not to the job log: one file for
+          # each test, with the Terraform log and the provider log.
+          TF_LOG_PATH_MASK: ${{ github.workspace }}/acceptance-logs/%s.log
+        run: |
+          mkdir -p "$LOG_DIR"
+          set -o pipefail
+          make "$TARGET" run="$RUN" 2>&1 | tee "$LOG_DIR/go-test.log"
+
+      - name: Write the summary
+        if: always()
+        run: |
+          [ -f "$LOG_DIR/go-test.log" ] || exit 0
+          {
+            echo '### Acceptance tests'
+            echo '```'
+            # After a go test timeout, these lines name the tests that hung.
+            grep -E '^\s*--- (FAIL|PASS|SKIP)|^(ok|FAIL)\s|^panic: |^\s+running tests:|^\s+Test\w+ \(' "$LOG_DIR/go-test.log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Before the last sweep, so that a slow sweep cannot lose the logs.
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: acceptance-logs
+          path: acceptance-logs/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # A failed create leaves its cluster out of the state, so no destroy
+      # step deletes it.
+      - name: Sweep clusters of this run
+        if: always()
+        timeout-minutes: 35
+        run: make sweep

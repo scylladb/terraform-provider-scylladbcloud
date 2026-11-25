@@ -24,19 +24,22 @@ test:
 	go test -timeout=1m -race -run="$(value run)" $(pkgs)
 
 # The full set, for releases. With -parallel=3 it takes about one hour, and a
-# timeout stops the test binary before it can destroy its clusters.
+# timeout stops the test binary before it can destroy its clusters. TEST_RUN
+# gives the run filter to go test as data, not as shell text.
 testacc: run?=.*
 testacc: pkgs?=./...
+testacc: export TEST_RUN = $(value run)
 testacc:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=120m -parallel=3 -race -run="$(value run)" $(pkgs)
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=120m -parallel=3 -race -run="$$TEST_RUN" $(pkgs)
 
 # The smoke set for pull requests: the acceptance tests that do not call
 # acctest.SkipIfShort. It takes about 30 minutes. The timeout leaves room
 # for the destroy checks.
 testacc-short: run?=.*
 testacc-short: pkgs?=./...
+testacc-short: export TEST_RUN = $(value run)
 testacc-short:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -short -v -timeout=90m -parallel=3 -race -run="$(value run)" $(pkgs)
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -short -v -timeout=90m -parallel=3 -race -run="$$TEST_RUN" $(pkgs)
 
 # Deletes the clusters that acceptance runs left behind: every cluster whose
 # name starts with tf-acc-test-, in the account of SCYLLADB_CLOUD_TOKEN.
