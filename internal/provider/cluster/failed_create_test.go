@@ -3,8 +3,8 @@ package cluster
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -79,13 +79,13 @@ func TestCreateKeepsIDWhenALaterStepFails(t *testing.T) {
 		name        string
 		final       string // status of the create request after QUEUED
 		setup       func(*scyllatest.Server)
-		timeout     time.Duration
+		stopInWait  bool // the context ends during the wait, as at the create timeout
 		wantErr     string
 		wantWarning string
 	}{
 		{name: "request fails", final: "FAILED", wantErr: "cluster request ID 9 failed (CREATE_CLUSTER at 30%): Not enough capacity"},
-		// The deadline can hit in a poll or between polls, so only the prefix is fixed.
-		{name: "wait times out", final: "QUEUED", timeout: 50 * time.Millisecond, wantErr: "failed to wait for request 9 creating cluster 3"},
+		// The context can end in a poll or between polls, so only the prefix is fixed.
+		{name: "wait is stopped", final: "QUEUED", stopInWait: true, wantErr: "failed to wait for request 9 creating cluster 3"},
 		{
 			name:  "cluster read fails",
 			final: "COMPLETED",
@@ -113,11 +113,19 @@ func TestCreateKeepsIDWhenALaterStepFails(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(srv)
 			}
-			ctx := context.Background()
-			if tt.timeout != 0 {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, tt.timeout)
-				defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tt.stopInWait {
+				// The first read of the request is in CreateCluster, before
+				// the ID is saved. The next reads are in the wait, so the
+				// context ends only there, with no clock in the test.
+				var reads atomic.Int32
+				srv.Handle(http.MethodGet, "/account/1/cluster/request/9", func(*http.Request, []byte) scyllatest.Response {
+					if reads.Add(1) > 1 {
+						cancel()
+					}
+					return scyllatest.Response{Data: testCreateRequest("QUEUED")}
+				})
 			}
 			d := testClusterData(t)
 
