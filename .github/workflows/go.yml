@@ -31,6 +31,10 @@ jobs:
         with:
           version: v2.15
           install-only: true
+      # make lint checks the format of the acceptance test configurations.
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
       - run: make lint
   docs:
     runs-on: ubuntu-latest

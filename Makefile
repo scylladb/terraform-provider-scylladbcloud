@@ -16,16 +16,27 @@ lint: $(GOLANGCI_LINT)
 	go tool gofumpt -l -d -e .
 	$(GOLANGCI_LINT) run ./...
 	go vet ./...
+	terraform fmt -check -recursive -diff internal/provider/testdata
 
 test: run?=.*
 test: pkgs?=./...
 test:
 	go test -timeout=1m -race -run="$(value run)" $(pkgs)
 
+# The full set, for releases. With -parallel=3 it takes about one hour, and a
+# timeout stops the test binary before it can destroy its clusters.
 testacc: run?=.*
 testacc: pkgs?=./...
 testacc:
-	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=30m -parallel=3 -race -run="$(value run)" $(pkgs)
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -v -timeout=120m -parallel=3 -race -run="$(value run)" $(pkgs)
+
+# The smoke set for pull requests: the acceptance tests that do not call
+# acctest.SkipIfShort. It takes about 30 minutes. The timeout leaves room
+# for the destroy checks.
+testacc-short: run?=.*
+testacc-short: pkgs?=./...
+testacc-short:
+	TF_ACC=1 TF_ACC_LOG=DEBUG TF_LOG=DEBUG go test -short -v -timeout=90m -parallel=3 -race -run="$(value run)" $(pkgs)
 
 list-testacc:
 	@find . -name '*.go' -print0 | xargs -0 grep -Eoh "func TestAcc\w*" | sed 's/func //'
@@ -43,4 +54,4 @@ $(GOLANGCI_LINT):
 	mv $$tmp/golangci-lint $@ && \
 	rmdir $$tmp
 
-.PHONY: build fmt generate lint test testacc
+.PHONY: build fmt generate lint test testacc testacc-short

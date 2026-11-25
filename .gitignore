@@ -32,6 +32,13 @@ go.work.sum
 /dist
 /terraform-provider-scylladbcloud
 
+# Files of a manual terraform run in the acceptance test configurations
+**/.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars.json
+
 # editor config
 .vscode
 .idea

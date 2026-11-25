@@ -164,20 +164,39 @@ Acceptance tests create real resources in ScyllaDB Cloud, so they require valid 
 | `SCYLLADB_CLOUD_TRACE` | Trace ID that the API calls send. Without it, each run makes a new one | No |
 | `TEST_SCYLLADB_CLOUD_GCP_BYOA_ID` | GCP BYOA credential ID | For the GCP BYOA tests only |
 | `TEST_SCYLLADB_CLOUD_EAR_KEY_ID` | Customer-managed key ID for encryption at rest | For the encryption key tests only |
+| `TEST_SCYLLADB_CLOUD_PEER_VPC_ID`, `TEST_SCYLLADB_CLOUD_PEER_ACCOUNT_ID`, `TEST_SCYLLADB_CLOUD_PEER_CIDR` | An AWS VPC in `us-east-1` for the VPC peering in `basicAWS`. Its CIDR must not overlap `10.0.1.0/24` | No. Without them, `basicAWS` skips the VPC peering |
 
 ### Running Acceptance Tests
 
-Run all acceptance tests:
+Run the smoke set, for a pull request. It creates one cluster on AWS, one on
+GCP and one from an old provider release, so it takes about 30 minutes:
+
+```bash
+make testacc-short
+```
+
+Run all acceptance tests, for a release or a nightly run:
 
 ```bash
 make testacc
 ```
+
+A new acceptance test is long by default: start it with
+`acctest.SkipIfShort(t)`. Leave the call out only when the test must run for
+each pull request, and check on an existing cluster when you can.
 
 Run a specific test:
 
 ```bash
 make testacc run=TestAccScyllaDBCloudCluster_basicAWS
 ```
+
+The Terraform configurations of the acceptance tests are in
+`internal/provider/testdata`, not in Go strings. Most tests use
+`testdata/cluster` and set its variables with `testAccAWSClusterVars` or
+`testAccGCPClusterVars`. A test of an upgrade from an old release pins that
+release in its own directory, under `required_providers`. `make lint` runs
+`terraform fmt -check` on these files.
 
 List all available acceptance tests:
 
