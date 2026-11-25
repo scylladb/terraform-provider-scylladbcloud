@@ -216,10 +216,15 @@ the account of `SCYLLADB_CLOUD_TOKEN`, and logs each one. It does not touch
 other clusters. Do not run it while acceptance tests run on the same
 account: it also deletes their clusters.
 
-Before it deletes a cluster, the sweeper deletes the cluster's VPC
-peerings and connections. A cluster delete does not delete its VPC
-peerings, and after the delete they cannot be listed. The sweeper cannot
-clean the AWS side of a peering, in the peer VPC.
+Before it deletes a private cluster, the sweeper deletes the cluster's
+VPC peerings and connections and waits until they are gone. A cluster
+delete does not delete its VPC peerings, and after the delete they cannot
+be listed. So if this step fails, the sweeper keeps the cluster: run
+`make sweep` again. The sweeper cannot clean the AWS side of a peering,
+in the peer VPC.
+
+The sweeper reports a cluster as deleted only when its delete request
+completes.
 
 List all available acceptance tests:
 

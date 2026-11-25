@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 
@@ -26,7 +27,11 @@ func init() {
 			if err != nil {
 				return err
 			}
-			return acctest.SweepClusters(context.Background(), c, log.Printf)
+			// End before the -timeout of make sweep, so the sweep reports
+			// what it could not finish.
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
+			defer cancel()
+			return acctest.SweepClusters(ctx, c, log.Printf)
 		},
 	})
 }
