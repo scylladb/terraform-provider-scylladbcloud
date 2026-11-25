@@ -144,8 +144,9 @@ done < <(git log --reverse --format='%h %s' "${last}..HEAD")
 
 # Checks of the bump against the entries.
 # The entries are read from the planned commit, as changelog-build reads
-# them, not from the working tree.
-types="$(for f in $entry_files; do git show "${sha}:${f}"; done | tr -d '\r' | sed -n 's/^```release-note:\(.*\)$/\1/p' | sort -u)"
+# them, not from the working tree. The echo keeps a fence of an entry
+# without a final newline from joining the next entry.
+types="$(for f in $entry_files; do git show "${sha}:${f}" && echo; done | tr -d '\r' | sed -n 's/^```release-note:\(.*\)$/\1/p' | sort -u)"
 if grep -qx breaking-change <<<"$types" && [ "$level" != major ]; then
 	fail "A breaking-change entry needs a major release, but ${version} is a ${level} release."
 fi

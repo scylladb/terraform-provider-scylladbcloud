@@ -204,7 +204,8 @@ jobs:
           name: release
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
-          retention-days: 30
+          # Longer than the 30 days a deployment can wait for approval.
+          retention-days: 35
 
       - name: Add the build to the preview
         run: |
