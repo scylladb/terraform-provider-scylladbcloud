@@ -216,6 +216,11 @@ func resourceServerlessClusterDelete(ctx context.Context, d *schema.ResourceData
 
 	r, err := c.DeleteCluster(ctx, clusterID, name.(string), 0)
 	if err != nil {
+		// A delete after an unclear error is not sent again, so the next
+		// destroy can find the cluster already deleted.
+		if scylla.IsDeletedErr(err) {
+			return nil
+		}
 		return diag.Errorf("error deleting serverlessCluster: %s", err)
 	}
 
