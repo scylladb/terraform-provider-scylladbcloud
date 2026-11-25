@@ -1,11 +1,12 @@
 name: Acceptance tests
 
-# The acceptance tests create real clusters, so they run only when a person
-# starts them from the Actions tab. They never run for a pull request.
+# The acceptance tests create real clusters, so they run only on a schedule
+# or when a person starts them from the Actions tab. They never run for a
+# pull request.
 #
 # The job reads its credentials from the "acceptance" environment. Protect
 # it so that only main can use it:
-#   secrets: SCYLLADB_CLOUD_TOKEN
+#   secrets: SCYLLADB_CLOUD_TOKEN, SLACK_WEBHOOK_URL (optional)
 #   variables: SCYLLADB_CLOUD_ENDPOINT, and the optional TEST_SCYLLADB_CLOUD_*
 #   values from the Acceptance Tests section in CONTRIBUTING.md.
 #
@@ -13,6 +14,8 @@ name: Acceptance tests
 # each cluster with the tf-acc-test- prefix in the account, also the clusters
 # of a person who runs the tests on the same account.
 on:
+  schedule:
+    - cron: "0 1 * * *"
   workflow_dispatch:
     inputs:
       run:
@@ -107,3 +110,18 @@ jobs:
         if: always()
         timeout-minutes: 35
         run: make sweep
+
+      # The job limit cancels a run, it does not fail it.
+      - name: Report the failure to Slack
+        if: (failure() || cancelled()) && github.event_name == 'schedule'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL is not set, so no one gets the failure report."
+            exit 0
+          fi
+          jq -n --arg url "$RUN_URL" \
+            '{text: ("The nightly Terraform provider acceptance workflow did not pass. A test or a sweep failed, or the run stopped: " + $url)}' |
+            curl -sSf -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"

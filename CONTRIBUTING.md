@@ -228,16 +228,17 @@ completes.
 
 ### Acceptance Tests in CI
 
-The `Acceptance tests` workflow runs `make testacc` when you start it from
-the Actions tab (**Run workflow**, from `main`). A run can set a `-run`
-filter or run only the smoke set.
+The `Acceptance tests` workflow runs `make testacc` on `main` each night,
+and when you start it from the Actions tab (**Run workflow**, from
+`main`). A manual run can set a `-run` filter or run only the smoke set.
 
 Each run sweeps leaked clusters before and after the tests, and runs
 alone: a new run waits for the current one. The `acceptance-logs` artifact
-has the test output and one debug log for each test.
+has the test output and one debug log for each test. A failed nightly run
+posts to Slack.
 
-The credentials come from the protected `acceptance` environment. The
-workflow file lists what it needs.
+The credentials and the Slack webhook come from the protected
+`acceptance` environment. The workflow file lists what it needs.
 
 List all available acceptance tests:
 
