@@ -184,11 +184,11 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 
 	if p, ok := resType.(*[]byte); ok {
 		if *p, err = io.ReadAll(body); err != nil {
-			traceResponse(ctx, "failed to read body: "+err.Error(), resp, buf.Bytes(), err)
+			traceResponse(ctx, "failed to read body: "+err.Error(), resp, logRawBody(buf.Bytes()), err)
 			return fmt.Errorf("error reading body: %w", err)
 		}
 
-		traceResponse(ctx, "api call succeeded", resp, buf.Bytes(), nil)
+		traceResponse(ctx, "api call succeeded", resp, logRawBody(buf.Bytes()), nil)
 		return nil
 	}
 
@@ -201,7 +201,7 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 	}{"", resType}
 
 	if err := d.Decode(&data); err != nil {
-		traceResponse(ctx, "failed to unmarshal data: "+err.Error(), resp, buf.Bytes(), err)
+		traceResponse(ctx, "failed to unmarshal data: "+err.Error(), resp, logBody(buf.Bytes()), err)
 
 		err = makeError("failed to unmarshal data: "+err.Error(), c.ErrCodes, resp)
 
@@ -216,21 +216,21 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 
 	if data.Error != "" {
 		err = makeError(data.Error, c.ErrCodes, resp)
-		traceResponse(ctx, "api returned error: "+err.Error(), resp, buf.Bytes(), err)
+		traceResponse(ctx, "api returned error: "+err.Error(), resp, logBody(buf.Bytes()), err)
 		return err
 	}
 
-	traceResponse(ctx, "api call succeeded", resp, buf.Bytes(), nil)
+	traceResponse(ctx, "api call succeeded", resp, logBody(buf.Bytes()), nil)
 	return nil
 }
 
-// traceResponse writes a response to the trace log. The body goes through
-// logBody, so no secret from the body gets into the log.
-func traceResponse(ctx context.Context, msg string, resp *http.Response, body []byte, err error) {
+// traceResponse writes a response to the trace log. body comes from logBody
+// or logRawBody, so no secret from the body gets into the log.
+func traceResponse(ctx context.Context, msg string, resp *http.Response, body string, err error) {
 	fields := map[string]interface{}{
 		"code":   resp.StatusCode,
 		"status": resp.Status,
-		"body":   logBody(body),
+		"body":   body,
 	}
 	if err != nil {
 		fields["error"] = err.Error()

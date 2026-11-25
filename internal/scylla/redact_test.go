@@ -48,32 +48,39 @@ func TestTraceLogHasNoSecrets(t *testing.T) {
 	}
 }
 
-// A serverless connection bundle is a raw body with secrets that are not in
-// JSON keys, so the log must not show any part of it.
+// A serverless connection bundle is a raw body. Its secrets can be under any
+// key, also when the bundle is JSON, so the log must not show any part of it.
 func TestTraceLogHasNoRawBody(t *testing.T) {
 	t.Parallel()
-	const bundle = "authInfo:\n  username: scylla\n  password: bundle-pass-1\n"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, bundle)
-	}))
-	t.Cleanup(srv.Close)
+	for name, bundle := range map[string]string{
+		"yaml": "authInfo:\n  username: scylla\n  password: bundle-pass-1\n",
+		"json": `{"authInfo":{"username":"scylla","config":"bundle-pass-1"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, bundle)
+			}))
+			t.Cleanup(srv.Close)
 
-	c, err := NewClient(srv.URL, "api-token-1", "test", "", false)
-	require.NoError(t, err)
-	c.AccountID = 1
-	c.Retry = retrier.New(nil, DefaultClassifier)
+			c, err := NewClient(srv.URL, "api-token-1", "test", "", false)
+			require.NoError(t, err)
+			c.AccountID = 1
+			c.Retry = retrier.New(nil, DefaultClassifier)
 
-	var logs bytes.Buffer
-	ctx := tflogtest.RootLogger(context.Background(), &logs)
+			var logs bytes.Buffer
+			ctx := tflogtest.RootLogger(context.Background(), &logs)
 
-	got, err := c.Bundle(ctx, 3)
-	require.NoError(t, err)
-	require.Equal(t, bundle, string(got), "the caller still gets the bundle")
+			got, err := c.Bundle(ctx, 3)
+			require.NoError(t, err)
+			require.Equal(t, bundle, string(got), "the caller still gets the bundle")
 
-	out := logs.String()
-	require.NotContains(t, out, "bundle-pass-1")
-	require.NotContains(t, out, "authInfo")
-	require.Contains(t, out, fmt.Sprintf(`"body":"[%d bytes, not JSON]"`, len(bundle)))
+			out := logs.String()
+			require.NotContains(t, out, "bundle-pass-1")
+			require.NotContains(t, out, "authInfo")
+			require.Contains(t, out, fmt.Sprintf(`"body":"[%d bytes, raw]"`, len(bundle)))
+		})
+	}
 }
 
 func TestLogBody(t *testing.T) {
@@ -85,6 +92,8 @@ func TestLogBody(t *testing.T) {
 		{in: "-----BEGIN CERTIFICATE-----", want: "[27 bytes, not JSON]"},
 		{in: `{"password":"cut-off`, want: "[20 bytes, not JSON]"},
 		{in: `{"a":1} {"password":"x"}`, want: "[24 bytes, not JSON]"},
+		{in: `"bundle-pass-1"]`, want: "[16 bytes, not JSON]"},
+		{in: "{\"a\":1}\n", want: `{"a":1}`},
 		{in: `[{"password":"x"},{"name":"n"}]`, want: `[{"password":"REDACTED"},{"name":"n"}]`},
 		{in: `{"credentials":{"user":"u"},"secret":{"a":"b","c":["d"]}}`, want: `{"credentials":{"user":"u"},"secret":"REDACTED"}`},
 		{in: "", want: ""},

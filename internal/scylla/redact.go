@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -15,9 +16,8 @@ const redacted = "REDACTED"
 var secretKeyParts = []string{"password", "secret", "token", "privatekey"}
 
 // logBody returns an API body as the trace log shows it. In a JSON body, the
-// values of secret keys are replaced. A body that is not valid JSON, such as a
-// serverless connection bundle, can hold secrets that cannot be found, so
-// only its size is shown.
+// values of secret keys are replaced. A body that is not one valid JSON value
+// can hold secrets that cannot be found, so only its size is shown.
 func logBody(body []byte) string {
 	if len(body) == 0 {
 		return ""
@@ -27,7 +27,9 @@ func logBody(body []byte) string {
 	d.UseNumber()
 
 	var v any
-	if err := d.Decode(&v); err != nil || d.More() {
+	// The second Decode finds data after the value. More cannot: it reports
+	// no more data before a "]" or a "}".
+	if err := d.Decode(&v); err != nil || d.Decode(new(any)) != io.EOF {
 		if int64(len(body)) >= maxResponseBodyLength {
 			return fmt.Sprintf("[%d bytes, cut at the size limit]", len(body))
 		}
@@ -37,6 +39,13 @@ func logBody(body []byte) string {
 	// Marshal cannot fail on a value that Decode made.
 	out, _ := json.Marshal(redactValue(v))
 	return string(out)
+}
+
+// logRawBody returns a raw API body, such as a serverless connection bundle,
+// as the trace log shows it: only its size. The caller of a raw body reads it
+// as it is, so it can hold secrets under any key, also when it is JSON.
+func logRawBody(body []byte) string {
+	return fmt.Sprintf("[%d bytes, raw]", len(body))
 }
 
 func redactValue(v any) any {
