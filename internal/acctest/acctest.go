@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -24,6 +25,10 @@ const (
 	envEndpoint = "SCYLLADB_CLOUD_ENDPOINT"
 	envToken    = "SCYLLADB_CLOUD_TOKEN"
 	envTrace    = "SCYLLADB_CLOUD_TRACE"
+
+	// deleteWaitTimeout is how long the destroy check waits for a delete
+	// request. A cluster delete in lab takes a few minutes.
+	deleteWaitTimeout = 30 * time.Minute
 )
 
 // NewClient returns a client for the API in SCYLLADB_CLOUD_ENDPOINT, with the
@@ -189,6 +194,10 @@ func awaitClusterDeleted(ctx context.Context, c *scylla.Client, id int64) error 
 	}
 
 	last := slices.MaxFunc(reqs, func(a, b model.ClusterRequest) int { return cmp.Compare(a.ID, b.ID) })
+	// A delete that stalls must fail this check with the cluster ID, not
+	// wait until go test stops the whole run.
+	ctx, cancel := context.WithTimeout(ctx, deleteWaitTimeout)
+	defer cancel()
 	switch err := c.AwaitClusterRequest(ctx, last.ID); {
 	case isGone(err):
 		// The delete ended while the check waited.
