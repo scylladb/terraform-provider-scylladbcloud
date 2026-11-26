@@ -199,6 +199,20 @@ jobs:
           fi
           cp "$RUNNER_TEMP/plan/notes.md" "$RUNNER_TEMP/release/notes.md"
 
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+
+      - name: Smoke test
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # Installs the linux_amd64 zip into Terraform and validates the
+          # examples with it. Calls no ScyllaDB Cloud API.
+          ./scripts/release-smoke.sh "$RUNNER_TEMP/release" "${VERSION#v}"
+          echo "smoke_line=Smoke test: ✓ checksums, signature, provider schema and examples with Terraform $(terraform version -json | jq -r .terraform_version)." >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
@@ -213,6 +227,8 @@ jobs:
             echo "### Build"
             echo
             echo "$key_line"
+            echo
+            echo "$smoke_line"
             echo
             echo "<details><summary>16 files (SHA256SUMS)</summary>"
             echo
