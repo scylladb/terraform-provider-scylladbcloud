@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
-	"github.com/scylladb/terraform-provider-scylladbcloud/internal/provider/cluster"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla"
 	"github.com/scylladb/terraform-provider-scylladbcloud/internal/scylla/model"
 )
@@ -139,7 +138,7 @@ func resourceServerlessClusterCreate(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("error creating serverless cluster: %s", err)
 	}
 
-	if err := cluster.WaitForClusterRequestID(ctx, c, cr.ID); err != nil {
+	if err := c.AwaitClusterRequest(ctx, cr.ID); err != nil {
 		return diag.Errorf("error waiting for serverless cluster: %s", err)
 	}
 
@@ -179,7 +178,7 @@ func resourceServerlessClusterRead(ctx context.Context, d *schema.ResourceData, 
 	_ = d.Set("request_id", reqs[0].ID)
 
 	if reqs[0].Status != "COMPLETED" {
-		if err := cluster.WaitForClusterRequestID(ctx, c, reqs[0].ID); err != nil {
+		if err := c.AwaitClusterRequest(ctx, reqs[0].ID); err != nil {
 			return diag.Errorf("error waiting for serverless cluster: %s", err)
 		}
 	}
