@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/compare"
@@ -25,6 +26,92 @@ func testAccCheckClusterReplicationFactor(cluster *model.Cluster, want int64) re
 		}
 		return nil
 	}
+}
+
+func TestAccScyllaDBCloudCluster_replicationFactorAWS(t *testing.T) {
+	ctx := t.Context()
+	resourceName := acctest.RandomWithPrefix("rf-aws")
+
+	var cluster model.Cluster
+
+	clusterIDCompare := statecheck.CompareValue(compare.ValuesSame())
+
+	config := func(minNodes int) string {
+		return fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name                  = %[1]q
+  cloud                 = "AWS"
+  region                = "us-east-1"
+  node_type             = "i3.large"
+  min_nodes             = %[2]d
+  replication_factor    = 2
+  cidr_block            = "10.0.1.0/24"
+  enable_dns            = true
+  backup_retention_days = 0
+
+  encryption_at_rest {
+    enabled = false
+  }
+}`, resourceName, minNodes)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV5ProviderFactories: protoV5ProviderFactories,
+		CheckDestroy:             testAccCheckScyllaDBCloudClusterDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				// 4 is not a multiple of 3, so the plan checks min_nodes
+				// against the configured replication factor. ScyllaDB Cloud
+				// creates no Standard cluster with fewer than 3 nodes.
+				Config: config(4),
+				ConfigStateChecks: []statecheck.StateCheck{
+					clusterIDCompare.AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("cluster_id"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("replication_factor"),
+						knownvalue.Int64Exact(2),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int64Exact(4),
+					),
+				},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckScyllaDBCloudClusterExists(ctx, "scylladbcloud_cluster.test", &cluster),
+					testAccCheckClusterReplicationFactor(&cluster, 2),
+				),
+			},
+			{
+				// A scale-out keeps the same number of nodes in each rack.
+				Config: config(6),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("scylladbcloud_cluster.test", plancheck.ResourceActionUpdate),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					clusterIDCompare.AddStateValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("cluster_id"),
+					),
+					statecheck.ExpectKnownValue(
+						"scylladbcloud_cluster.test",
+						tfjsonpath.New("node_count"),
+						knownvalue.Int64Exact(6),
+					),
+				},
+			},
+			{
+				Config:      config(5),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`min_nodes must be a multiple of replication_factor \(2\), got 5`),
+			},
+		},
+	})
 }
 
 func TestAccScyllaDBCloudCluster_replicationFactorXCloudAWS(t *testing.T) {

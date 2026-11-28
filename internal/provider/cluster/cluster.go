@@ -26,15 +26,74 @@ const (
 	defaultReplicationFactor = 3
 )
 
+// validateMinNodesDiag checks the smallest Standard cluster that ScyllaDB
+// Cloud creates, for every replication factor. The check against the
+// replication factor is in validateMinNodes, because it needs other
+// attributes.
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	value := v.(int)
 	if value < 3 {
 		return diag.Errorf("min_nodes must be at least 3, got %d", value)
 	}
-	if value%3 != 0 {
-		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+	return nil
+}
+
+// validateMinNodes checks that min_nodes is a multiple of the replication
+// factor. ScyllaDB Cloud puts the same number of nodes in each rack, and the
+// replication factor is the number of racks.
+func validateMinNodes(minNodes, replicationFactor int) error {
+	if minNodes%replicationFactor != 0 {
+		return fmt.Errorf("min_nodes must be a multiple of replication_factor (%d), got %d", replicationFactor, minNodes)
 	}
 	return nil
+}
+
+// validateConfiguredMinNodes checks the configured min_nodes against the
+// replication factor that the cluster has or gets. It does no check when a
+// value is not known.
+func validateConfiguredMinNodes(d *schema.ResourceDiff) error {
+	config := d.GetRawConfig()
+	if config.IsNull() || !config.IsKnown() {
+		// Destroy plan condition.
+		return nil
+	}
+
+	minNodes, ok := knownInt(config.GetAttr("min_nodes"))
+	if !ok {
+		return nil
+	}
+
+	replicationFactor, ok := plannedReplicationFactor(d, config.GetAttr("replication_factor"))
+	if !ok {
+		return nil
+	}
+
+	return validateMinNodes(minNodes, replicationFactor)
+}
+
+// plannedReplicationFactor returns the replication factor from the config. If
+// the config has no value, it returns the default for a new cluster and the
+// state value for an existing one. State from older versions has no value.
+func plannedReplicationFactor(d *schema.ResourceDiff, configured cty.Value) (int, bool) {
+	switch {
+	case !configured.IsKnown():
+		return 0, false
+	case !configured.IsNull():
+		return knownInt(configured)
+	case d.Id() == "":
+		return defaultReplicationFactor, true
+	}
+
+	rf := d.Get("replication_factor").(int)
+	return rf, rf > 0
+}
+
+func knownInt(v cty.Value) (int, bool) {
+	if v.IsNull() || !v.IsKnown() {
+		return 0, false
+	}
+	i, _ := v.AsBigFloat().Int64()
+	return int(i), true
 }
 
 func validateReplicationFactorDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -499,6 +558,10 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		return err
 	}
 
+	if err := validateConfiguredMinNodes(d); err != nil {
+		return err
+	}
+
 	if encryptionAtRest, ok := castToNestedBlock(d.Get("encryption_at_rest")); ok {
 		enabled, _ := encryptionAtRest["enabled"].(bool)
 		configuredKeyID, _ := configuredEncryptionAtRest(d.GetRawConfig())
@@ -604,7 +667,8 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description: "Minimum number of nodes in the cluster. Required for Standard clusters; must be at least 3 and divisible by 3. " +
+				Description: "Minimum number of nodes in the cluster. Required for Standard clusters. " +
+					"Must be at least 3 and a multiple of `replication_factor`, because each rack gets the same number of nodes. " +
 					"Must not be set when the scaling block is present, in which case it reads back as `0` and `node_count` reports the number of nodes the cluster currently runs. " +
 					"Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.",
 				Optional:         true,

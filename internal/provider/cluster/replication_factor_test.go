@@ -180,3 +180,107 @@ func TestSetClusterKVsSetsReplicationFactor(t *testing.T) {
 		require.Equal(t, 2, data.Get("replication_factor"))
 	})
 }
+
+func TestValidateMinNodes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		minNodes          int
+		replicationFactor int
+		wantErr           string
+	}{
+		{name: "one node per rack", minNodes: 3, replicationFactor: 3},
+		{name: "two nodes per rack", minNodes: 4, replicationFactor: 2},
+		{name: "one rack", minNodes: 3, replicationFactor: 1},
+		{name: "more racks than the smallest cluster", minNodes: 5, replicationFactor: 5},
+		{name: "not a multiple", minNodes: 3, replicationFactor: 2, wantErr: "min_nodes must be a multiple of replication_factor (2), got 3"},
+		{name: "fewer nodes than racks", minNodes: 3, replicationFactor: 5, wantErr: "min_nodes must be a multiple of replication_factor (5), got 3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateMinNodes(tt.minNodes, tt.replicationFactor)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
+// TestMinNodesPlan checks which replication factor the plan uses to check
+// min_nodes.
+func TestMinNodesPlan(t *testing.T) {
+	t.Parallel()
+
+	config := func(minNodes int64, rf cty.Value) map[string]cty.Value {
+		return map[string]cty.Value{
+			"name":               cty.StringVal("cluster"),
+			"cloud":              cty.StringVal("AWS"),
+			"region":             cty.StringVal("us-east-1"),
+			"node_type":          cty.StringVal("i3.large"),
+			"min_nodes":          cty.NumberIntVal(minNodes),
+			"replication_factor": rf,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		state   *terraform.InstanceState
+		config  map[string]cty.Value
+		wantErr string
+	}{
+		{
+			name:    "new cluster without a value uses the default",
+			config:  config(4, cty.NullVal(cty.Number)),
+			wantErr: "min_nodes must be a multiple of replication_factor (3), got 4",
+		},
+		{
+			name:   "new cluster uses the configured value",
+			config: config(4, cty.NumberIntVal(2)),
+		},
+		{
+			name:    "new cluster with a configured value rejects a value that is not a multiple",
+			config:  config(5, cty.NumberIntVal(2)),
+			wantErr: "min_nodes must be a multiple of replication_factor (2), got 5",
+		},
+		{
+			name:   "unknown value is not checked",
+			config: config(5, cty.UnknownVal(cty.Number)),
+		},
+		{
+			name:   "existing cluster without a value in config uses the state",
+			state:  existingClusterState("2", "4"),
+			config: config(8, cty.NullVal(cty.Number)),
+		},
+		{
+			name:    "existing cluster rejects a scale to a value that is not a multiple",
+			state:   existingClusterState("2", "4"),
+			config:  config(5, cty.NullVal(cty.Number)),
+			wantErr: "min_nodes must be a multiple of replication_factor (2), got 5",
+		},
+		{
+			// The real value is not known until the next refresh.
+			name:   "state from older versions is not checked",
+			state:  existingClusterState("", "6"),
+			config: config(4, cty.NullVal(cty.Number)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := clusterDiff(t, tt.state, tt.config)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
