@@ -1,0 +1,51 @@
+```release-note:bug
+resource/scylladbcloud_vpc_peering: `peer_region` accepts any AWS region, including regions where ScyllaDB Cloud does not deploy clusters. An opt-in region must be enabled in the peer AWS account
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: For GCP, `peer_region` no longer has to be a ScyllaDB Cloud region when `peer_cidr_blocks` is set, and a list that starts with the default CIDR block is accepted
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A GCP peering that uses the default CIDR block no longer plans a replacement on every run. To use the default CIDR block, omit `peer_cidr_blocks`: an empty list, `peer_cidr_blocks = []`, is now rejected
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A change to `cluster_id` plans a replacement instead of an update that always failed
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A refresh checks the cluster in `cluster_id` first. A peering that another cluster also lists, as clusters that share a network do, could get the ID of that cluster on refresh, and the next plan showed a `cluster_id` change. If the cluster in `cluster_id` is gone or no longer lists the peering, but another cluster does, the refresh fails and names that cluster, instead of removing the peering from the state. To manage the peering through that cluster, remove it from the state and import it again. An import takes the first cluster that lists the peering, so when several clusters list it, check the imported `cluster_id` and the next plan before applying
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: A `datacenter` that the cluster does not have fails with `unable to find "<name>" datacenter` instead of an error about the cloud provider
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: `datacenter` is case-insensitive, as the create already was. A name in another letter case than the API name planned a replacement after each refresh
+```
+
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: `peer_region` is case-insensitive
+```
+
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, an AWS peering, or a GCP peering in a region for which the provider has no default CIDR block, fails at plan time instead of during apply
+```
+
+```release-note:enhancement
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a GCP peering with a `datacenter` that the cluster does not have fails at plan time instead of during apply, when the plan knows the `datacenter` name. With `peer_cidr_blocks`, the apply still reports it
+```
+
+```release-note:note
+resource/scylladbcloud_vpc_peering: A GCP peering without `peer_cidr_blocks` whose `peer_region` or `cluster_id` is known only at apply time, as for a peering on a cluster made in the same apply, now fails at plan time. Set `peer_cidr_blocks` in such a configuration
+```
+
+```release-note:feature
+resource/scylladbcloud_vpc_peering: A GCP peering is imported with its region: `<connection_id>,<peer_region>`. Without the region, the import fails with a hint. A GCP peering imported with an earlier version has an empty `peer_region` in the state, and its next plan replaces it: remove it from the state and import it again with its region, as the import example shows
+```
+
+```release-note:note
+resource/scylladbcloud_vpc_peering: Without `peer_cidr_blocks`, a configuration that fails at plan time also fails `terraform destroy`, because Terraform plans the configuration to refresh the state first. Set `peer_cidr_blocks`, or run `terraform destroy -refresh=false`, which skips that refresh. Terraform still plans the destroy. Public clusters do not list peerings: if the private cluster of a peering was deleted and only public clusters still use its network, Terraform can remove the peering from the state while it remains live. Check in AWS or GCP that the peering is gone before treating the destroy as complete. An empty list, `peer_cidr_blocks = []`, fails validation also with `-refresh=false`: set a nonempty list, or remove the argument when the provider has a default CIDR block for the GCP region
+```

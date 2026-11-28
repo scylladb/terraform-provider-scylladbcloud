@@ -152,7 +152,11 @@
 041107	Cluster has no VPC
 041108	Cluster has multiple VPC
 041103	Provided VPC is already peered
-041115	Missing peer region ID
+041115	Missing peer region ID or name
+041122	Invalid peer VPC region name
+041123	Unknown peer VPC region
+041124	Region and RegionID refer to different regions
+041125	General error validating the peer VPC region
 041102	Provided CIDR block overlaps with target VPC
 041109	CIDR range overlaps a reserved network
 041101	Invalid request format
