@@ -22,6 +22,8 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
+
+	defaultReplicationFactor = 3
 )
 
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
@@ -31,6 +33,13 @@ func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	}
 	if value%3 != 0 {
 		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+	}
+	return nil
+}
+
+func validateReplicationFactorDiag(v interface{}, _ cty.Path) diag.Diagnostics {
+	if value := v.(int); value < 1 {
+		return diag.Errorf("replication_factor must be at least 1, got %d", value)
 	}
 	return nil
 }
@@ -498,7 +507,31 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		}
 	}
 
-	return validateEncryptionKeyIDNotRemoved(d)
+	if err := validateEncryptionKeyIDNotRemoved(d); err != nil {
+		return err
+	}
+
+	return planReplicationFactorChange(d)
+}
+
+// planReplicationFactorChange makes a change of replication_factor replace the
+// cluster, because the API can set it only at creation.
+//
+// State written before the attribute existed has no value, and 0 is not a
+// valid replication factor. A config value against such a state is not a
+// change: the plan must not replace a cluster whose real value it does not
+// know. The diff is cleared, and the next refresh writes the real value. If the
+// real value is different from the config, that plan replaces the cluster.
+func planReplicationFactorChange(d *schema.ResourceDiff) error {
+	if d.Id() == "" || !d.HasChange("replication_factor") {
+		return nil
+	}
+
+	if old, _ := d.GetChange("replication_factor"); old.(int) == 0 {
+		return d.Clear("replication_factor")
+	}
+
+	return d.ForceNew("replication_factor")
 }
 
 func ResourceCluster() *schema.Resource {
@@ -578,6 +611,15 @@ func ResourceCluster() *schema.Resource {
 				Type:             schema.TypeInt,
 				ConflictsWith:    []string{"scaling"},
 				ValidateDiagFunc: validateMinNodesDiag,
+			},
+			"replication_factor": {
+				Description: "The number of copies of each row. ScyllaDB Cloud also uses it as the number of racks in the datacenter. " +
+					"Applies to Standard and X Cloud clusters. Defaults to 3. ScyllaDB Cloud sets the maximum. " +
+					"You can set it only when the cluster is created, so a change replaces the cluster.",
+				Optional:         true,
+				Computed:         true,
+				Type:             schema.TypeInt,
+				ValidateDiagFunc: validateReplicationFactorDiag,
 			},
 			"byoa_id": {
 				Description: "The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).",
@@ -817,7 +859,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		clusterCreateRequest = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
-			ReplicationFactor:    3,
+			ReplicationFactor:    defaultReplicationFactor,
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Placement:            "true",
@@ -835,6 +877,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if !enableVpcPeering {
 		clusterCreateRequest.BroadcastType = "PUBLIC"
+	}
+
+	if rf, ok := d.GetOk("replication_factor"); ok {
+		clusterCreateRequest.ReplicationFactor = int64(rf.(int))
 	}
 
 	if clusterCreateRequest.UserAPIInterface == "ALTERNATOR" {
@@ -1151,6 +1197,12 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	}
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
+
+	// 0 means the API did not report a value. The state keeps what it has
+	// instead of a guessed default.
+	if cluster.ReplicationFactor > 0 {
+		_ = d.Set("replication_factor", cluster.ReplicationFactor)
+	}
 
 	if !hasScaling(cluster) {
 		_ = d.Set("node_type", instanceExternalID)
