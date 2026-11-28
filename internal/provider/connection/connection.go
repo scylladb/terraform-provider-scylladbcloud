@@ -369,19 +369,29 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 			return nil, nil, fmt.Errorf("error reading cluster connection %d: %s", connectionID, err)
 		}
 	}
-	clusters, err := c.ListClusters(ctx)
+	clusters, unreadable, err := c.ListClusters(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading cluster list: %s", err)
 	}
 
+	// noDC holds the IDs of the clusters that may have the connection but have
+	// no ACTIVE datacenter, so they cannot be read.
+	var noDC []int64
 	for i := range clusters {
-		cluster = &clusters[i]
-		connection, err = c.GetClusterConnection(ctx, cluster.ID, connectionID)
+		// The API counts only ACTIVE datacenters, and it can fail the lookup
+		// in a cluster without one instead of reporting that it found none.
+		if clusters[i].DCCount == 0 {
+			noDC = append(noDC, clusters[i].ID)
+			continue
+		}
+
+		id := clusters[i].ID
+		connection, err = c.GetClusterConnection(ctx, id, connectionID)
 		if err == nil {
 			// Repopulate cluster with detailed information
-			cluster, err = c.GetCluster(ctx, cluster.ID)
+			cluster, err = c.GetCluster(ctx, id)
 			if err != nil {
-				return nil, nil, fmt.Errorf("error reading cluster %d: %s", clusterID, err)
+				return nil, nil, fmt.Errorf("error reading cluster %d: %s", id, err)
 			}
 			return cluster, connection, nil
 		}
@@ -389,5 +399,35 @@ func findConnection(ctx context.Context, c *scylla.Client, clusterID, connection
 			return nil, nil, fmt.Errorf("error reading cluster connection %d: %s", connectionID, err)
 		}
 	}
+
+	// Not errNotFound: the import would report a missing connection after an
+	// incomplete search.
+	if skipped := skippedClusters(noDC, unreadable); skipped != "" {
+		return nil, nil, fmt.Errorf("cluster connection %d was not found, but the search skipped clusters that may have it (%s): "+
+			"check them, and try again when they can be read", connectionID, skipped)
+	}
+
 	return nil, nil, errNotFound
+}
+
+// skippedClusters lists the clusters that a lookup could not read, or returns
+// "" when it read them all. It names the clusters without an ACTIVE
+// datacenter, and counts the entries the API could not read, as the list has
+// no ID for them. The VPC peering lookups use the same words.
+func skippedClusters(noDC []int64, unreadable int) string {
+	var parts []string
+
+	if len(noDC) > 0 {
+		ids := make([]string, 0, len(noDC))
+		for _, id := range noDC {
+			ids = append(ids, strconv.FormatInt(id, 10))
+		}
+		parts = append(parts, "without an ACTIVE datacenter: "+strings.Join(ids, ", "))
+	}
+
+	if unreadable > 0 {
+		parts = append(parts, fmt.Sprintf("entries the API could not read: %d", unreadable))
+	}
+
+	return strings.Join(parts, "; ")
 }

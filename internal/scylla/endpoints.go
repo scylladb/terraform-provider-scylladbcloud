@@ -2,6 +2,7 @@ package scylla
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -192,16 +193,36 @@ func (c *Client) UpdateDcScalingPolicy(ctx context.Context, clusterID, dcID int6
 	return &result, nil
 }
 
-func (c *Client) ListClusters(ctx context.Context) ([]model.Cluster, error) {
-	var result model.Clusters
+// ListClusters lists the clusters of the account, and counts the clusters the
+// API could not read. The list has no ID for those: a caller that does not
+// find a resource in clusters cannot tell whether one of them has it.
+func (c *Client) ListClusters(ctx context.Context) (clusters []model.ClusterSummary, unreadable int, err error) {
+	var result struct {
+		Clusters []struct {
+			model.ClusterSummary
+
+			// Error replaces the cluster fields for a cluster the API could
+			// not read.
+			Error json.RawMessage `json:"error"`
+		} `json:"clusters"`
+	}
 
 	path := fmt.Sprintf("/account/%d/clusters", c.AccountID)
 
 	if err := c.get(ctx, path, &result, "enriched", "true"); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return result.Clusters, nil
+	clusters = make([]model.ClusterSummary, 0, len(result.Clusters))
+	for _, entry := range result.Clusters {
+		if len(entry.Error) > 0 {
+			unreadable++
+			continue
+		}
+		clusters = append(clusters, entry.ClusterSummary)
+	}
+
+	return clusters, unreadable, nil
 }
 
 type ListClusterRequestParams struct {

@@ -1,0 +1,19 @@
+```release-note:bug
+provider: Reading VPC peerings, allowlist rules and cluster connections no longer fails while the account has a cluster whose instance the API cannot report, for example while none of its nodes is ACTIVE. A cluster that the API cannot read at all no longer fails an allowlist rule read or an import that finds its resource, or a VPC peering refresh that finds the peering in the cluster in `cluster_id`. A VPC peering refresh that finds the peering only in another cluster fails and keeps the peering in the state. A lookup that does not find its resource while such a cluster may have it still fails and asks to try again, and a refresh keeps the resource in the state
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: Reading a VPC peering no longer fails while another cluster of the account has no datacenter, for example right after it is created or after its creation failed, when the cluster in `cluster_id` lists the peering, or for an import, any cluster that can be read. When no cluster that can be read lists it, the read still fails and asks to try again, as a cluster without a datacenter could list it. While the cluster of the peering itself is listed without a datacenter, its refresh, also the one before `terraform destroy`, still fails, and asks to try again when that cluster has an ACTIVE datacenter. If the peering was deleted, or Terraform should stop managing it, `terraform state rm` removes it from the state and leaves a peering that still exists in place
+```
+
+```release-note:bug
+resource/scylladbcloud_vpc_peering: Deleting a VPC peering whose cluster was deleted, for example with `terraform destroy -refresh=false`, no longer removes the peering from the state while another cluster still lists it, as clusters that share a network do. The delete fails and names that cluster, or asks to try again while a cluster that could list the peering cannot be read. It succeeds when no cluster lists the peering. Public clusters do not list peerings: if the private cluster was deleted and only public clusters still use its network, Terraform can remove the peering from the state while it remains live. Check in AWS or GCP that the peering is gone before treating the destroy as complete
+```
+
+```release-note:bug
+resource/scylladbcloud_cluster: Reading a cluster no longer fails when the API cannot report its instance. If only the instance lookup of the API fails, the read and the import work as usual. While none of the nodes of a Standard cluster is ACTIVE, the read keeps `node_type`, `node_disk_size` and `min_nodes` from the state and warns that it did not check them, and an import or a `min_nodes` change fails until a node is ACTIVE. If a check needed to decide whether to resize fails, the provider keeps the previous `min_nodes` in the state, so the next plan has the change again
+```
+
+```release-note:bug
+resource/scylladbcloud_cluster_connection: Importing a cluster connection no longer fails while the account has a public cluster without a datacenter, for example right after it is created
+```

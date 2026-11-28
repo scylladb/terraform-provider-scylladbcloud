@@ -75,7 +75,6 @@ type CloudProviderInstance struct {
 	NetworkSpeed                int64       `json:"networkSpeed"`
 	ExternalStorageNetworkSpeed int64       `json:"externalStorageNetworkSpeed"`
 	CostPerHour                 json.Number `json:"costPerHour"`
-	Environment                 string      `json:"environment"`
 	LicenseCostOnDemandPerHour  json.Number `json:"licenseCostOnDemandPerHour"`
 	SubscriptionCostHourly      json.Number `json:"subscriptionCostHourly"`
 	InstanceCostHourly          json.Number `json:"instanceCostHourly"`
@@ -155,25 +154,24 @@ type ClusterCreateRequest struct {
 }
 
 type Cluster struct {
-	ID                  int64                  `json:"id"`
-	AccountID           int64                  `json:"accountId"`
-	ClusterName         string                 `json:"clusterName"`
-	Status              string                 `json:"status"`
-	InstanceID          int64                  `json:"instanceId"`
-	CloudProviderID     int64                  `json:"cloudProviderId"`
-	ScyllaVersionID     int64                  `json:"scyllaVersionId"`
-	UserAPIInterface    string                 `json:"userApiInterface"`
-	PricingModel        int64                  `json:"pricingModel"`
-	MaxAllowedCIDRRange int64                  `json:"maxAllowedCidrRange"`
-	DNS                 bool                   `json:"dns"`
-	CloudProvider       *CloudProvider         `json:"cloudProvider"`
-	ScyllaVersion       *ScyllaVersion         `json:"scyllaVersion"`
-	Region              *CloudProviderRegion   `json:"region"`
-	Instance            *CloudProviderInstance `json:"instance"`
-	Datacenter          *Datacenter            `json:"dc"`
-	FreeTier            *ExpirationTime        `json:"freeTier"`
-	JumpStart           *ExpirationTime        `json:"jumpStart"`
-	Progress            *Progress              `json:"progress"`
+	ID                  int64                `json:"id"`
+	AccountID           int64                `json:"accountId"`
+	ClusterName         string               `json:"clusterName"`
+	Status              string               `json:"status"`
+	InstanceID          int64                `json:"instanceId"`
+	CloudProviderID     int64                `json:"cloudProviderId"`
+	ScyllaVersionID     int64                `json:"scyllaVersionId"`
+	UserAPIInterface    string               `json:"userApiInterface"`
+	PricingModel        int64                `json:"pricingModel"`
+	MaxAllowedCIDRRange int64                `json:"maxAllowedCidrRange"`
+	DNS                 bool                 `json:"dns"`
+	CloudProvider       *CloudProvider       `json:"cloudProvider"`
+	ScyllaVersion       *ScyllaVersion       `json:"scyllaVersion"`
+	Region              *CloudProviderRegion `json:"region"`
+	Datacenter          *Datacenter          `json:"dc"`
+	FreeTier            *ExpirationTime      `json:"freeTier"`
+	JumpStart           *ExpirationTime      `json:"jumpStart"`
+	Progress            *Progress            `json:"progress"`
 
 	ReplicationFactor        int64        `json:"replicationFactor,omitempty"`
 	BroadcastType            string       `json:"broadcastType,omitempty"`
@@ -205,8 +203,15 @@ type ClusterCertificate struct {
 	Content string `json:"content"`
 }
 
-type Clusters struct {
-	Clusters []Cluster `json:"clusters"`
+// ClusterSummary is a cluster in the account cluster list. It holds only what
+// the provider reads from the list, so a change in another field of the list
+// cannot break it.
+type ClusterSummary struct {
+	ID int64 `json:"id"`
+
+	// DCCount is the number of ACTIVE datacenters. The API omits it when
+	// there is none.
+	DCCount int `json:"dcCount"`
 }
 
 type ExpirationTime struct {

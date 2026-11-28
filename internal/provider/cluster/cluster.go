@@ -974,22 +974,14 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	// The instance the cluster runs on is only tracked for Standard clusters.
-	// X Cloud picks it from the scaling policy and changes it as the cluster
-	// scales, so resolving it here would only produce a value setClusterKVs
-	// discards.
-	instanceExternalID := ""
-	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
-		i := cloudProvider.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
-		if i == nil {
-			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
-		}
-		instanceExternalID = i.ExternalID
+	instance, err := standardInstance(cluster, instances, cloudProvider)
+	if err != nil {
+		return diag.FromErr(err)
 	}
 	caCert, certWarns := fetchCACertificate(ctx, scyllaClient, cluster.ID, "")
 	warns = append(warns, certWarns...)
 
-	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instanceExternalID, caCert, instances, cloudProvider)
+	err = setClusterKVs(d, cluster, cloudProvider.CloudProvider.Name, instance, caCert, instances, cloudProvider)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
 	}
@@ -1048,23 +1040,36 @@ func resourceClusterRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
 	}
 
-	var instanceExternalID string
 	instances, err := scyllaClient.ListCloudProviderInstancesPerRegion(ctx, cluster.CloudProviderID, cluster.Region.ID)
 	if err != nil {
 		return diag.Errorf("failed to list cloud provider instances for region %q: %s", cluster.Region.ExternalID, err)
 	}
-	// Standard clusters only; see the matching comment in resourceClusterCreate.
-	if !hasScaling(cluster) && cluster.Datacenter.InstanceID != 0 {
-		i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
-		if i == nil {
-			return diag.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
-		}
-		instanceExternalID = i.ExternalID
+
+	instance, err := standardInstance(cluster, instances, p)
+	if err != nil {
+		return diag.FromErr(err)
 	}
+
+	// Without the instance, the read keeps node_type from the state, and the
+	// state of an import has none.
+	if instance == nil && !hasScaling(cluster) && d.Get("node_type").(string) == "" {
+		return noActiveNodeDiag(cluster.ID)
+	}
+
 	caCert, warns := fetchCACertificate(ctx, scyllaClient, clusterID, d.Get("ca_certificate").(string))
-	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instanceExternalID, caCert, instances, p)
+	err = setClusterKVs(d, cluster, p.CloudProvider.Name, instance, caCert, instances, p)
 	if err != nil {
 		return diag.Errorf("failed to set cluster values for cluster %d: %s", cluster.ID, err)
+	}
+
+	// The plan shows no change for the values kept from the state, so say
+	// that they were not checked.
+	if instance == nil && !hasScaling(cluster) {
+		warns = append(warns, diag.Diagnostic{
+			Severity: diag.Warning,
+			Summary:  fmt.Sprintf("cluster %d has no ACTIVE node", cluster.ID),
+			Detail:   "The read keeps node_type, node_disk_size and min_nodes from the state, and does not check them for changes made outside Terraform.",
+		})
 	}
 
 	return append(warns, alternatorIsolationWarning(cluster)...)
@@ -1088,6 +1093,12 @@ func alternatorIsolationWarning(cluster *model.Cluster) diag.Diagnostics {
 	}}
 }
 
+// noActiveNodeDiag is the error for a cluster whose datacenter has no ACTIVE
+// node. The API then reports instance ID 0, so the instance is unknown.
+func noActiveNodeDiag(clusterID int64) diag.Diagnostics {
+	return diag.Errorf("cluster %d has no ACTIVE node, so its node_type is unknown: try again when it has ACTIVE nodes", clusterID)
+}
+
 // fetchCACertificate retrieves the cluster's CA certificate. Clusters without
 // in-transit encryption (error 041201) yield an empty string. Any other
 // failure is downgraded to a warning and prev is returned, so a misbehaving
@@ -1107,7 +1118,26 @@ func fetchCACertificate(ctx context.Context, c *scylla.Client, clusterID int64, 
 	return cert.Content, nil
 }
 
-func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName, instanceExternalID, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
+// standardInstance returns the instance a Standard cluster runs on, from the
+// instances of its region. It returns nil for an X Cloud cluster, which picks
+// its instances from the scaling policy and changes them as it scales. It
+// also returns nil while the datacenter has no ACTIVE node: the API then
+// reports instance ID 0.
+func standardInstance(cluster *model.Cluster, instances []model.CloudProviderInstance, p *scylla.CloudProvider) (*model.CloudProviderInstance, error) {
+	if hasScaling(cluster) || cluster.Datacenter.InstanceID == 0 {
+		return nil, nil
+	}
+
+	i := p.InstanceByIDFromInstances(cluster.Datacenter.InstanceID, instances)
+	if i == nil {
+		return nil, fmt.Errorf("unexpected instance ID for cluster %d: %d", cluster.ID, cluster.Datacenter.InstanceID)
+	}
+	return i, nil
+}
+
+// setClusterKVs sets the state from cluster. instance is the instance of a
+// Standard cluster, from standardInstance.
+func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName string, instance *model.CloudProviderInstance, caCert string, instances []model.CloudProviderInstance, cloudProvider *scylla.CloudProvider) error {
 	_ = d.Set("cluster_id", cluster.ID)
 	_ = d.Set("name", cluster.ClusterName)
 	_ = d.Set("cloud", providerName)
@@ -1130,6 +1160,11 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 			return err
 		}
 		_ = d.Set("scaling", scaling)
+	} else if instance == nil {
+		// Without the instance, which the API cannot report while the
+		// datacenter has no ACTIVE node, keep min_nodes, node_type and
+		// node_disk_size: 0 and "" would plan a resize or a replacement.
+		_ = d.Set("scaling", []map[string]interface{}{})
 	} else if minNodes, ok := d.GetOk("min_nodes"); !ok {
 		_ = d.Set("scaling", []map[string]interface{}{})
 		_ = d.Set("min_nodes", nodeCount)
@@ -1152,8 +1187,8 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
 
-	if !hasScaling(cluster) {
-		_ = d.Set("node_type", instanceExternalID)
+	if !hasScaling(cluster) && instance != nil {
+		_ = d.Set("node_type", instance.ExternalID)
 	}
 	_ = d.Set("node_dns_names", model.NodesDNSNames(cluster.Nodes))
 	_ = d.Set("node_private_ips", model.NodesPrivateIPs(cluster.Nodes))
@@ -1174,8 +1209,8 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 		_ = d.Set("byoa_id", id)
 	}
 
-	if !hasScaling(cluster) && cluster.Instance != nil {
-		_ = d.Set("node_disk_size", cluster.Instance.TotalStorage)
+	if !hasScaling(cluster) && instance != nil {
+		_ = d.Set("node_disk_size", instance.TotalStorage)
 	}
 
 	azIDs := cluster.Datacenter.AvailabilityZoneIDs()
@@ -1226,9 +1261,21 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 	oldMinNodesI, newMinNodesI := d.GetChange("min_nodes")
 	oldMinNodes, newMinNodes := oldMinNodesI.(int), newMinNodesI.(int)
 
+	// While the update checks whether to resize, a failure changes nothing in
+	// the cloud, so keepMinNodes keeps min_nodes from the state. The SDK
+	// stores the planned values of a failed update, and the read keeps a
+	// min_nodes below the node count, so a failed scale-in would never be
+	// planned again. The other planned values are stored as usual: for
+	// example, backup_retention_days changes only in the state, and the
+	// delete reads it from there.
+	keepMinNodes := func(diags diag.Diagnostics) diag.Diagnostics {
+		_ = d.Set("min_nodes", oldMinNodes)
+		return diags
+	}
+
 	clusterID, diags := parseClusterID(d)
 	if diags != nil {
-		return diags
+		return keepMinNodes(diags)
 	}
 
 	tflog.Debug(ctx, "Updating cluster min_nodes", map[string]interface{}{
@@ -1243,16 +1290,16 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 			d.SetId("")
 			return nil // cluster was deleted
 		}
-		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+		return keepMinNodes(diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err))
 	}
 
 	if n := len(cluster.Datacenters); n != 1 {
-		return diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n)
+		return keepMinNodes(diag.Errorf("clusters without datacenter or multi-datacenter clusters are not currently supported (found %d datacenters)", n))
 	}
 
 	// Resize will fail if there is any ongoing cluster request.
 	if err := WaitForNoInProgressRequests(ctx, scyllaClient, cluster.ID); err != nil {
-		return diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err)
+		return keepMinNodes(diag.Errorf("failed waiting for no in-progress cluster requests for cluster %d: %s", cluster.ID, err))
 	}
 
 	// Re-fetch the cluster to get the current node count after waiting,
@@ -1263,9 +1310,20 @@ func resourceClusterUpdateMinNodes(ctx context.Context, d *schema.ResourceData, 
 			d.SetId("")
 			return nil // cluster was deleted
 		}
-		return diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err)
+		return keepMinNodes(diag.Errorf("failed to get the cluster with ID %d: %s", clusterID, err))
 	}
 
+	// The read keeps min_nodes from the state while the datacenter has no
+	// ACTIVE node, but the resize needs the instance, and the API reports
+	// instance ID 0 then.
+	if cluster.Datacenter.InstanceID == 0 {
+		return keepMinNodes(noActiveNodeDiag(cluster.ID))
+	}
+
+	// The API can save the resize request and still answer with an error,
+	// so from here on a failure stores the planned min_nodes, as before.
+	// Keeping the old value would plan the resize again and could send it
+	// twice.
 	curNodesCount := len(model.NodesByStatus(cluster.Nodes, "ACTIVE"))
 
 	if newMinNodes == curNodesCount {
