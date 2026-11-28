@@ -92,7 +92,7 @@ resource "scylladbcloud_cluster" "xcloud" {
 
 - **X Cloud Multi-DC:** Multi-DC is not supported. X Cloud clusters are single-datacenter only. Support for multi-DC deployments is planned for a future release.
 - **Upgrading from Standard to X Cloud forces re-creation:** Changing a cluster from `node_type`/`min_nodes` configuration to a `scaling` block will trigger a full destroy-and-recreate of the cluster. Back up your data before applying such a change.
-- **Replication factor:** Replication factor is fixed at 3 for X Cloud. X Cloud always uses RF=3 across three availability zones. This is required for Materialized Views, Secondary Indexes, Alternator, and CDC.
+- **Replication factor changes force re-creation:** Set the replication factor with `replication_factor` when you create a Standard or X Cloud cluster. The default is 3. ScyllaDB Cloud cannot change the replication factor of an existing cluster, so a change replaces the cluster. For a Standard cluster, `min_nodes` must be at least 3 and a multiple of the replication factor.
 - **Node Type changes:** The provider deletes and recreates the cluster if the `node_type` property is changed on a Standard cluster.
 
 ## Horizontal Scaling
