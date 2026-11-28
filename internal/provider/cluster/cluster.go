@@ -275,6 +275,36 @@ func createClusterWithEncryptionFallback(
 	}}, nil
 }
 
+// createErrorDiags returns the error of a failed cluster create. When the API
+// may have made the cluster, it looks for a cluster with the same name and
+// tells the user how to import it.
+func createErrorDiags(ctx context.Context, c *scylla.Client, name string, err error) diag.Diagnostics {
+	d := diag.Diagnostic{
+		Severity: diag.Error,
+		Summary:  fmt.Sprintf("failed to create a cluster request: %s", err),
+	}
+	if !scylla.MayHaveRun(err) {
+		return diag.Diagnostics{d}
+	}
+
+	d.Detail = fmt.Sprintf("The API may have created cluster %q. Look for it in ScyllaDB Cloud before you apply again.", name)
+
+	clusters, lerr := c.ListClusters(ctx)
+	if lerr != nil {
+		tflog.Warn(ctx, "failed to list clusters after a create error", map[string]interface{}{"error": lerr.Error()})
+		return diag.Diagnostics{d}
+	}
+	for _, cl := range clusters {
+		if cl.ClusterName == name && !strings.EqualFold(cl.Status, "DELETED") {
+			d.Detail = fmt.Sprintf("The API may have created cluster %q: a cluster with this name has ID %d. "+
+				"If Terraform created it, import it with \"terraform import <resource address> %d\". "+
+				"Otherwise, delete it or change the name in the configuration.", name, cl.ID, cl.ID)
+			break
+		}
+	}
+	return diag.Diagnostics{d}
+}
+
 // flattenEncryptionAtRest always returns exactly one block, never an empty
 // list. An unencrypted cluster reads back as "encryption_at_rest { enabled = false }".
 // Returning an empty list would leave diffing against nothing forever.
@@ -958,7 +988,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	cr, warns, err := createClusterWithEncryptionFallback(ctx, scyllaClient, clusterCreateRequest, encryptionConfigured)
 	if err != nil {
-		return diag.Errorf("failed to create a cluster request: %s", err)
+		return createErrorDiags(ctx, scyllaClient, clusterCreateRequest.ClusterName, err)
 	}
 
 	if err := WaitForClusterRequestID(ctx, scyllaClient, cr.ID); err != nil {

@@ -51,6 +51,9 @@ type Client struct {
 	// Retry is used to retry requests to the API.
 	Retry *retrier.Retrier
 
+	// RetryOnce is used for requests that the API must not run twice.
+	RetryOnce *retrier.Retrier
+
 	// PollInterval is how often cluster requests are polled.
 	PollInterval time.Duration
 
@@ -71,10 +74,8 @@ func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client
 	}
 
 	ctx := context.Background()
-	retry := retrier.New(
-		retrier.ExponentialBackoff(5, 5*time.Second),
-		DefaultClassifier,
-	)
+	backoff := retrier.ExponentialBackoff(5, 5*time.Second)
+	retry := retrier.New(backoff, DefaultClassifier)
 
 	c := &Client{
 		Token:        token,
@@ -82,6 +83,7 @@ func NewClient(endpoint, token, useragent, trace string, metadata bool) (*Client
 		Headers:      make(http.Header),
 		HTTPClient:   &http.Client{Timeout: defaultTimeout},
 		Retry:        retry,
+		RetryOnce:    retrier.New(backoff, OnceClassifier),
 		PollInterval: DefaultPollInterval,
 		Endpoint:     end,
 		V2: v2scylla.New(
@@ -157,8 +159,8 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	return req, nil
 }
 
-func (c *Client) retryCall(ctx context.Context, method, path string, reqBody, resType interface{}, query ...string) error {
-	return c.Retry.RunCtx(ctx, func(ctx context.Context) error {
+func (c *Client) retryCall(ctx context.Context, r *retrier.Retrier, method, path string, reqBody, resType interface{}, query ...string) error {
+	return r.RunCtx(ctx, func(ctx context.Context) error {
 		return c.call(ctx, method, path, reqBody, resType, query...)
 	})
 }
@@ -256,23 +258,25 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 }
 
 func (c *Client) get(ctx context.Context, path string, resultType interface{}, query ...string) error {
-	return c.retryCall(ctx, http.MethodGet, path, nil, resultType, query...)
+	return c.retryCall(ctx, c.Retry, http.MethodGet, path, nil, resultType, query...)
 }
 
+// post uses RetryOnce, because a POST is not safe to send twice: most POST
+// endpoints create an object. See OnceClassifier.
 func (c *Client) post(ctx context.Context, path string, requestBody, resultType interface{}) error {
-	return c.retryCall(ctx, http.MethodPost, path, requestBody, resultType)
+	return c.retryCall(ctx, c.RetryOnce, http.MethodPost, path, requestBody, resultType)
 }
 
 func (c *Client) patch(ctx context.Context, path string, requestBody, resultType interface{}) error {
-	return c.retryCall(ctx, http.MethodPatch, path, requestBody, resultType)
+	return c.retryCall(ctx, c.Retry, http.MethodPatch, path, requestBody, resultType)
 }
 
 func (c *Client) delete(ctx context.Context, path string) error {
-	return c.retryCall(ctx, http.MethodDelete, path, nil, nil)
+	return c.retryCall(ctx, c.Retry, http.MethodDelete, path, nil, nil)
 }
 
 func (c *Client) put(ctx context.Context, path string, requestBody, resultType interface{}) error {
-	return c.retryCall(ctx, http.MethodPut, path, requestBody, resultType)
+	return c.retryCall(ctx, c.Retry, http.MethodPut, path, requestBody, resultType)
 }
 
 func (c *Client) findAndSaveAccountID(ctx context.Context) error {

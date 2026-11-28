@@ -125,6 +125,7 @@ func (s *Server) Client(t testing.TB) *scylla.Client {
 	c.AccountID = AccountID
 	noRetry := retrier.New(nil, scylla.DefaultClassifier)
 	c.Retry = noRetry
+	c.RetryOnce = retrier.New(nil, scylla.OnceClassifier)
 	c.V2.With(v2scylla.WithRetryPolicy(noRetry))
 	c.PollInterval = 5 * time.Millisecond
 	return c

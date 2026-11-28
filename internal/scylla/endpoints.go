@@ -140,7 +140,7 @@ func (c *Client) CreateCluster(ctx context.Context, req *model.ClusterCreateRequ
 	path = fmt.Sprintf("/account/%d/cluster/request/%d", c.AccountID, result.RequestID)
 
 	if err := c.get(ctx, path, &clusterReq); err != nil {
-		return nil, err
+		return nil, &acceptedError{fmt.Errorf("the API accepted create request %d, but reading it failed: %w", result.RequestID, err)}
 	}
 
 	return &clusterReq, nil

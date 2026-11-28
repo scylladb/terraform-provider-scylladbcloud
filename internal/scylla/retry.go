@@ -39,6 +39,50 @@ var DefaultClassifier retrier.Classifier = &RetryStrategy{
 	},
 }
 
+// OnceClassifier is for requests that the API must not run twice, such as a
+// create. It fails when the API may have run the request. Else it uses
+// DefaultClassifier.
+var OnceClassifier retrier.Classifier = onceClassifier{next: DefaultClassifier}
+
+type onceClassifier struct {
+	next retrier.Classifier
+}
+
+func (o onceClassifier) Classify(err error) retrier.Action {
+	if MayHaveRun(err) {
+		return retrier.Fail
+	}
+	return o.next.Classify(err)
+}
+
+// acceptedError is an error that comes after the API accepted a request, for
+// example when the next call to read the request fails. The API runs the
+// request in all cases.
+type acceptedError struct{ err error }
+
+func (e *acceptedError) Error() string { return e.err.Error() }
+func (e *acceptedError) Unwrap() error { return e.err }
+
+// MayHaveRun reports whether the API may have run a request that failed with
+// err. Only a request that was not sent, or a 4xx answer other than 408, shows
+// that the API did not run it. An error after the API accepted the request is
+// always true, whatever its code. It returns false for a nil err.
+func MayHaveRun(err error) bool {
+	if err == nil {
+		return false
+	}
+	if e := (*acceptedError)(nil); errors.As(err, &e) {
+		return true
+	}
+	if e := (*APIError)(nil); errors.As(err, &e) {
+		return e.StatusCode < 400 || e.StatusCode >= 500 || e.StatusCode == http.StatusRequestTimeout
+	}
+	if e := (*net.OpError)(nil); errors.As(err, &e) && e.Op == "dial" {
+		return false
+	}
+	return true
+}
+
 type RetryStrategy struct {
 	RetryStatus  []int
 	RetryCode    []string
