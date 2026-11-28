@@ -151,7 +151,7 @@ func (c *Client) newHttpRequest(ctx context.Context, method, path string, reqBod
 	tflog.Trace(ctx, "api call prepared: "+req.Method+" "+req.URL.String(), map[string]interface{}{
 		"host":        req.Host,
 		"remote_addr": req.RemoteAddr,
-		"body":        string(body),
+		"body":        logBody(body),
 	})
 
 	return req, nil
@@ -188,21 +188,11 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 
 	if p, ok := resType.(*[]byte); ok {
 		if *p, err = io.ReadAll(body); err != nil {
-			tflog.Trace(ctx, "failed to read body: "+err.Error(), map[string]interface{}{
-				"code":   resp.StatusCode,
-				"status": resp.Status,
-				"error":  err.Error(),
-			})
-
+			traceResponse(ctx, "failed to read body: "+err.Error(), resp, logRawBody(buf.Bytes()), err)
 			return fmt.Errorf("error reading body: %w", err)
 		}
 
-		tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"body":   buf.String(),
-		})
-
+		traceResponse(ctx, "api call succeeded", resp, logRawBody(buf.Bytes()), nil)
 		return nil
 	}
 
@@ -215,12 +205,7 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 	}{"", resType}
 
 	if err := d.Decode(&data); err != nil {
-		tflog.Trace(ctx, "failed to unmarshal data: "+err.Error(), map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"error":  err.Error(),
-			"body":   buf.String(),
-		})
+		traceResponse(ctx, "failed to unmarshal data: "+err.Error(), resp, logBody(buf.Bytes()), err)
 
 		err = makeError("failed to unmarshal data: "+err.Error(), c.ErrCodes, resp)
 
@@ -235,24 +220,26 @@ func (c *Client) call(ctx context.Context, method, path string, reqBody, resType
 
 	if data.Error != "" {
 		err = makeError(data.Error, c.ErrCodes, resp)
-
-		tflog.Trace(ctx, "api returned error: "+err.Error(), map[string]interface{}{
-			"code":   resp.StatusCode,
-			"status": resp.Status,
-			"body":   buf.String(),
-			"error":  err.Error(),
-		})
-
+		traceResponse(ctx, "api returned error: "+err.Error(), resp, logBody(buf.Bytes()), err)
 		return err
 	}
 
-	tflog.Trace(ctx, "api call succeeded", map[string]interface{}{
+	traceResponse(ctx, "api call succeeded", resp, logBody(buf.Bytes()), nil)
+	return nil
+}
+
+// traceResponse writes a response to the trace log. body comes from logBody
+// or logRawBody, so no secret from the body gets into the log.
+func traceResponse(ctx context.Context, msg string, resp *http.Response, body string, err error) {
+	fields := map[string]interface{}{
 		"code":   resp.StatusCode,
 		"status": resp.Status,
-		"body":   buf.String(),
-	})
-
-	return nil
+		"body":   body,
+	}
+	if err != nil {
+		fields["error"] = err.Error()
+	}
+	tflog.Trace(ctx, msg, fields)
 }
 
 func (c *Client) get(ctx context.Context, path string, resultType interface{}, query ...string) error {

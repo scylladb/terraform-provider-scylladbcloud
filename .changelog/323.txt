@@ -1,0 +1,3 @@
+```release-note:bug
+provider: The trace log no longer shows passwords, secrets or tokens from API request and response bodies. For a body that is not valid JSON, such as a serverless connection bundle, the log shows only its size
+```
