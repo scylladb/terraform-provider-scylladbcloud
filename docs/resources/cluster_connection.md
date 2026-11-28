@@ -45,7 +45,7 @@ output "scylladbcloud_cluster_connection_id" {
 ### Optional
 
 - `name` (String) Cluster Connection Name
-- `status` (String) Connection Status
+- `status` (String) The connection status: `ACTIVE` or `INACTIVE`. A connection with `INACTIVE` is created as active and then turned off. `AWS_PRIVATE_LINK` and `GCP_PRIVATE_SERVICE_CONNECT` connections are always `ACTIVE`.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
