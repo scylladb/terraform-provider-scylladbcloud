@@ -110,6 +110,26 @@ func TestAccScyllaDBCloudCluster_replicationFactorAWS(t *testing.T) {
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`min_nodes must be a multiple of replication_factor \(2\), got 5`),
 			},
+			{
+				Config: fmt.Sprintf(`resource "scylladbcloud_cluster" "test" {
+  name                  = %[1]q
+  cloud                 = "AWS"
+  region                = "us-east-1"
+  node_type             = "i3.large"
+  min_nodes             = 6
+  replication_factor    = 2
+  cidr_block            = "10.0.1.0/24"
+  enable_dns            = true
+  backup_retention_days = 0
+  availability_zone_ids = ["use1-az2", "use1-az4", "use1-az6"]
+
+  encryption_at_rest {
+    enabled = false
+  }
+}`, resourceName),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`availability_zone_ids must have at most replication_factor \(2\) zones, got 3`),
+			},
 		},
 	})
 }

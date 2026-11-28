@@ -71,6 +71,39 @@ func validateConfiguredMinNodes(d *schema.ResourceDiff) error {
 	return validateMinNodes(minNodes, replicationFactor)
 }
 
+// validateConfiguredAvailabilityZones checks that the configured zones are not
+// more than the replication factor. ScyllaDB Cloud makes one rack for each
+// replication factor and gives the racks to the zones in turn. A zone after
+// the last rack gets no rack and does not come back in a read. Then every plan
+// replaces the cluster, because availability_zone_ids is ForceNew. It does no
+// check when a value is not known.
+func validateConfiguredAvailabilityZones(d *schema.ResourceDiff) error {
+	config := d.GetRawConfig()
+	if config.IsNull() || !config.IsKnown() {
+		// Destroy plan condition.
+		return nil
+	}
+
+	zones := config.GetAttr("availability_zone_ids")
+	if zones.IsNull() || !zones.IsWhollyKnown() {
+		return nil
+	}
+
+	replicationFactor, ok := plannedReplicationFactor(d, config.GetAttr("replication_factor"))
+	if !ok {
+		return nil
+	}
+
+	if n := zones.LengthInt(); n > replicationFactor {
+		return fmt.Errorf(
+			"availability_zone_ids must have at most replication_factor (%d) zones, got %d; "+
+				"ScyllaDB Cloud puts no rack in the additional zones",
+			replicationFactor, n,
+		)
+	}
+	return nil
+}
+
 // plannedReplicationFactor returns the replication factor from the config. If
 // the config has no value, it returns the default for a new cluster and the
 // state value for an existing one. State from older versions has no value.
@@ -562,6 +595,10 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		return err
 	}
 
+	if err := validateConfiguredAvailabilityZones(d); err != nil {
+		return err
+	}
+
 	if encryptionAtRest, ok := castToNestedBlock(d.Get("encryption_at_rest")); ok {
 		enabled, _ := encryptionAtRest["enabled"].(bool)
 		configuredKeyID, _ := configuredEncryptionAtRest(d.GetRawConfig())
@@ -856,8 +893,9 @@ func ResourceCluster() *schema.Resource {
 				ConflictsWith: []string{"scaling"},
 			},
 			"availability_zone_ids": {
-				Description: `Availability zone IDs where cluster nodes are provisioned. ` +
-					`Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). ` +
+				Description: `Availability zone IDs where cluster nodes are provisioned (e.g. ["use1-az1", "use1-az4", "use1-az5"]). ` +
+					`Each rack goes in one zone, and the number of racks is the replication factor. ` +
+					`Provide at most replication_factor distinct zone IDs. With fewer zones than racks, some zones get more than one rack. ` +
 					`If omitted, zones are selected automatically. After refreshing state with terraform refresh, ` +
 					`you can read back the IDs that were assigned.`,
 				Optional: true,

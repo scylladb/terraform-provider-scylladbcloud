@@ -284,3 +284,84 @@ func TestMinNodesPlan(t *testing.T) {
 		})
 	}
 }
+
+// TestAvailabilityZonesPlan checks the number of zones against the replication
+// factor that the plan uses.
+func TestAvailabilityZonesPlan(t *testing.T) {
+	t.Parallel()
+
+	zones := func(ids ...string) cty.Value {
+		values := make([]cty.Value, 0, len(ids))
+		for _, id := range ids {
+			values = append(values, cty.StringVal(id))
+		}
+		return cty.SetVal(values)
+	}
+
+	config := func(azIDs, rf cty.Value) map[string]cty.Value {
+		return map[string]cty.Value{
+			"name":                  cty.StringVal("cluster"),
+			"cloud":                 cty.StringVal("AWS"),
+			"region":                cty.StringVal("us-east-1"),
+			"node_type":             cty.StringVal("i3.large"),
+			"min_nodes":             cty.NumberIntVal(6),
+			"availability_zone_ids": azIDs,
+			"replication_factor":    rf,
+		}
+	}
+
+	const tooManyZones = "availability_zone_ids must have at most replication_factor (2) zones, got 3; " +
+		"ScyllaDB Cloud puts no rack in the additional zones"
+
+	tests := []struct {
+		name    string
+		state   *terraform.InstanceState
+		config  map[string]cty.Value
+		wantErr string
+	}{
+		{
+			name:    "more zones than racks",
+			config:  config(zones("use1-az1", "use1-az2", "use1-az4"), cty.NumberIntVal(2)),
+			wantErr: tooManyZones,
+		},
+		{
+			name:   "one zone for each rack",
+			config: config(zones("use1-az1", "use1-az2"), cty.NumberIntVal(2)),
+		},
+		{
+			name:   "fewer zones than racks",
+			config: config(zones("use1-az1", "use1-az2"), cty.NumberIntVal(6)),
+		},
+		{
+			name:   "new cluster without a value uses the default",
+			config: config(zones("use1-az1", "use1-az2", "use1-az4"), cty.NullVal(cty.Number)),
+		},
+		{
+			name:   "unknown zones are not checked",
+			config: config(cty.UnknownVal(cty.Set(cty.String)), cty.NumberIntVal(2)),
+		},
+		{
+			name:   "unknown value is not checked",
+			config: config(zones("use1-az1", "use1-az2", "use1-az4"), cty.UnknownVal(cty.Number)),
+		},
+		{
+			name:    "existing cluster without a value in config uses the state",
+			state:   existingClusterState("2", "6"),
+			config:  config(zones("use1-az1", "use1-az2", "use1-az4"), cty.NullVal(cty.Number)),
+			wantErr: tooManyZones,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := clusterDiff(t, tt.state, tt.config)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
