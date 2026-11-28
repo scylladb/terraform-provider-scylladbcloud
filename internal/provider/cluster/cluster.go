@@ -22,15 +22,116 @@ import (
 const (
 	clusterRetryTimeout  = 40 * time.Minute
 	clusterDeleteTimeout = 90 * time.Minute
+
+	defaultReplicationFactor = 3
 )
 
+// validateMinNodesDiag checks the smallest Standard cluster that ScyllaDB
+// Cloud creates, for every replication factor. The check against the
+// replication factor is in validateMinNodes, because it needs other
+// attributes.
 func validateMinNodesDiag(v interface{}, _ cty.Path) diag.Diagnostics {
 	value := v.(int)
 	if value < 3 {
 		return diag.Errorf("min_nodes must be at least 3, got %d", value)
 	}
-	if value%3 != 0 {
-		return diag.Errorf("min_nodes must be divisible by 3, got %d", value)
+	return nil
+}
+
+// validateMinNodes checks that min_nodes is a multiple of the replication
+// factor. ScyllaDB Cloud puts the same number of nodes in each rack, and the
+// replication factor is the number of racks.
+func validateMinNodes(minNodes, replicationFactor int) error {
+	if minNodes%replicationFactor != 0 {
+		return fmt.Errorf("min_nodes must be a multiple of replication_factor (%d), got %d", replicationFactor, minNodes)
+	}
+	return nil
+}
+
+// validateConfiguredMinNodes checks the configured min_nodes against the
+// replication factor that the cluster has or gets. It does no check when a
+// value is not known.
+func validateConfiguredMinNodes(d *schema.ResourceDiff) error {
+	config := d.GetRawConfig()
+	if config.IsNull() || !config.IsKnown() {
+		// Destroy plan condition.
+		return nil
+	}
+
+	minNodes, ok := knownInt(config.GetAttr("min_nodes"))
+	if !ok {
+		return nil
+	}
+
+	replicationFactor, ok := plannedReplicationFactor(d, config.GetAttr("replication_factor"))
+	if !ok {
+		return nil
+	}
+
+	return validateMinNodes(minNodes, replicationFactor)
+}
+
+// validateConfiguredAvailabilityZones checks that the configured zones are not
+// more than the replication factor. ScyllaDB Cloud makes one rack for each
+// replication factor and gives the racks to the zones in turn. A zone after
+// the last rack gets no rack and does not come back in a read. Then every plan
+// replaces the cluster, because availability_zone_ids is ForceNew. It does no
+// check when a value is not known.
+func validateConfiguredAvailabilityZones(d *schema.ResourceDiff) error {
+	config := d.GetRawConfig()
+	if config.IsNull() || !config.IsKnown() {
+		// Destroy plan condition.
+		return nil
+	}
+
+	zones := config.GetAttr("availability_zone_ids")
+	if zones.IsNull() || !zones.IsWhollyKnown() {
+		return nil
+	}
+
+	replicationFactor, ok := plannedReplicationFactor(d, config.GetAttr("replication_factor"))
+	if !ok {
+		return nil
+	}
+
+	if n := zones.LengthInt(); n > replicationFactor {
+		return fmt.Errorf(
+			"availability_zone_ids must have at most replication_factor (%d) zones, got %d; "+
+				"ScyllaDB Cloud puts no rack in the additional zones",
+			replicationFactor, n,
+		)
+	}
+	return nil
+}
+
+// plannedReplicationFactor returns the replication factor from the config. If
+// the config has no value, it returns the default for a new cluster and the
+// state value for an existing one. State from older versions has no value.
+func plannedReplicationFactor(d *schema.ResourceDiff, configured cty.Value) (int, bool) {
+	switch {
+	case !configured.IsKnown():
+		return 0, false
+	case !configured.IsNull():
+		return knownInt(configured)
+	case d.Id() == "":
+		return defaultReplicationFactor, true
+	}
+
+	rf := d.Get("replication_factor").(int)
+	return rf, rf > 0
+}
+
+func knownInt(v cty.Value) (int, bool) {
+	if v.IsNull() || !v.IsKnown() {
+		return 0, false
+	}
+	i, _ := v.AsBigFloat().Int64()
+	return int(i), true
+}
+
+func validateReplicationFactorDiag(v interface{}, _ cty.Path) diag.Diagnostics {
+	if value := v.(int); value < 1 {
+		return diag.Errorf("replication_factor must be at least 1, got %d", value)
 	}
 	return nil
 }
@@ -490,6 +591,14 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		return err
 	}
 
+	if err := validateConfiguredMinNodes(d); err != nil {
+		return err
+	}
+
+	if err := validateConfiguredAvailabilityZones(d); err != nil {
+		return err
+	}
+
 	if encryptionAtRest, ok := castToNestedBlock(d.Get("encryption_at_rest")); ok {
 		enabled, _ := encryptionAtRest["enabled"].(bool)
 		configuredKeyID, _ := configuredEncryptionAtRest(d.GetRawConfig())
@@ -498,7 +607,31 @@ func resourceClusterCustomizeDiff(_ context.Context, d *schema.ResourceDiff, _ i
 		}
 	}
 
-	return validateEncryptionKeyIDNotRemoved(d)
+	if err := validateEncryptionKeyIDNotRemoved(d); err != nil {
+		return err
+	}
+
+	return planReplicationFactorChange(d)
+}
+
+// planReplicationFactorChange makes a change of replication_factor replace the
+// cluster, because the API can set it only at creation.
+//
+// State written before the attribute existed has no value, and 0 is not a
+// valid replication factor. A config value against such a state is not a
+// change: the plan must not replace a cluster whose real value it does not
+// know. The diff is cleared, and the next refresh writes the real value. If the
+// real value is different from the config, that plan replaces the cluster.
+func planReplicationFactorChange(d *schema.ResourceDiff) error {
+	if d.Id() == "" || !d.HasChange("replication_factor") {
+		return nil
+	}
+
+	if old, _ := d.GetChange("replication_factor"); old.(int) == 0 {
+		return d.Clear("replication_factor")
+	}
+
+	return d.ForceNew("replication_factor")
 }
 
 func ResourceCluster() *schema.Resource {
@@ -571,13 +704,23 @@ func ResourceCluster() *schema.Resource {
 				Type:        schema.TypeInt,
 			},
 			"min_nodes": {
-				Description: "Minimum number of nodes in the cluster. Required for Standard clusters; must be at least 3 and divisible by 3. " +
+				Description: "Minimum number of nodes in the cluster. Required for Standard clusters. " +
+					"Must be at least 3 and a multiple of `replication_factor`, because each rack gets the same number of nodes. " +
 					"Must not be set when the scaling block is present, in which case it reads back as `0` and `node_count` reports the number of nodes the cluster currently runs. " +
 					"Increasing this value scales the cluster out; decreasing it scales the cluster in. Either operation takes effect immediately on `terraform apply` and does not force cluster re-creation.",
 				Optional:         true,
 				Type:             schema.TypeInt,
 				ConflictsWith:    []string{"scaling"},
 				ValidateDiagFunc: validateMinNodesDiag,
+			},
+			"replication_factor": {
+				Description: "The number of copies of each row. ScyllaDB Cloud also uses it as the number of racks in the datacenter. " +
+					"Applies to Standard and X Cloud clusters. Defaults to 3. ScyllaDB Cloud sets the maximum. " +
+					"You can set it only when the cluster is created, so a change replaces the cluster.",
+				Optional:         true,
+				Computed:         true,
+				Type:             schema.TypeInt,
+				ValidateDiagFunc: validateReplicationFactorDiag,
 			},
 			"byoa_id": {
 				Description: "The ID of your account (BYOA) in ScyllaDB Cloud (only for AWS).",
@@ -750,8 +893,9 @@ func ResourceCluster() *schema.Resource {
 				ConflictsWith: []string{"scaling"},
 			},
 			"availability_zone_ids": {
-				Description: `Availability zone IDs where cluster nodes are provisioned. ` +
-					`Provide exactly 3 distinct AZ IDs (e.g. ["use1-az1", "use1-az4", "use1-az5"]). ` +
+				Description: `Availability zone IDs where cluster nodes are provisioned (e.g. ["use1-az1", "use1-az4", "use1-az5"]). ` +
+					`Each rack goes in one zone, and the number of racks is the replication factor. ` +
+					`Provide at most replication_factor distinct zone IDs. With fewer zones than racks, some zones get more than one rack. ` +
 					`If omitted, zones are selected automatically. After refreshing state with terraform refresh, ` +
 					`you can read back the IDs that were assigned.`,
 				Optional: true,
@@ -817,7 +961,7 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 		clusterCreateRequest = &model.ClusterCreateRequest{
 			ClusterName:          d.Get("name").(string),
 			BroadcastType:        "PRIVATE",
-			ReplicationFactor:    3,
+			ReplicationFactor:    defaultReplicationFactor,
 			UserAPIInterface:     d.Get("user_api_interface").(string),
 			EnableDNSAssociation: d.Get("enable_dns").(bool),
 			Placement:            "true",
@@ -835,6 +979,10 @@ func resourceClusterCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	if !enableVpcPeering {
 		clusterCreateRequest.BroadcastType = "PUBLIC"
+	}
+
+	if rf, ok := d.GetOk("replication_factor"); ok {
+		clusterCreateRequest.ReplicationFactor = int64(rf.(int))
 	}
 
 	if clusterCreateRequest.UserAPIInterface == "ALTERNATOR" {
@@ -1151,6 +1299,12 @@ func setClusterKVs(d *schema.ResourceData, cluster *model.Cluster, providerName,
 	}
 
 	_ = d.Set("user_api_interface", cluster.UserAPIInterface)
+
+	// 0 means the API did not report a value. The state keeps what it has
+	// instead of a guessed default.
+	if cluster.ReplicationFactor > 0 {
+		_ = d.Set("replication_factor", cluster.ReplicationFactor)
+	}
 
 	if !hasScaling(cluster) {
 		_ = d.Set("node_type", instanceExternalID)

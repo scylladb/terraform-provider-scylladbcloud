@@ -1,0 +1,7 @@
+```release-note:enhancement
+resource/scylladbcloud_cluster: Add `replication_factor` to set the replication factor of a new Standard or X Cloud cluster. It defaults to 3, and a change replaces the cluster. Existing clusters plan no changes
+```
+
+```release-note:enhancement
+resource/scylladbcloud_cluster: `min_nodes` must be at least 3 and a multiple of `replication_factor`, and `availability_zone_ids` must have at most `replication_factor` zones. The plan checks both
+```
